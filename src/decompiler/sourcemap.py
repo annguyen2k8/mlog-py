@@ -435,7 +435,14 @@ class SourceMapEmitter:
 
     def emit_program(self, program: Any) -> Tuple[str, SourceMap]:
         """Emit complete program with source mappings."""
+        from .dsl_symbols import format_import_header, get_required_dsl_imports
         from .function_ir import FunctionProgram
+
+        symbols = get_required_dsl_imports(program)
+        header = format_import_header(symbols)
+        if header:
+            self.emit_line(header)
+            self.emit_line("")
 
         if isinstance(program, FunctionProgram) and program.functions:
             for idx, func in enumerate(program.functions):

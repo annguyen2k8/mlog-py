@@ -103,6 +103,12 @@ from .semantics import (
     get_instruction_dest_vars,
     get_instruction_read_vars,
 )
+from .dsl_symbols import (
+    collect_used_dsl_symbols,
+    extract_dsl_symbols_from_ast,
+    format_import_header,
+    get_required_dsl_imports,
+)
 from typing import Tuple, Union
 
 
@@ -218,4 +224,9 @@ __all__ = [
     "get_argument_semantic_role",
     "get_instruction_dest_vars",
     "get_instruction_read_vars",
+    # DSL Symbols & Imports
+    "collect_used_dsl_symbols",
+    "extract_dsl_symbols_from_ast",
+    "format_import_header",
+    "get_required_dsl_imports",
 ]

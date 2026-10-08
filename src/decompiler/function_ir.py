@@ -113,6 +113,8 @@ class FunctionProgram(StructuredProgram):
             code, _ = SourceMapEmitter(self.instruction_by_address, debug=True).emit_program(self)
             return code
 
+        from .dsl_symbols import format_import_header, get_required_dsl_imports
+
         chunks: List[str] = []
 
         # Render functions separated by double newlines
@@ -130,7 +132,13 @@ class FunctionProgram(StructuredProgram):
         if not chunks:
             return "pass\n"
 
-        return "\n\n".join(chunks) + "\n"
+        body = "\n\n".join(chunks)
+
+        symbols = get_required_dsl_imports(self, rendered_body=body)
+        header = format_import_header(symbols)
+        if header:
+            return f"{header}\n\n{body}\n"
+        return f"{body}\n"
 
     def generate_source_map(self, debug: bool = False) -> Tuple[str, Any]:
         """Render Python DSL code and return associated SourceMap."""

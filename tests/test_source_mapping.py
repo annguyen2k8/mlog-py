@@ -346,7 +346,8 @@ print out
         self.assertEqual(len(fn_mappings), 1)
         m = fn_mappings[0]
         self.assertEqual(m.node_type, "FunctionDef")
-        self.assertEqual(m.python_line, 1)
+        # Line 1 is 'from mlog import print', Line 2 is blank, Line 3 is 'def add(a, b):'
+        self.assertEqual(m.python_line, 3)
         self.assertTrue(1 in m.mlog_addresses)
         self.assertTrue(1 in sm.python_to_mlog(m.python_line))
 

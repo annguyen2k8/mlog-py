@@ -94,60 +94,60 @@ class TestSemanticArgumentRecovery(unittest.TestCase):
     # -----------------------------------------------------------------------
 
     def test_drawflush_named_device(self):
-        """drawflush display1 must decompile to drawflush('display1')."""
+        """drawflush display1 must decompile to drawflush('display1') with import."""
         mlog = "drawflush display1\n"
         py = decompile(mlog).strip()
         ast.parse(py)
-        self.assertEqual(py, 'drawflush("display1")')
+        self.assertEqual(py, 'from mlog import drawflush\n\ndrawflush("display1")')
 
     def test_printflush_named_device(self):
-        """printflush message1 must decompile to printflush('message1')."""
+        """printflush message1 must decompile to printflush('message1') with import."""
         mlog = "printflush message1\n"
         py = decompile(mlog).strip()
         ast.parse(py)
-        self.assertEqual(py, 'printflush("message1")')
+        self.assertEqual(py, 'from mlog import printflush\n\nprintflush("message1")')
 
     def test_read_named_cell(self):
-        """read val cell1 idx must decompile to read(val, 'cell1', idx)."""
+        """read val cell1 idx must decompile to read(val, 'cell1', idx) with import."""
         mlog = "read val cell1 idx\n"
         py = decompile(mlog).strip()
         ast.parse(py)
-        self.assertEqual(py, 'read(val, "cell1", idx)')
+        self.assertEqual(py, 'from mlog import read\n\nread(val, "cell1", idx)')
 
     def test_write_named_cell(self):
-        """write total cell1 63 must decompile to write(total, 'cell1', 63)."""
+        """write total cell1 63 must decompile to write(total, 'cell1', 63) with import."""
         mlog = "write total cell1 63\n"
         py = decompile(mlog).strip()
         ast.parse(py)
-        self.assertEqual(py, 'write(total, "cell1", 63)')
+        self.assertEqual(py, 'from mlog import write\n\nwrite(total, "cell1", 63)')
 
     def test_sensor_named_building(self):
-        """sensor hp vault1 @health must decompile to sensor(hp, 'vault1', '@health')."""
+        """sensor hp vault1 @health must decompile to sensor(hp, 'vault1', '@health') with import."""
         mlog = "sensor hp vault1 @health\n"
         py = decompile(mlog).strip()
         ast.parse(py)
-        self.assertEqual(py, 'sensor(hp, "vault1", "@health")')
+        self.assertEqual(py, 'from mlog import sensor\n\nsensor(hp, "vault1", "@health")')
 
     def test_control_named_building(self):
-        """control enabled reactor1 1 0 0 0 must decompile to control(enabled, 'reactor1', 1, 0, 0, 0)."""
+        """control enabled reactor1 1 0 0 0 must decompile to control(enabled, 'reactor1', ...) with import."""
         mlog = "control enabled reactor1 1 0 0 0\n"
         py = decompile(mlog).strip()
         ast.parse(py)
-        self.assertEqual(py, 'control(enabled, "reactor1", 1, 0, 0, 0)')
+        self.assertEqual(py, 'from mlog import control\n\ncontrol(enabled, "reactor1", 1, 0, 0, 0)')
 
     def test_radar_named_turret(self):
-        """radar with cyclone1 must decompile with cyclone1 as quoted string."""
+        """radar with cyclone1 must decompile with cyclone1 as quoted string with import."""
         mlog = "radar enemy any any distance cyclone1 1 target\n"
         py = decompile(mlog).strip()
         ast.parse(py)
-        self.assertEqual(py, 'radar(enemy, any, any, distance, "cyclone1", 1, target)')
+        self.assertEqual(py, 'from mlog import radar\n\nradar(enemy, any, any, distance, "cyclone1", 1, target)')
 
     def test_ucontrol_named_container(self):
-        """ucontrol itemDrop container1 must decompile with container1 as quoted string."""
+        """ucontrol itemDrop container1 must decompile with container1 as quoted string with import."""
         mlog = "ucontrol itemDrop container1 10 0 0 0\n"
         py = decompile(mlog).strip()
         ast.parse(py)
-        self.assertEqual(py, 'ucontrol(itemDrop, "container1", 10, 0, 0, 0)')
+        self.assertEqual(py, 'from mlog import ucontrol\n\nucontrol(itemDrop, "container1", 10, 0, 0, 0)')
 
     # -----------------------------------------------------------------------
     # 3. Variable Holding Block (getlink) Remains Unquoted

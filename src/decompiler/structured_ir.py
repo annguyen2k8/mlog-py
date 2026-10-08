@@ -326,8 +326,14 @@ class StructuredProgram:
         if not self.body:
             return "pass\n"
 
-        lines = [node.to_python(indent=0) for node in self.body]
-        return "\n".join(lines) + "\n"
+        from .dsl_symbols import format_import_header, get_required_dsl_imports
+
+        body = "\n".join(node.to_python(indent=0) for node in self.body)
+        symbols = get_required_dsl_imports(self, rendered_body=body)
+        header = format_import_header(symbols)
+        if header:
+            return f"{header}\n\n{body}\n"
+        return f"{body}\n"
 
     def generate_source_map(self, debug: bool = False) -> Tuple[str, Any]:
         """Render Python DSL code and return associated SourceMap."""
