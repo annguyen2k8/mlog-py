@@ -113,34 +113,8 @@ def compile_py(
     return CompileResult(mlog=mlog_text, ir=ir, label_table=label_table)
 
 
-def main(argv: Optional[List[str]] = None) -> int:
-    """CLI entry point for Python-to-mlog compiler."""
-    parser = argparse.ArgumentParser(
-        description="Compile a controlled Python subset into Mindustry Logic (mlog)."
-    )
-    parser.add_argument("input_file", help="Input Python source file (.py)")
-    parser.add_argument(
-        "-o", "--output", dest="output_file", help="Output file path (.mlog)"
-    )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Print IR instructions and label table for debugging",
-    )
-    parser.add_argument(
-        "--no-validate",
-        action="store_true",
-        help="Skip mlog syntax validation",
-    )
-
-    parser.add_argument(
-        "--mindustry",
-        action="store_true",
-        help="Validate generated mlog using Mindustry's actual engine (requires Java)",
-    )
-
-    args = parser.parse_args(argv)
-
+def _cli_compile(args: argparse.Namespace) -> int:
+    """Handle compile subcommand: Python DSL -> MLog."""
     try:
         with open(args.input_file, "r", encoding="utf-8") as f:
             source = f.read()
@@ -192,6 +166,122 @@ def main(argv: Optional[List[str]] = None) -> int:
         sys.stdout.write(result.mlog)
 
     return 0
+
+
+def _cli_decompile(args: argparse.Namespace) -> int:
+    """Handle decompile subcommand: MLog -> Python DSL."""
+    from .decompiler import decompile
+    from .decompiler.errors import DecompileError
+
+    try:
+        with open(args.input_file, "r", encoding="utf-8") as f:
+            mlog_source = f.read()
+    except OSError as e:
+        _cli_print(f"Error reading file '{args.input_file}': {e}", file=sys.stderr)
+        return 1
+
+    try:
+        python_code = decompile(
+            mlog_source,
+            filename=args.input_file,
+            debug=args.debug,
+        )
+    except DecompileError as e:
+        _cli_print(f"Decompilation error: {e}", file=sys.stderr)
+        return 1
+
+    if args.output_file:
+        try:
+            with open(args.output_file, "w", encoding="utf-8") as f:
+                f.write(python_code)
+        except OSError as e:
+            _cli_print(f"Error writing output file '{args.output_file}': {e}", file=sys.stderr)
+            return 1
+    else:
+        sys.stdout.write(python_code)
+
+    return 0
+
+
+def _build_cli_parser() -> argparse.ArgumentParser:
+    """Build the argument parser supporting 'compile' and 'decompile' subcommands."""
+    parser = argparse.ArgumentParser(
+        prog="mlog-py",
+        description="Compile a controlled Python subset into Mindustry Logic (mlog) or decompile mlog to Python DSL.",
+    )
+    subparsers = parser.add_subparsers(
+        dest="command",
+        title="subcommands",
+        metavar="{compile, decompile}",
+        help="Subcommands (compile, decompile)",
+    )
+
+    # Subcommand: compile (Python DSL -> MLog)
+    compile_p = subparsers.add_parser(
+        "compile",
+        help="Compile Python DSL -> MLog",
+        description="Compile Python DSL into Mindustry Logic (mlog).",
+    )
+    compile_p.add_argument("input_file", help="Input Python source file (.py)")
+    compile_p.add_argument(
+        "-o", "--output", dest="output_file", help="Output file path (.mlog)"
+    )
+    compile_p.add_argument(
+        "--debug",
+        action="store_true",
+        help="Print IR instructions and label table for debugging",
+    )
+    compile_p.add_argument(
+        "--no-validate",
+        action="store_true",
+        help="Skip mlog syntax validation",
+    )
+    compile_p.add_argument(
+        "--mindustry",
+        action="store_true",
+        help="Validate generated mlog using Mindustry's actual engine (requires Java)",
+    )
+
+    # Subcommand: decompile (MLog -> Python DSL)
+    decompile_p = subparsers.add_parser(
+        "decompile",
+        help="Decompile MLog -> Python DSL",
+        description="Decompile Mindustry Logic (mlog) into structured Python DSL.",
+    )
+    decompile_p.add_argument("input_file", help="Input Mindustry Logic file (.mlog)")
+    decompile_p.add_argument(
+        "-o", "--output", dest="output_file", help="Output file path (.py)"
+    )
+    decompile_p.add_argument(
+        "--debug",
+        action="store_true",
+        help="Include mlog instruction provenance comments (# mlog[<addr>])",
+    )
+
+    return parser
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    """CLI entry point for Python-to-mlog compiler and mlog-to-Python decompiler."""
+    parser = _build_cli_parser()
+
+    raw_args = list(sys.argv[1:] if argv is None else argv)
+
+    # Backward compatibility:
+    # If first argument is not a known subcommand ('compile', 'decompile', '-h', '--help', empty),
+    # default to the 'compile' command (e.g. `mlog-py script.py -o script.mlog`).
+    if raw_args and raw_args[0] not in ("compile", "decompile", "-h", "--help"):
+        raw_args = ["compile"] + raw_args
+
+    args = parser.parse_args(raw_args)
+
+    if args.command == "compile":
+        return _cli_compile(args)
+    elif args.command == "decompile":
+        return _cli_decompile(args)
+    else:
+        parser.print_help(sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

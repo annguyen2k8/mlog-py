@@ -1,7 +1,9 @@
 """Tests for Phase 1F: Comprehensive test suite for all 19 test categories, validation, and CLI."""
 
+import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from src.mlog import compile_py
 from src.validator import MlogValidator, ValidationError
@@ -325,6 +327,7 @@ class TestPhase1F(unittest.TestCase):
         self.assertIn("Jump address must be a non-negative integer", str(ctx.exception))
 
     def test_cli_execution(self):
+        # 1. Top-level --help
         res = subprocess.run(
             [sys.executable, "compiler.py", "--help"],
             capture_output=True,
@@ -332,6 +335,56 @@ class TestPhase1F(unittest.TestCase):
         )
         self.assertEqual(res.returncode, 0)
         self.assertIn("Compile a controlled Python subset into Mindustry Logic", res.stdout)
+        self.assertIn("compile", res.stdout)
+        self.assertIn("decompile", res.stdout)
+
+        # 2. compile subcommand --help
+        res_comp = subprocess.run(
+            [sys.executable, "compiler.py", "compile", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(res_comp.returncode, 0)
+        self.assertIn("Compile Python DSL into Mindustry Logic", res_comp.stdout)
+
+        # 3. decompile subcommand --help
+        res_decomp = subprocess.run(
+            [sys.executable, "compiler.py", "decompile", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(res_decomp.returncode, 0)
+        self.assertIn("Decompile Mindustry Logic (mlog) into structured Python DSL", res_decomp.stdout)
+
+        # 4. Backward compatibility: compiling without explicit 'compile' subcommand
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as f_in:
+            f_in.write("x = 10\n")
+            in_path = f_in.name
+        try:
+            res_run = subprocess.run(
+                [sys.executable, "compiler.py", in_path],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(res_run.returncode, 0)
+            self.assertEqual(res_run.stdout.strip(), "set x 10")
+        finally:
+            os.remove(in_path)
+
+        # 5. Explicit decompile subcommand execution
+        with tempfile.NamedTemporaryFile("w", suffix=".mlog", delete=False) as f_mlog:
+            f_mlog.write("set x 10\n")
+            mlog_path = f_mlog.name
+        try:
+            res_decomp_run = subprocess.run(
+                [sys.executable, "compiler.py", "decompile", mlog_path],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(res_decomp_run.returncode, 0)
+            self.assertIn("x = 10", res_decomp_run.stdout)
+        finally:
+            os.remove(mlog_path)
 
 
 if __name__ == "__main__":

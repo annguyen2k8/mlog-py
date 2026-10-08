@@ -29,22 +29,35 @@ pip install .
 
 ### 1. Compile Python to MLog
 
-Use the installed `mlog-py` CLI (or `python3 compiler.py` directly from source):
+Use the `mlog-py compile` CLI (or legacy `mlog-py input.py` / `python3 compiler.py input.py`):
 
 ```bash
 # Compile to stdout
-mlog-py input.py
+mlog-py compile input.py
 
 # Compile and output to a file
-mlog-py input.py -o output.mlog
+mlog-py compile input.py -o output.mlog
 
 # Debug mode: view IR instructions and resolved label addresses
-mlog-py input.py --debug
+mlog-py compile input.py --debug
 ```
 
 ### 2. Decompile MLog to Python DSL
 
-Use the Python API:
+Use the `mlog-py decompile` CLI (or Python API):
+
+```bash
+# Decompile to stdout
+mlog-py decompile input.mlog
+
+# Decompile and output to a file
+mlog-py decompile input.mlog -o output.py
+
+# Decompile with inline provenance comments (# mlog[<addr>])
+mlog-py decompile input.mlog --debug
+```
+
+Or via Python API:
 
 ```python
 from src.decompiler import decompile
