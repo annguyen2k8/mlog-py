@@ -96,6 +96,8 @@ while True:
     wait(0.5)
 ```
 
+> **Note**: Mindustry Logic runs processor programs continuously, so `while True` here is an explicit Python representation of the program's persistent execution cycle.
+
 ### Compiled MLog Output (`reactor.mlog`)
 
 ```text
