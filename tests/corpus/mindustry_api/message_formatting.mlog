@@ -1,0 +1,8 @@
+sensor copper vault1 @copper
+sensor lead vault1 @lead
+print "RESOURCE REPORT:\n"
+print "Copper: "
+print copper
+print "\nLead: "
+print lead
+printflush message1

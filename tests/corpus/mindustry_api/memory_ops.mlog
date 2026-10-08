@@ -1,0 +1,7 @@
+set i 0
+jump 7 greaterThanEq i 16
+read val cell1 i
+op mul val val 2
+write val cell2 i
+op add i i 1
+jump 1 always 0 0

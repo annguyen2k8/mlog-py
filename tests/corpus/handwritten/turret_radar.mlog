@@ -1,0 +1,14 @@
+radar enemy any any distance cyclone1 1 target
+sensor dead target @dead
+jump 11 notEqual dead 0
+sensor tx target @x
+sensor ty target @y
+sensor ammo cyclone1 @ammo
+jump 9 lessThan ammo 5
+control shoot cyclone1 tx ty 1 0
+jump 0 always 0 0
+control shoot cyclone1 0 0 0 0
+jump 0 always 0 0
+control shoot cyclone1 0 0 0 0
+wait 0.2
+jump 0 always 0 0

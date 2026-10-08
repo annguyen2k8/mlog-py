@@ -1,0 +1,11 @@
+jump 5 always 0 0
+op mul prod a b
+op add __tmp0 prod c
+set __retval_multiply_add __tmp0
+set @counter __ret_multiply_add
+set a 5
+set b 6
+set c 7
+set __ret_multiply_add 10
+jump 1 always 0 0
+set ans __retval_multiply_add

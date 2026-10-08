@@ -1,0 +1,7 @@
+set val 42
+jump 3 lessThanEq val 100
+jump 4 always 0 0
+set val 100
+jump 7 notEqual val 100
+set val 200
+jump 7 always 0 0

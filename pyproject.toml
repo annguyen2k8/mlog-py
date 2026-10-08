@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mlog-py"
+version = "0.1.0"
+description = "Verified Python-to-Mindustry Logic (mlog) Compiler and Decompiler"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [
+    { name = "Anzuno", email = "anzunonguyen@gmail.com" }
+]
+keywords = ["mindustry", "mlog", "compiler", "decompiler", "dsl"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Compilers",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Disassemblers",
+]
+
+[project.urls]
+Homepage = "https://github.com/Anzuno/mlog-py"
+Repository = "https://github.com/Anzuno/mlog-py"
+Issues = "https://github.com/Anzuno/mlog-py/issues"
+
+[project.scripts]
+mlog-py = "src.mlog:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+namespaces = true
+
+[tool.setuptools]
+py-modules = ["compiler", "mlog"]
+
+[tool.setuptools.package-data]
+src = ["*.pyi", "*.java"]

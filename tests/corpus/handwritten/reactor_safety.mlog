@@ -1,0 +1,13 @@
+sensor heat reactor1 @heat
+sensor cryo reactor1 @cryofluid
+jump 5 lessThan cryo 10
+jump 5 greaterThan heat 0.2
+jump 9 always 0 0
+control enabled reactor1 0 0 0 0
+print "ALERT: Reactor Overheating"
+printflush message1
+end
+control enabled reactor1 1 0 0 0
+print "Reactor Status: Nominal"
+printflush message1
+end

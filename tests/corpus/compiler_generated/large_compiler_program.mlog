@@ -1,0 +1,41 @@
+jump 28 always 0 0
+op add __tmp0 a b
+set __retval_add __tmp0
+set @counter __ret_add
+set res 0
+set k 0
+jump 10 greaterThanEq k b
+op add res res a
+op add k k 1
+jump 6 always 0 0
+set __retval_multiply res
+set @counter __ret_multiply
+set a x
+set b y
+set __ret_add 16
+jump 1 always 0 0
+set s1 __retval_add
+set a s1
+set b z
+set __ret_multiply 21
+jump 4 always 0 0
+set s2 __retval_multiply
+jump 26 lessThanEq s2 1000
+op idiv __tmp1 s2 2
+set __retval_compute_stat __tmp1
+set @counter __ret_compute_stat
+set __retval_compute_stat s2
+set @counter __ret_compute_stat
+set i 0
+set acc 0
+jump 41 greaterThanEq i 8
+set x i
+op add __tmp2 i 1
+set y __tmp2
+set z 3
+set __ret_compute_stat 37
+jump 12 always 0 0
+set tmp __retval_compute_stat
+op add acc acc tmp
+op add i i 1
+jump 30 always 0 0

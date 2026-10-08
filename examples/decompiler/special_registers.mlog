@@ -1,0 +1,3 @@
+sensor u @unit @dead
+sensor hp core1 @health
+set @counter 10

@@ -1,0 +1,7 @@
+set a 1
+jump 4 always 0 0
+set dead1 999
+op add dead2 dead1 1
+set b 2
+end
+set dead3 888

@@ -1,0 +1,16 @@
+sensor heat reactor1 @heat
+sensor cryo reactor1 @cryofluid
+jump 7 lessThanEq heat 0.5
+control enabled reactor1 0 0 0 0
+print "EMERGENCY SHUTDOWN"
+printflush message1
+jump 15 always 0 0
+jump 12 greaterThanEq cryo 10
+control enabled reactor1 0 0 0 0
+print "LOW CRYOFLUID"
+printflush message1
+jump 15 always 0 0
+control enabled reactor1 1 0 0 0
+print "NOMINAL"
+printflush message1
+wait 0.5

@@ -1,0 +1,3 @@
+sensor u_dead @unit @dead
+set copper_name @copper
+set @counter 10

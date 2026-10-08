@@ -1,0 +1,16 @@
+jump 12 always 0 0
+jump 4 greaterThan n 1
+set __retval_fact 1
+set @counter __ret_fact
+op sub sub n 1
+set n sub
+set __ret_fact 8
+jump 1 always 0 0
+set prev __retval_fact
+op mul __tmp0 n prev
+set __retval_fact __tmp0
+set @counter __ret_fact
+set n 5
+set __ret_fact 15
+jump 1 always 0 0
+set result __retval_fact

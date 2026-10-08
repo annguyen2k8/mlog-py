@@ -1,0 +1,6 @@
+sensor heat reactor1 @heat
+jump 4 lessThanEq heat 0.5
+control enabled reactor1 0 0 0 0
+jump 5 always 0 0
+control enabled reactor1 1 0 0 0
+wait 0.5

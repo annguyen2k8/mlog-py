@@ -1,0 +1,12 @@
+set link_count 4
+set idx 0
+jump 12 greaterThanEq idx link_count
+getlink block idx
+sensor hp block @health
+sensor max_hp block @maxHealth
+jump 9 greaterThanEq hp max_hp
+control enabled block 0 0 0 0
+jump 10 always 0 0
+control enabled block 1 0 0 0
+op add idx idx 1
+jump 2 always 0 0

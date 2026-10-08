@@ -1,0 +1,500 @@
+set acc 0
+set i 0
+jump 10 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 8 lessThan hp 500
+op mul acc acc 2
+jump 9 always 0 0
+op div acc acc 2
+op add i i 1
+jump 2 always 0 0
+jump 19 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 17 lessThan hp 500
+op mul acc acc 2
+jump 18 always 0 0
+op div acc acc 2
+op add i i 1
+jump 11 always 0 0
+jump 28 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 26 lessThan hp 500
+op mul acc acc 2
+jump 27 always 0 0
+op div acc acc 2
+op add i i 1
+jump 20 always 0 0
+jump 37 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 35 lessThan hp 500
+op mul acc acc 2
+jump 36 always 0 0
+op div acc acc 2
+op add i i 1
+jump 29 always 0 0
+jump 46 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 44 lessThan hp 500
+op mul acc acc 2
+jump 45 always 0 0
+op div acc acc 2
+op add i i 1
+jump 38 always 0 0
+jump 55 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 53 lessThan hp 500
+op mul acc acc 2
+jump 54 always 0 0
+op div acc acc 2
+op add i i 1
+jump 47 always 0 0
+jump 64 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 62 lessThan hp 500
+op mul acc acc 2
+jump 63 always 0 0
+op div acc acc 2
+op add i i 1
+jump 56 always 0 0
+jump 73 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 71 lessThan hp 500
+op mul acc acc 2
+jump 72 always 0 0
+op div acc acc 2
+op add i i 1
+jump 65 always 0 0
+jump 82 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 80 lessThan hp 500
+op mul acc acc 2
+jump 81 always 0 0
+op div acc acc 2
+op add i i 1
+jump 74 always 0 0
+jump 91 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 89 lessThan hp 500
+op mul acc acc 2
+jump 90 always 0 0
+op div acc acc 2
+op add i i 1
+jump 83 always 0 0
+jump 100 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 98 lessThan hp 500
+op mul acc acc 2
+jump 99 always 0 0
+op div acc acc 2
+op add i i 1
+jump 92 always 0 0
+jump 109 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 107 lessThan hp 500
+op mul acc acc 2
+jump 108 always 0 0
+op div acc acc 2
+op add i i 1
+jump 101 always 0 0
+jump 118 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 116 lessThan hp 500
+op mul acc acc 2
+jump 117 always 0 0
+op div acc acc 2
+op add i i 1
+jump 110 always 0 0
+jump 127 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 125 lessThan hp 500
+op mul acc acc 2
+jump 126 always 0 0
+op div acc acc 2
+op add i i 1
+jump 119 always 0 0
+jump 136 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 134 lessThan hp 500
+op mul acc acc 2
+jump 135 always 0 0
+op div acc acc 2
+op add i i 1
+jump 128 always 0 0
+jump 145 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 143 lessThan hp 500
+op mul acc acc 2
+jump 144 always 0 0
+op div acc acc 2
+op add i i 1
+jump 137 always 0 0
+jump 154 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 152 lessThan hp 500
+op mul acc acc 2
+jump 153 always 0 0
+op div acc acc 2
+op add i i 1
+jump 146 always 0 0
+jump 163 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 161 lessThan hp 500
+op mul acc acc 2
+jump 162 always 0 0
+op div acc acc 2
+op add i i 1
+jump 155 always 0 0
+jump 172 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 170 lessThan hp 500
+op mul acc acc 2
+jump 171 always 0 0
+op div acc acc 2
+op add i i 1
+jump 164 always 0 0
+jump 181 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 179 lessThan hp 500
+op mul acc acc 2
+jump 180 always 0 0
+op div acc acc 2
+op add i i 1
+jump 173 always 0 0
+jump 190 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 188 lessThan hp 500
+op mul acc acc 2
+jump 189 always 0 0
+op div acc acc 2
+op add i i 1
+jump 182 always 0 0
+jump 199 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 197 lessThan hp 500
+op mul acc acc 2
+jump 198 always 0 0
+op div acc acc 2
+op add i i 1
+jump 191 always 0 0
+jump 208 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 206 lessThan hp 500
+op mul acc acc 2
+jump 207 always 0 0
+op div acc acc 2
+op add i i 1
+jump 200 always 0 0
+jump 217 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 215 lessThan hp 500
+op mul acc acc 2
+jump 216 always 0 0
+op div acc acc 2
+op add i i 1
+jump 209 always 0 0
+jump 226 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 224 lessThan hp 500
+op mul acc acc 2
+jump 225 always 0 0
+op div acc acc 2
+op add i i 1
+jump 218 always 0 0
+jump 235 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 233 lessThan hp 500
+op mul acc acc 2
+jump 234 always 0 0
+op div acc acc 2
+op add i i 1
+jump 227 always 0 0
+jump 244 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 242 lessThan hp 500
+op mul acc acc 2
+jump 243 always 0 0
+op div acc acc 2
+op add i i 1
+jump 236 always 0 0
+jump 253 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 251 lessThan hp 500
+op mul acc acc 2
+jump 252 always 0 0
+op div acc acc 2
+op add i i 1
+jump 245 always 0 0
+jump 262 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 260 lessThan hp 500
+op mul acc acc 2
+jump 261 always 0 0
+op div acc acc 2
+op add i i 1
+jump 254 always 0 0
+jump 271 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 269 lessThan hp 500
+op mul acc acc 2
+jump 270 always 0 0
+op div acc acc 2
+op add i i 1
+jump 263 always 0 0
+jump 280 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 278 lessThan hp 500
+op mul acc acc 2
+jump 279 always 0 0
+op div acc acc 2
+op add i i 1
+jump 272 always 0 0
+jump 289 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 287 lessThan hp 500
+op mul acc acc 2
+jump 288 always 0 0
+op div acc acc 2
+op add i i 1
+jump 281 always 0 0
+jump 298 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 296 lessThan hp 500
+op mul acc acc 2
+jump 297 always 0 0
+op div acc acc 2
+op add i i 1
+jump 290 always 0 0
+jump 307 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 305 lessThan hp 500
+op mul acc acc 2
+jump 306 always 0 0
+op div acc acc 2
+op add i i 1
+jump 299 always 0 0
+jump 316 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 314 lessThan hp 500
+op mul acc acc 2
+jump 315 always 0 0
+op div acc acc 2
+op add i i 1
+jump 308 always 0 0
+jump 325 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 323 lessThan hp 500
+op mul acc acc 2
+jump 324 always 0 0
+op div acc acc 2
+op add i i 1
+jump 317 always 0 0
+jump 334 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 332 lessThan hp 500
+op mul acc acc 2
+jump 333 always 0 0
+op div acc acc 2
+op add i i 1
+jump 326 always 0 0
+jump 343 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 341 lessThan hp 500
+op mul acc acc 2
+jump 342 always 0 0
+op div acc acc 2
+op add i i 1
+jump 335 always 0 0
+jump 352 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 350 lessThan hp 500
+op mul acc acc 2
+jump 351 always 0 0
+op div acc acc 2
+op add i i 1
+jump 344 always 0 0
+jump 361 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 359 lessThan hp 500
+op mul acc acc 2
+jump 360 always 0 0
+op div acc acc 2
+op add i i 1
+jump 353 always 0 0
+jump 370 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 368 lessThan hp 500
+op mul acc acc 2
+jump 369 always 0 0
+op div acc acc 2
+op add i i 1
+jump 362 always 0 0
+jump 379 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 377 lessThan hp 500
+op mul acc acc 2
+jump 378 always 0 0
+op div acc acc 2
+op add i i 1
+jump 371 always 0 0
+jump 388 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 386 lessThan hp 500
+op mul acc acc 2
+jump 387 always 0 0
+op div acc acc 2
+op add i i 1
+jump 380 always 0 0
+jump 397 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 395 lessThan hp 500
+op mul acc acc 2
+jump 396 always 0 0
+op div acc acc 2
+op add i i 1
+jump 389 always 0 0
+jump 406 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 404 lessThan hp 500
+op mul acc acc 2
+jump 405 always 0 0
+op div acc acc 2
+op add i i 1
+jump 398 always 0 0
+jump 415 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 413 lessThan hp 500
+op mul acc acc 2
+jump 414 always 0 0
+op div acc acc 2
+op add i i 1
+jump 407 always 0 0
+jump 424 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 422 lessThan hp 500
+op mul acc acc 2
+jump 423 always 0 0
+op div acc acc 2
+op add i i 1
+jump 416 always 0 0
+jump 433 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 431 lessThan hp 500
+op mul acc acc 2
+jump 432 always 0 0
+op div acc acc 2
+op add i i 1
+jump 425 always 0 0
+jump 442 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 440 lessThan hp 500
+op mul acc acc 2
+jump 441 always 0 0
+op div acc acc 2
+op add i i 1
+jump 434 always 0 0
+jump 451 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 449 lessThan hp 500
+op mul acc acc 2
+jump 450 always 0 0
+op div acc acc 2
+op add i i 1
+jump 443 always 0 0
+jump 460 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 458 lessThan hp 500
+op mul acc acc 2
+jump 459 always 0 0
+op div acc acc 2
+op add i i 1
+jump 452 always 0 0
+jump 469 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 467 lessThan hp 500
+op mul acc acc 2
+jump 468 always 0 0
+op div acc acc 2
+op add i i 1
+jump 461 always 0 0
+jump 478 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 476 lessThan hp 500
+op mul acc acc 2
+jump 477 always 0 0
+op div acc acc 2
+op add i i 1
+jump 470 always 0 0
+jump 487 greaterThanEq i 10
+op add acc acc i
+sensor hp core1 @health
+jump 485 lessThan hp 500
+op mul acc acc 2
+jump 486 always 0 0
+op div acc acc 2
+op add i i 1
+jump 479 always 0 0
+op add acc acc 488
+op add acc acc 489
+op add acc acc 490
+op add acc acc 491
+op add acc acc 492
+op add acc acc 493
+op add acc acc 494
+op add acc acc 495
+op add acc acc 496
+op add acc acc 497
+print acc
+printflush message1

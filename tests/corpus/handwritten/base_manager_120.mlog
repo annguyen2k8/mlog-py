@@ -1,0 +1,120 @@
+sensor power_cap battery1 @powerCapacity
+sensor power_stored battery1 @powerNetStored
+op div power_ratio power_stored power_cap
+jump 6 greaterThan power_ratio 0.5
+control enabled generator1 1 0 0 0
+jump 7 always 0 0
+control enabled generator1 0 0 0 0
+set turret_idx 0
+jump 22 greaterThanEq turret_idx 4
+getlink t_block turret_idx
+sensor t_hp t_block @health
+sensor t_max_hp t_block @maxHealth
+op div t_hp_ratio t_hp t_max_hp
+jump 18 lessThan t_hp_ratio 0.4
+control shoot t_block 0 0 1 0
+jump 19 always 0 0
+control shoot t_block 0 0 0 0
+control enabled t_block 1 0 0 0
+op add turret_idx turret_idx 1
+jump 8 always 0 0
+ubind @flare
+sensor u_flag @unit @flag
+jump 26 equal u_flag 1
+ucontrol flag 1 0 0 0 0
+ucontrol move 50 50 0 0 0
+ucontrol boost 1 0 0 0 0
+set cell_idx 0
+jump 36 greaterThanEq cell_idx 8
+read cell_val cell1 cell_idx
+op add cell_val cell_val 1
+write cell_val cell1 cell_idx
+op add cell_idx cell_idx 1
+jump 27 always 0 0
+draw clear 0 0 0 0 0 0
+draw color 0 255 0 255 0 0
+op mul bar_w power_ratio 80
+draw rect 0 0 bar_w 10 0 0
+draw color 255 255 255 255 0 0
+draw line 0 12 80 12 0 0
+drawflush display1
+op add reg_40 power_ratio 40
+op add reg_41 power_ratio 41
+op add reg_42 power_ratio 42
+op add reg_43 power_ratio 43
+op add reg_44 power_ratio 44
+op add reg_45 power_ratio 45
+op add reg_46 power_ratio 46
+op add reg_47 power_ratio 47
+op add reg_48 power_ratio 48
+op add reg_49 power_ratio 49
+op add reg_50 power_ratio 50
+op add reg_51 power_ratio 51
+op add reg_52 power_ratio 52
+op add reg_53 power_ratio 53
+op add reg_54 power_ratio 54
+op add reg_55 power_ratio 55
+op add reg_56 power_ratio 56
+op add reg_57 power_ratio 57
+op add reg_58 power_ratio 58
+op add reg_59 power_ratio 59
+op add reg_60 power_ratio 60
+op add reg_61 power_ratio 61
+op add reg_62 power_ratio 62
+op add reg_63 power_ratio 63
+op add reg_64 power_ratio 64
+op add reg_65 power_ratio 65
+op add reg_66 power_ratio 66
+op add reg_67 power_ratio 67
+op add reg_68 power_ratio 68
+op add reg_69 power_ratio 69
+op add reg_70 power_ratio 70
+op add reg_71 power_ratio 71
+op add reg_72 power_ratio 72
+op add reg_73 power_ratio 73
+op add reg_74 power_ratio 74
+op add reg_75 power_ratio 75
+op add reg_76 power_ratio 76
+op add reg_77 power_ratio 77
+op add reg_78 power_ratio 78
+op add reg_79 power_ratio 79
+op add reg_80 power_ratio 80
+op add reg_81 power_ratio 81
+op add reg_82 power_ratio 82
+op add reg_83 power_ratio 83
+op add reg_84 power_ratio 84
+op add reg_85 power_ratio 85
+op add reg_86 power_ratio 86
+op add reg_87 power_ratio 87
+op add reg_88 power_ratio 88
+op add reg_89 power_ratio 89
+op add reg_90 power_ratio 90
+op add reg_91 power_ratio 91
+op add reg_92 power_ratio 92
+op add reg_93 power_ratio 93
+op add reg_94 power_ratio 94
+op add reg_95 power_ratio 95
+op add reg_96 power_ratio 96
+op add reg_97 power_ratio 97
+op add reg_98 power_ratio 98
+op add reg_99 power_ratio 99
+op add reg_100 power_ratio 100
+op add reg_101 power_ratio 101
+op add reg_102 power_ratio 102
+op add reg_103 power_ratio 103
+op add reg_104 power_ratio 104
+op add reg_105 power_ratio 105
+op add reg_106 power_ratio 106
+op add reg_107 power_ratio 107
+op add reg_108 power_ratio 108
+op add reg_109 power_ratio 109
+op add reg_110 power_ratio 110
+op add reg_111 power_ratio 111
+op add reg_112 power_ratio 112
+op add reg_113 power_ratio 113
+op add reg_114 power_ratio 114
+op add reg_115 power_ratio 115
+op add reg_116 power_ratio 116
+op add reg_117 power_ratio 117
+print "Status: Nominal"
+printflush message1

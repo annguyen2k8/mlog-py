@@ -1,0 +1,19 @@
+set i 0
+set total 0
+jump 19 greaterThanEq i 10
+set j 0
+jump 15 greaterThanEq j 5
+jump 8 notEqual j 3
+jump 15 always 0 0
+jump 11 always 0 0
+jump 11 notEqual j 1
+op add j j 1
+jump 4 always 0 0
+op mul __tmp0 i j
+op add total total __tmp0
+op add j j 1
+jump 4 always 0 0
+jump 17 lessThanEq total 50
+jump 19 always 0 0
+op add i i 1
+jump 2 always 0 0

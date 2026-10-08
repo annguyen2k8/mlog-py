@@ -1,0 +1,15 @@
+set x 75
+set category 0
+jump 5 lessThan x 90
+set category 4
+jump 15 always 0 0
+jump 8 lessThan x 70
+set category 3
+jump 15 always 0 0
+jump 11 lessThan x 50
+set category 2
+jump 15 always 0 0
+jump 14 lessThan x 30
+set category 1
+jump 15 always 0 0
+set category 0

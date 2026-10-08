@@ -1,0 +1,12 @@
+set a 1
+set b 2
+set c 3
+set d 4
+set flag 0
+jump 7 greaterThanEq a b
+jump 9 lessThan b c
+jump 11 greaterThanEq c d
+jump 11 notEqual d 4
+set flag 1
+jump 12 always 0 0
+op sub flag 0 1

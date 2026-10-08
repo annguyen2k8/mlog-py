@@ -1,0 +1,5 @@
+read val cell1 0
+op add nxt val 1
+write nxt cell1 0
+getlink b 0
+sensor hp b @health

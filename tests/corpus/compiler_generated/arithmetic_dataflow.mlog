@@ -1,0 +1,20 @@
+set a 10
+set b 20
+set c 30
+op add __tmp0 a b
+op mul d __tmp0 c
+op idiv __tmp1 d 5
+op mod __tmp2 b 7
+op sub e __tmp1 __tmp2
+op shl __tmp3 a 2
+op shr __tmp4 b 1
+op or f __tmp3 __tmp4
+op add __tmp5 a 1
+op add __tmp6 b 2
+op mul x __tmp5 __tmp6
+op add y x d
+jump 19 lessThanEq y 100
+jump 19 greaterThanEq x 500
+set res 1
+jump 20 always 0 0
+set res 0

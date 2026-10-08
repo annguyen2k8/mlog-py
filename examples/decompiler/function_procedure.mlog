@@ -1,0 +1,11 @@
+jump 5 always 0 0
+op mul __tmp0 a b
+op add __tmp1 __tmp0 c
+set __retval_compute __tmp1
+set @counter __ret_compute
+set a 5
+set b 6
+set c 7
+set __ret_compute 10
+jump 1 always 0 0
+set ans __retval_compute

@@ -1,0 +1,11 @@
+set i 0
+set total 0
+jump 11 greaterThanEq i 10
+jump 6 notEqual i 3
+op add i i 1
+jump 2 always 0 0
+jump 8 notEqual i 8
+jump 11 always 0 0
+op add total total i
+op add i i 1
+jump 2 always 0 0

@@ -1,0 +1,8 @@
+from mlog import draw, drawflush
+
+draw("clear", 10, 10, 10, 0, 0)
+draw("color", 255, 100, 0, 255, 0)
+draw("line", 0, 0, 80, 80, 0)
+draw("rect", 10, 10, 20, 30, 0)
+draw("poly", 40, 40, 6, 15, 0)
+drawflush("display1")

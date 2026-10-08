@@ -1,0 +1,15 @@
+set i 0
+set res 0
+jump 15 greaterThanEq i 10
+op mod __tmp0 i 2
+jump 12 notEqual __tmp0 0
+set k 0
+jump 11 greaterThanEq k 3
+op mul __tmp1 i k
+op add res res __tmp1
+op add k k 1
+jump 6 always 0 0
+jump 13 always 0 0
+op add res res i
+op add i i 1
+jump 2 always 0 0

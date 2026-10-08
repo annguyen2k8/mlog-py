@@ -1,0 +1,7 @@
+set x 10
+jump 3 greaterThan x 5
+set y 1
+jump 5 always 0 0
+set y 2
+jump 2 lessThan y 10
+set z 3

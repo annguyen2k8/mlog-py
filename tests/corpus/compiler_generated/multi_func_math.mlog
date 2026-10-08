@@ -1,0 +1,23 @@
+jump 13 always 0 0
+op mul __tmp0 x x
+set __retval_square __tmp0
+set @counter __ret_square
+jump 8 greaterThanEq val low
+set __retval_clamp low
+set @counter __ret_clamp
+jump 11 always 0 0
+jump 11 lessThanEq val high
+set __retval_clamp high
+set @counter __ret_clamp
+set __retval_clamp val
+set @counter __ret_clamp
+set x 7
+set __ret_square 16
+jump 1 always 0 0
+set v1 __retval_square
+set val v1
+set low 10
+set high 40
+set __ret_clamp 22
+jump 4 always 0 0
+set v2 __retval_clamp

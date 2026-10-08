@@ -1,0 +1,13 @@
+jump 9 always 0 0
+set total 0
+set k 1
+jump 7 greaterThan k n
+op add total total k
+op add k k 1
+jump 3 always 0 0
+set __retval_sum_to_n total
+set @counter __ret_sum_to_n
+set n 10
+set __ret_sum_to_n 12
+jump 1 always 0 0
+set s __retval_sum_to_n

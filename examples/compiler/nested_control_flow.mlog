@@ -1,0 +1,12 @@
+set r 0
+jump 11 greaterThanEq r 3
+set c 0
+jump 9 greaterThanEq c 3
+jump 7 notEqual r c
+print "Diag: "
+print r
+op add c c 1
+jump 3 always 0 0
+op add r r 1
+jump 1 always 0 0
+printflush message1

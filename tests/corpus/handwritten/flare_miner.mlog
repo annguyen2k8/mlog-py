@@ -1,0 +1,15 @@
+ubind @flare
+sensor flag @unit @flag
+jump 5 equal flag 1
+ucontrol flag 1 0 0 0 0
+jump 0 always 0 0
+sensor item @unit @copper
+jump 11 greaterThanEq item 10
+ulocate building container 0 @copper cx cy found cblock
+ucontrol approach cx cy 3 0 0
+ucontrol itemTake cblock @copper 10 0 0
+jump 0 always 0 0
+ulocate building core 0 @copper kx ky kfound kblock
+ucontrol approach kx ky 3 0 0
+ucontrol itemDrop kblock 10 0 0 0
+jump 0 always 0 0

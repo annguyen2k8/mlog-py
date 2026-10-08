@@ -1,0 +1,8 @@
+set a 15
+jump 3 lessThanEq a 20
+set res 1
+jump 6 always 0 0
+jump 6 lessThanEq a 10
+set res 2
+jump 7 always 0 0
+set res 0

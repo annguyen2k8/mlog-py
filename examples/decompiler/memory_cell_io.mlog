@@ -1,0 +1,3 @@
+read val cell1 0
+op add nxt val 10
+write nxt cell1 1

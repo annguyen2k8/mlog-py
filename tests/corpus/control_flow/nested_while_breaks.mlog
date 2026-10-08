@@ -1,0 +1,17 @@
+set a 0
+set outer 0
+jump 17 greaterThanEq outer 5
+set inner 0
+jump 15 greaterThanEq inner 4
+jump 8 notEqual inner 2
+op add inner inner 1
+jump 4 always 0 0
+jump 10 notEqual outer 3
+jump 15 always 0 0
+op mul __tmp0 outer 10
+op add __tmp1 a __tmp0
+op add a __tmp1 inner
+op add inner inner 1
+jump 4 always 0 0
+op add outer outer 1
+jump 2 always 0 0

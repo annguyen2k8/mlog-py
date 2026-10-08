@@ -1,0 +1,21 @@
+jump 17 always 0 0
+jump 4 greaterThan n 1
+set __retval_fib n
+set @counter __ret_fib
+op sub n1 n 1
+set n n1
+set __ret_fib 8
+jump 1 always 0 0
+set f1 __retval_fib
+op sub n2 n 2
+set n n2
+set __ret_fib 13
+jump 1 always 0 0
+set f2 __retval_fib
+op add __tmp0 f1 f2
+set __retval_fib __tmp0
+set @counter __ret_fib
+set n 6
+set __ret_fib 20
+jump 1 always 0 0
+set res __retval_fib

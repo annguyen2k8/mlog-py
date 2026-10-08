@@ -1,0 +1,9 @@
+set offset 2
+op add @counter @counter offset
+set r 0
+jump 6 always 0 0
+set r 1
+jump 6 always 0 0
+set r 2
+print r
+printflush message1

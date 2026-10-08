@@ -1,0 +1,12 @@
+draw clear 0 0 0 0 0 0
+set i 0
+jump 11 greaterThanEq i 5
+read val cell1 i
+op mul x i 15
+op add x x 5
+op div h val 10
+draw color 0 200 255 255 0 0
+draw rect x 0 10 h 0 0
+op add i i 1
+jump 2 always 0 0
+drawflush display1
