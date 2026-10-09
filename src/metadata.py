@@ -90,6 +90,24 @@ MAX_TEXT_BUFFER: int = 400
 _rt_print_buffer: List[str] = []
 
 
+def _java_math_round(a: float) -> int:
+    """Exact emulation of Java java.lang.Math.round(double a) -> (long)Math.floor(a + 0.5d)."""
+    if math.isnan(a):
+        return 0
+    return math.floor(a + 0.5)
+
+
+def _utf16_len(s: str) -> int:
+    """Return length in UTF-16 code units (matching Java StringBuilder.length())."""
+    return len(s.encode("utf-16-le", errors="surrogatepass")) // 2
+
+
+def _utf16_slice(s: str, max_code_units: int) -> str:
+    """Slice string by UTF-16 code units (matching Java StringBuilder.append(str, 0, n))."""
+    b = s.encode("utf-16-le", errors="surrogatepass")
+    return b[: max_code_units * 2].decode("utf-16-le", errors="surrogatepass")
+
+
 def _rt_format_print_value(value: Any) -> str:
     """Format a value according to Mindustry Logic LExecutor.PrintI rules.
 
@@ -125,9 +143,9 @@ def _rt_format_print_value(value: Any) -> str:
     if isinstance(value, float):
         if math.isnan(value) or math.isinf(value):
             return "null"
-        rounded = round(value)
+        rounded = _java_math_round(value)
         if abs(value - rounded) < 0.00001:
-            return str(int(rounded))
+            return str(rounded)
         return str(value)
 
     if isinstance(value, str):
@@ -159,17 +177,21 @@ def _rt_print(value: Any = "") -> None:
 
     Mindustry engine rules (LExecutor.PrintI):
     1. If exec.textBuffer.length() >= maxTextBuffer (400), return immediately.
+       Length is measured in Java UTF-16 code units (char), where non-BMP
+       characters (e.g. emojis) count as 2 units.
     2. Convert value according to toString / numeric formatting.
     3. Append value up to remaining capacity: Math.min(length, maxTextBuffer - current_length).
     """
-    current_len = sum(len(s) for s in _rt_print_buffer)
+    current_text = "".join(_rt_print_buffer)
+    current_len = _utf16_len(current_text)
     if current_len >= MAX_TEXT_BUFFER:
         return None
 
     str_val = _rt_format_print_value(value)
+    val_len = _utf16_len(str_val)
     remaining = MAX_TEXT_BUFFER - current_len
-    if len(str_val) > remaining:
-        _rt_print_buffer.append(str_val[:remaining])
+    if val_len > remaining:
+        _rt_print_buffer.append(_utf16_slice(str_val, remaining))
     else:
         _rt_print_buffer.append(str_val)
     return None
@@ -179,17 +201,26 @@ def _rt_printflush(message: Any = None) -> None:
     """Flush the print buffer to a message block and clear the buffer.
 
     Mindustry engine rules (LExecutor.PrintFlushI):
-    1. If target is a printable building (e.g. message block), write textBuffer to target.
+    1. If target is a printable building (e.g. message block) and printable(exec) is true:
+       writes textBuffer to target.
     2. exec.textBuffer.setLength(0) is ALWAYS called unconditionally, even if target
        is null, invalid, destroyed, or not a printable building.
     """
     text = "".join(_rt_print_buffer)
-    if hasattr(message, "print") and callable(getattr(message, "print")):
-        message.print(text)
-    elif hasattr(message, "message"):
-        setattr(message, "message", text)
-    elif isinstance(message, dict):
-        message["message"] = text
+    is_printable = True
+    if hasattr(message, "printable") and callable(getattr(message, "printable")):
+        is_printable = bool(message.printable())
+    elif hasattr(message, "is_valid") and not message.is_valid:
+        is_printable = False
+
+    if is_printable:
+        if hasattr(message, "print") and callable(getattr(message, "print")):
+            message.print(text)
+        elif hasattr(message, "message"):
+            setattr(message, "message", text)
+        elif isinstance(message, dict):
+            message["message"] = text
+
     _rt_print_buffer.clear()
     return None
 

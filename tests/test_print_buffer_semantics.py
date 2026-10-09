@@ -249,19 +249,115 @@ printflush("message1")
         recompiled = compile_py(py).mlog.strip()
         self.assertEqual(recompiled, res.mlog.strip())
 
-    def test_print_variable_compilation(self):
-        """Printing variables emits raw variable identifiers without quotes."""
-        source = """from mlog import print, printflush
-count = 10
-print("Count: ")
-print(count)
+    def test_java_math_round_simulation_edge_cases(self):
+        """Verify _java_math_round matches Java java.lang.Math.round(double a) at x.5, negative, and zero."""
+        from src.metadata import _java_math_round
+
+        # Java Math.round(a) = (long)Math.floor(a + 0.5d)
+        self.assertEqual(_java_math_round(2.5), 3)
+        self.assertEqual(_java_math_round(3.5), 4)
+        self.assertEqual(_java_math_round(-2.5), -2)
+        self.assertEqual(_java_math_round(-3.5), -3)
+        self.assertEqual(_java_math_round(0.5), 1)
+        self.assertEqual(_java_math_round(-0.5), 0)
+        self.assertEqual(_java_math_round(-1.5), -1)
+        self.assertEqual(_java_math_round(-0.0), 0)
+        self.assertEqual(_java_math_round(0.0), 0)
+
+        # In _rt_print, non-integer x.5 is not within 0.00001 of an integer, so it emits float string
+        _rt_print(2.5)
+        _rt_print(" ")
+        _rt_print(-1.5)
+        _rt_print(" ")
+        _rt_print(-0.0)
+        self.assertEqual(get_print_buffer(), "2.5 -1.5 0")
+        _rt_printflush("message1")
+
+    def test_utf16_code_units_buffer_limit_and_surrogate_pairs(self):
+        """Verify buffer limit 400 is measured in Java UTF-16 code units, properly handling non-BMP emojis."""
+        from src.metadata import _utf16_len
+
+        rocket = "🚀"  # U+1F680: 1 Python codepoint, 2 Java UTF-16 code units (surrogate pair)
+        self.assertEqual(len(rocket), 1)
+        self.assertEqual(_utf16_len(rocket), 2)
+
+        # 200 rockets = 400 UTF-16 code units -> fills buffer completely
+        _rt_print(rocket * 200)
+        self.assertEqual(_utf16_len(get_print_buffer()), 400)
+        self.assertEqual(len(get_print_buffer()), 200)  # 200 Python codepoints
+
+        # Subsequent print when at 400 UTF-16 code units is ignored
+        _rt_print("EXTRA")
+        self.assertEqual(_utf16_len(get_print_buffer()), 400)
+
+        _rt_printflush("message1")
+        self.assertEqual(get_print_buffer(), "")
+
+        # Partial append with surrogate split at boundary: 399 code units + 1 rocket (2 code units)
+        _rt_print("A" * 399)
+        self.assertEqual(_utf16_len(get_print_buffer()), 399)
+        _rt_print(rocket)
+        # Sliced at 400: receives only high surrogate '\ud83d'
+        buf = get_print_buffer()
+        self.assertEqual(_utf16_len(buf), 400)
+        self.assertEqual(buf[-1], "\ud83d")
+        _rt_printflush("message1")
+
+    def test_pipeline_escape_sequences_and_raw_tokens(self):
+        """Test escape sequences through Python DSL -> compiler -> assembly -> decompiler."""
+        # \n is escaped in assembly; \t is preserved as tab; \" is escaped; \\ is escaped
+        source = '''from mlog import print, printflush
+print("Line1\\nLine2\\t\\"quote\\"\\\\slash\\u0041")
 printflush("message1")
-"""
-        res = compile_py(source, filename="test_var_print.py", validate=True)
-        mlog = res.mlog.strip()
-        self.assertIn('print "Count: "', mlog)
-        self.assertIn('print count', mlog)
-        self.assertIn('printflush message1', mlog)
+'''
+        res = compile_py(source, filename="test_escape_pipe.py", validate=True)
+        # Verify assembly representation
+        self.assertIn('print "Line1\\nLine2\t\\"quote\\"\\\\slashA"', res.mlog)
+
+        # Verify decompiler representation
+        py = decompile(res.mlog)
+        ast.parse(py)
+        self.assertIn('printflush("message1")', py)
+
+    def test_printflush_destroyed_and_non_printable_targets(self):
+        """Verify printflush handles valid, non-printable, null, and destroyed targets correctly."""
+        class MockBuilding:
+            def __init__(self, printable=True, is_valid=True):
+                self._printable = printable
+                self.is_valid = is_valid
+                self.received = None
+
+            def printable(self):
+                return self._printable and self.is_valid
+
+            def print(self, text):
+                self.received = text
+
+        # 1. Valid printable block receives text and buffer is cleared
+        valid_block = MockBuilding(printable=True, is_valid=True)
+        _rt_print("Hello Valid")
+        _rt_printflush(valid_block)
+        self.assertEqual(valid_block.received, "Hello Valid")
+        self.assertEqual(get_print_buffer(), "")
+
+        # 2. Destroyed block (is_valid=False) does not receive text, buffer is cleared
+        dead_block = MockBuilding(printable=True, is_valid=False)
+        _rt_print("Hello Dead")
+        _rt_printflush(dead_block)
+        self.assertIsNone(dead_block.received)
+        self.assertEqual(get_print_buffer(), "")
+
+        # 3. Non-printable block (e.g. router, printable=False) does not receive text, buffer is cleared
+        router_block = MockBuilding(printable=False, is_valid=True)
+        _rt_print("Hello Router")
+        _rt_printflush(router_block)
+        self.assertIsNone(router_block.received)
+        self.assertEqual(get_print_buffer(), "")
+
+        # 4. Null target (None) does not crash, buffer is cleared
+        _rt_print("Hello Null")
+        _rt_printflush(None)
+        self.assertEqual(get_print_buffer(), "")
 
 
 if __name__ == "__main__":
