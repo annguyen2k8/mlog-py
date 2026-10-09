@@ -10,6 +10,9 @@ from typing import Any, Iterable, Optional, Set
 
 from src.metadata import ALL_REGISTRY_ENUMS, MLOG_EXPORTS
 
+# Standard Python built-in functions that do not require importing from mlog
+PYTHON_BUILTIN_FUNCTIONS: Set[str] = {"min", "max"}
+
 
 def _collect_expr_symbols(expr: Any, symbols: Set[str]) -> None:
     """Recursively collect DSL symbols from an Expression IR node."""
@@ -20,7 +23,7 @@ def _collect_expr_symbols(expr: Any, symbols: Set[str]) -> None:
 
     if cls_name == "CallExpr":
         func = getattr(expr, "func", "")
-        if func in MLOG_EXPORTS:
+        if func in MLOG_EXPORTS and func not in PYTHON_BUILTIN_FUNCTIONS:
             symbols.add(func)
         for arg in getattr(expr, "args", []):
             _collect_expr_symbols(arg, symbols)
@@ -61,7 +64,7 @@ def _collect_node_symbols(node: Any, symbols: Set[str]) -> None:
 
     elif cls_name == "CallNode":
         func_name = getattr(node, "func_name", "")
-        if func_name in MLOG_EXPORTS:
+        if func_name in MLOG_EXPORTS and func_name not in PYTHON_BUILTIN_FUNCTIONS:
             symbols.add(func_name)
         for arg in getattr(node, "args", []):
             _collect_expr_symbols(arg, symbols)
@@ -98,14 +101,17 @@ def _collect_node_symbols(node: Any, symbols: Set[str]) -> None:
                 else:
                     symbols.add("set")
             elif op == "op":
-                symbols.add("op")
+                # Only add op if it is not a min/max op
+                op_name = args[0] if len(args) > 0 else ""
+                if op_name not in PYTHON_BUILTIN_FUNCTIONS:
+                    symbols.add("op")
             elif op == "stop":
                 symbols.add("stop")
             elif op == "end":
                 symbols.add("end")
             elif op == "wait":
                 symbols.add("wait")
-            elif op in MLOG_EXPORTS:
+            elif op in MLOG_EXPORTS and op not in PYTHON_BUILTIN_FUNCTIONS:
                 symbols.add(op)
 
     elif cls_name == "UnstructuredNode":
@@ -123,14 +129,16 @@ def _collect_node_symbols(node: Any, symbols: Set[str]) -> None:
                     else:
                         symbols.add("set")
                 elif op == "op":
-                    symbols.add("op")
+                    op_name = args[0] if len(args) > 0 else ""
+                    if op_name not in PYTHON_BUILTIN_FUNCTIONS:
+                        symbols.add("op")
                 elif op == "stop":
                     symbols.add("stop")
                 elif op == "end":
                     symbols.add("end")
                 elif op == "wait":
                     symbols.add("wait")
-                elif op in MLOG_EXPORTS:
+                elif op in MLOG_EXPORTS and op not in PYTHON_BUILTIN_FUNCTIONS:
                     symbols.add(op)
 
 
@@ -149,7 +157,7 @@ def collect_used_dsl_symbols(program: Any) -> Set[str]:
     for stmt in stmts:
         _collect_node_symbols(stmt, symbols)
 
-    return symbols
+    return symbols - PYTHON_BUILTIN_FUNCTIONS
 
 
 class _DSLSymbolASTVisitor(ast.NodeVisitor):
@@ -186,7 +194,7 @@ def extract_dsl_symbols_from_ast(code: str) -> Set[str]:
 
     visitor = _DSLSymbolASTVisitor()
     visitor.visit(tree)
-    free_names = (visitor.used_names - visitor.defined_names) & MLOG_EXPORTS
+    free_names = ((visitor.used_names - visitor.defined_names) & MLOG_EXPORTS) - PYTHON_BUILTIN_FUNCTIONS
     return free_names
 
 
@@ -200,6 +208,7 @@ def get_required_dsl_imports(program: Any, rendered_body: Optional[str] = None) 
     if rendered_body:
         ast_symbols = extract_dsl_symbols_from_ast(rendered_body)
         symbols.update(ast_symbols)
+    symbols -= PYTHON_BUILTIN_FUNCTIONS
     return symbols
 
 

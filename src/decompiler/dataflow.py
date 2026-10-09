@@ -296,7 +296,18 @@ class DataflowTransformer:
                         result.append(AssignNode(target=dest, value=UnaryExpr("~", a_expr), source_addresses=[instr.address]))
                         continue
 
-                    # B.3: General logic operation call: op("max", a, b) or op("rand", a)
+                    # B.3: Python min and max calls: dest = min(a, b) or max(a, b)
+                    if op_name in ("min", "max") and len(args) >= 4:
+                        result.append(
+                            AssignNode(
+                                target=dest,
+                                value=CallExpr(op_name, [a_expr, b_expr]),
+                                source_addresses=[instr.address],
+                            )
+                        )
+                        continue
+
+                    # B.4: General logic operation call: op("max", a, b) or op("rand", a)
                     call_args = [ConstantExpr(op_name), a_expr]
                     if len(args) > 3 and op_name not in UNARY_LOGIC_OPS:
                         call_args.append(b_expr)

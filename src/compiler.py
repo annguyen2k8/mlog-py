@@ -407,6 +407,20 @@ class Compiler:
                     call,
                 )
 
+        elif func_name in ("min", "max"):
+            if len(args) != 2:
+                self.error(
+                    f"{func_name}() takes exactly 2 arguments ({len(args)} given)",
+                    call,
+                )
+            a_val = str(self.compile_expr(args[0]))
+            b_val = str(self.compile_expr(args[1]))
+            dest = target_dest if target_dest is not None else self.new_temp(loc)
+            self.instructions.append(
+                IROp(op=func_name, dest=dest, a=a_val, b=b_val, loc=loc)
+            )
+            return dest
+
         elif func_name == "jump":
             if len(args) < 1 or len(args) > 4:
                 self.error("invalid arguments for jump: expected jump(target, [cond], [a], [b])", call)

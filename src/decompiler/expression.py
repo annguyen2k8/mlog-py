@@ -260,7 +260,9 @@ class CallExpr(Expr):
 
     @property
     def has_side_effects(self) -> bool:
-        # Pure arithmetic op call has no side effects, other calls might
+        # Pure arithmetic calls have no side effects, other calls might
+        if self.func in ("min", "max"):
+            return False
         if self.func == "op" and len(self.args) >= 1:
             first = self.args[0]
             if isinstance(first, ConstantExpr) and first.value in ("max", "min", "abs", "floor", "ceil", "round", "sqrt"):

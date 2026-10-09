@@ -21,8 +21,9 @@ class TestDecompilerDestVarRecovery(unittest.TestCase):
 
     def _assert_no_undefined_variables(self, code: str, allowed_globals=None):
         """Analyze AST to guarantee every loaded variable is defined via Store or Import."""
+        import builtins
         tree = ast.parse(code)
-        defined = set(allowed_globals or set())
+        defined = set(allowed_globals or set()) | set(dir(builtins))
         used = set()
 
         for node in ast.walk(tree):
@@ -141,7 +142,7 @@ op max res a b
 """
         py = decompile(full_mlog)
         self._assert_no_undefined_variables(py)
-        self.assertIn('res = op("max", a, b)', py)
+        self.assertIn("res = max(a, b)", py)
         self.assertNotIn('op("max", res', py)
 
     def test_variable_reassigned_multiple_times(self):

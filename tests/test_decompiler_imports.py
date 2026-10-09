@@ -27,10 +27,10 @@ class TestDecompilerImports(unittest.TestCase):
     """Test suite for decompiler automatic import header generation."""
 
     def test_output_with_op_import(self):
-        """Unfoldable op calls (e.g. min, max, sin) must import op."""
+        """Unfoldable op calls (e.g. sin, cos, atan) must import op."""
         mlog = """
 set n 1500
-op min n n 999
+op sin n n 0
 """
         py = decompile(mlog)
         # 1. Valid syntax
@@ -40,11 +40,11 @@ op min n n 999
 
         # 2. Contains import
         self.assertIn("from mlog import op", py)
-        self.assertTrue("op('min', n, 999)" in py or 'op("min", n, 999)' in py)
+        self.assertTrue("op('sin', n)" in py or 'op("sin", n)' in py)
 
         # 3. Can recompile
         res = compile_py(py)
-        self.assertIn("op min n n 999", res.mlog)
+        self.assertIn("op sin n n 0", res.mlog)
 
     def test_output_with_draw_and_drawflush(self):
         """Drawing instructions must import draw and drawflush."""
@@ -178,8 +178,11 @@ drawflush display1
         code_obj = compile(py, "<test>", "exec")
         self.assertIsNotNone(code_obj)
 
-        # 2. Check header has exactly the needed symbols
-        self.assertIn("from mlog import draw, drawflush, op, read", py)
+        # 2. Check header has exactly the needed symbols (min/max are python builtins, no op needed)
+        self.assertIn("from mlog import draw, drawflush, read", py)
+        self.assertNotIn("op", py)
+        self.assertIn("clamped = min(val, 9)", py)
+        self.assertIn("clamped = max(clamped, 0)", py)
 
         # 3. Execute in Python runtime environment where mlog is installed
         import mlog as mlog_module

@@ -539,6 +539,30 @@ def lookup(type: Union[LookupType, str], index: Any) -> Any:
     """
     ...
 
+def max(a: Any, b: Any) -> Any:
+    """Compute the maximum of two values without compile-time evaluation.
+    
+    Args:
+        a: First operand.
+        b: Second operand.
+    
+    Returns:
+        The larger of a and b.
+    """
+    ...
+
+def min(a: Any, b: Any) -> Any:
+    """Compute the minimum of two values without compile-time evaluation.
+    
+    Args:
+        a: First operand.
+        b: Second operand.
+    
+    Returns:
+        The smaller of a and b.
+    """
+    ...
+
 @overload
 def op(op_name: Union[LogicOp, str], dest: Any, a: Any, b: Any = 0) -> Any:
     """Perform operation and write result to dest variable (statement form).
@@ -743,6 +767,8 @@ __all__ = [
     "jump",
     "lookup",
     "main",
+    "max",
+    "min",
     "null",
     "op",
     "packcolor",

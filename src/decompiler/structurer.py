@@ -18,6 +18,7 @@ from .dataflow import (
 from .expression import (
     MLOG_TO_PY_BINARY_OPS,
     BinaryExpr,
+    CallExpr,
     ConstantExpr,
     parse_operand_to_expr,
 )
@@ -347,6 +348,11 @@ class CFGStructurer:
                                 if op_name in MLOG_TO_PY_BINARY_OPS:
                                     py_op = MLOG_TO_PY_BINARY_OPS[op_name]
                                     sub_expr = BinaryExpr(py_op, a_expr, b_expr)
+                                    cond_expr = substitute_variable(cond_expr, dest, sub_expr)
+                                    cond_str = cond_expr.to_python()
+                                    inlined = True
+                                elif op_name in ("min", "max"):
+                                    sub_expr = CallExpr(op_name, [a_expr, b_expr])
                                     cond_expr = substitute_variable(cond_expr, dest, sub_expr)
                                     cond_str = cond_expr.to_python()
                                     inlined = True

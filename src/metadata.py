@@ -70,6 +70,12 @@ def _rt_set(to: Any, from_: Any) -> Any:
 def _rt_op(op_name: Any, *args: Any) -> Any:
     return 0
 
+def _rt_min(a: Any, b: Any) -> Any:
+    return min(a, b)
+
+def _rt_max(a: Any, b: Any) -> Any:
+    return max(a, b)
+
 def _rt_sensor(*args: Any) -> Any:
     return 0
 
@@ -979,6 +985,54 @@ INTRINSIC_DEFINITIONS: List[IntrinsicDef] = [
             ),
         ],
         runtime_fn=_rt_raw,
+    ),
+    IntrinsicDef(
+        name="min",
+        summary="Mathematical minimum of two values (compiles to MLog op min)",
+        docstring=(
+            "Compute the minimum of two values without compile-time evaluation.\n\n"
+            "Args:\n"
+            "    a: First operand.\n"
+            "    b: Second operand.\n\n"
+            "Returns:\n"
+            "    The smaller of a and b."
+        ),
+        min_args=2,
+        max_args=2,
+        valid_arg_counts=(2,),
+        signatures=[
+            IntrinsicSignature(
+                params=[IntrinsicParam("a", "Any"), IntrinsicParam("b", "Any")],
+                return_type="Any",
+                docstring="Compute min(a, b) via MLog 'op min'.",
+            ),
+        ],
+        runtime_fn=_rt_min,
+        has_assignment_form=True,
+    ),
+    IntrinsicDef(
+        name="max",
+        summary="Mathematical maximum of two values (compiles to MLog op max)",
+        docstring=(
+            "Compute the maximum of two values without compile-time evaluation.\n\n"
+            "Args:\n"
+            "    a: First operand.\n"
+            "    b: Second operand.\n\n"
+            "Returns:\n"
+            "    The larger of a and b."
+        ),
+        min_args=2,
+        max_args=2,
+        valid_arg_counts=(2,),
+        signatures=[
+            IntrinsicSignature(
+                params=[IntrinsicParam("a", "Any"), IntrinsicParam("b", "Any")],
+                return_type="Any",
+                docstring="Compute max(a, b) via MLog 'op max'.",
+            ),
+        ],
+        runtime_fn=_rt_max,
+        has_assignment_form=True,
     ),
 ]
 

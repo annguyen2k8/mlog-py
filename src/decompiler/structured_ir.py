@@ -102,6 +102,9 @@ def instruction_to_python(
         a = format_operand(args[2])
         is_unary = op_name in UNARY_LOGIC_OPS
         if dest.isidentifier() and not dest.startswith("@"):
+            if op_name in ("min", "max") and len(args) >= 4:
+                b = format_operand(args[3])
+                return f"{dest} = {op_name}({a}, {b})"
             if len(args) == 4 and not is_unary:
                 b = format_operand(args[3])
                 return f'{dest} = op("{op_name}", {a}, {b})'
