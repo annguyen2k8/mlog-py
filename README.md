@@ -167,7 +167,7 @@ The project maintains a comprehensive automated test suite verifying both compil
 python3 -m unittest discover -s tests -p "test_*.py"
 ```
 
-- **329 Automated Tests**: 100% passing baseline across compiler, registry, CFG, structuring, dataflow, function recovery, and source mapping.
+- **377 Automated Tests**: 100% passing baseline across compiler, registry, CFG, structuring, dataflow, function recovery, bitwise operators, min/max, for loops, and source mapping.
 - **Real-World Test Corpus**: 32 representative programs across handwritten scripts, compiler-generated programs, control flow patterns, and pathological edge cases.
 - **Round-Trip Verification**: Guarantees that MLog → Decompiler → Compiler produces valid, identical instructions.
 
