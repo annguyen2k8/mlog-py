@@ -6,11 +6,13 @@ This document details the source mapping and provenance tracking architecture in
 
 ## 1. Overview & Provenance Guarantee
 
-In an optimizing decompiler, statements are frequently synthesized from multiple low-level instructions (for example, collapsing two `set`s and an `op` into `x = a + b`). 
+In an optimizing decompiler, statements are frequently synthesized from multiple low-level instructions (for example, collapsing two `set`s and an `op` into `x = a + b`).
 
 The `mlog-py` Source Mapping subsystem tracks full-pipeline provenance:
+
 - Every high-level Python statement or AST node tracks all constituent MLog instruction addresses.
 - Collapsed temporaries preserve the addresses of every collapsed instruction:
+
   ```text
   MLog[0]: set __tmp0 a
   MLog[1]: op add __tmp1 __tmp0 1
@@ -28,14 +30,14 @@ When `debug=True` is passed to `decompile()`, the decompiler emits informative p
 
 ```python
 # mlog[0]
-sensor(heat, "reactor1", "@heat")
+heat = sensor("reactor1", "@heat")
 # mlog[1, 3]
 if heat > 0.5:
     # mlog[2]
-    control(enabled, "reactor1", 0, 0, 0, 0)
+    control("enabled", "reactor1", 0, 0, 0, 0)
 else:
     # mlog[4]
-    control(enabled, "reactor1", 1, 0, 0, 0)
+    control("enabled", "reactor1", 1, 0, 0, 0)
 # mlog[5]
 wait(0.5)
 ```

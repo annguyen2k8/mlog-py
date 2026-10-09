@@ -132,6 +132,7 @@ Decompilation:  MLog Bytecode  ──►   CFG Rebuild   ──►   Structurer 
 ```
 
 Detailed architectural specifications:
+
 - [Unified System Architecture](docs/architecture.md)
 - [Compiler Pipeline & Lowering](docs/compiler.md)
 - [Decompiler Pipeline & Structuring](docs/decompiler.md)
@@ -166,7 +167,7 @@ The project maintains a comprehensive automated test suite verifying both compil
 python3 -m unittest discover -s tests -p "test_*.py"
 ```
 
-- **281 Automated Tests**: 100% passing baseline across compiler, registry, CFG, structuring, dataflow, function recovery, and source mapping.
+- **329 Automated Tests**: 100% passing baseline across compiler, registry, CFG, structuring, dataflow, function recovery, and source mapping.
 - **Real-World Test Corpus**: 32 representative programs across handwritten scripts, compiler-generated programs, control flow patterns, and pathological edge cases.
 - **Round-Trip Verification**: Guarantees that MLog → Decompiler → Compiler produces valid, identical instructions.
 

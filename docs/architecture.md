@@ -79,7 +79,7 @@ The forward compiler translates a verified Python subset into canonical MLog ins
 5. **Static Grammar Validation (`src/validator.py`)**:
    Validates opcode bounds, argument counts, 1000 instruction limit, 500 jump limit, and token length limits.
 
-6. **Engine Verification Harness (`src/mindustry_validator.py`, `src/MindustryHarness.java`)**:
+6. **Engine Verification Harness (`src/mindustry_validator.py`, `tools/harness/MindustryHarness.java`)**:
    Verifies emitted mlog bytecode against Mindustry's live `LParser` and `LAssembler` running in the Java Virtual Machine.
 
 ---
@@ -109,6 +109,7 @@ The reverse decompiler reconstructs high-level, human-readable Python DSL from f
 ## 4. Single Source of Truth (SSOT) Architecture
 
 All instruction signatures, opcode rules, enum definitions, and type stubs originate from a single centralized authority:
+
 - **`src/metadata.py`**: Defines `INTRINSICS`, parameter limits, argument signatures, and generates `mlog.pyi`.
 - **`src/mlog_registry.py`**: Contains property enums extracted directly from Mindustry Java sources (`LAccess`, `LUnitControl`, `LogicOp`, `Items`, `Liquids`, `Units`, etc.).
 

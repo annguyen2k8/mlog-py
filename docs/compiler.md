@@ -19,7 +19,9 @@ The compiler targets a strict, strongly-typed subset of Python designed for Mind
 | **Intrinsics** | `sensor()`, `control()`, `draw()`, `read()`, `write()`, etc. | Canonical Mindustry Logic instructions |
 
 ### Explicitly Rejected Constructs
+
 Features incompatible with Mindustry's flat processor memory model are rejected during AST validation:
+
 - **Classes & Objects**: `class`, inheritance, methods
 - **Data Collections**: Lists (`[]`), Dictionaries (`{}`), Sets, Tuples
 - **Iteration**: `for ... in` loops, list comprehensions, generator expressions
@@ -56,10 +58,13 @@ Vanilla MLog (.mlog)
 ```
 
 ### Pass 1: AST Parsing & Whitelisting (`src/parser.py`)
+
 Validates that every AST node belongs to the supported subset. Reports syntax errors with precise source coordinates (`filename:line:col`).
 
 ### Pass 2: Symbolic IR Lowering (`src/compiler.py`)
+
 Lowers Python AST statements and expressions into symbolic IR nodes (`IRLabel`, `IRSet`, `IROp`, `IRJump`, `IRRaw`).
+
 - **Temporary Generation**: Deterministic naming (`__tmp0`, `__tmp1`, ...) for nested expression intermediate values.
 - **Short-Circuit Evaluation**: Translates `and` / `or` chains into conditional branch ladders:
   - `a and b`: if `a` is false, jumps immediately to end without evaluating `b`.
@@ -67,15 +72,20 @@ Lowers Python AST statements and expressions into symbolic IR nodes (`IRLabel`, 
 - **Loop Scoping**: Maintains loop context stacks so `break` and `continue` jump accurately to the loop's exit label and latch label respectively.
 
 ### Pass 3: Optimization Pass (`src/optimizer.py`)
+
 The `PassThroughOptimizer` verifies IR integrity and preserves instruction sequencing and register assignments.
 
 ### Pass 4: Two-Pass Address Resolution (`src/emitter.py`)
+
 MLog jump instructions require 0-indexed numeric line numbers, whereas labels occupy 0 slots in the final output:
+
 1. **Pass 1 (Label Table Construction)**: Scans all IR nodes. When encountering an `IRLabel`, records its symbolic name mapped to the current instruction index without incrementing the instruction pointer.
 2. **Pass 2 (Address Substitution)**: Iterates over non-label instructions. Replaces all symbolic jump targets with their resolved integer line targets.
 
 ### Pass 5: Static Validation (`src/validator.py`)
+
 Validates the emitted MLog against vanilla Mindustry processor constraints:
+
 - Maximum 1000 instructions per processor.
 - Maximum 500 jump instructions per processor.
 - Maximum 16 arguments/tokens per instruction.
@@ -86,6 +96,7 @@ Validates the emitted MLog against vanilla Mindustry processor constraints:
 ## 3. Compiler CLI & API
 
 ### Command Line Interface
+
 ```bash
 # Compile Python file to stdout
 python3 compiler.py input.py
@@ -98,6 +109,7 @@ python3 compiler.py input.py --debug
 ```
 
 ### Python API
+
 ```python
 from src.mlog import compile_py
 

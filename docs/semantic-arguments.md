@@ -16,12 +16,14 @@ sensor hp reactor1 @health
 ```
 
 If a decompiler naively emits these tokens directly as Python identifiers:
+
 ```python
 val = read(cell1, idx)      # BROKEN: NameError: name 'cell1' is not defined
 drawflush(display1)         # BROKEN: NameError: name 'display1' is not defined
 printflush(message1)        # BROKEN: NameError: name 'message1' is not defined
 hp = sensor(reactor1, health) # BROKEN: NameError: name 'reactor1' is not defined
 ```
+
 Python fails at runtime, and static analysis tools (Pylance, mypy, flake8) report undefined variable errors.
 
 ---
@@ -36,7 +38,7 @@ Python fails at runtime, and static analysis tools (Pylance, mypy, flake8) repor
 | **2. Named Hardware Link** | Physical device linked to processor | `cell1`, `display1`, `message1` | Quoted string literal (`"cell1"`, `"display1"`, `"message1"`) |
 | **3. Special Constant** | Game constants starting with `@` | `@unit`, `@counter`, `@health` | Quoted string literal (`"@unit"`, `"@counter"`, `"@health"`) |
 | **4. DSL Enum / Keyword** | Known property or mode enum | `clear`, `color`, `shoot` | DSL identifier or enum (`clear`, `SensorProperty.HEALTH`) |
-| **5. Numeric / String Literal**| Constant numbers or string texts | `42`, `3.14`, `"hello"` | Python literal (`42`, `3.14`, `"hello"`) |
+| **5. Numeric / String Literal** | Constant numbers or string texts | `42`, `3.14`, `"hello"` | Python literal (`42`, `3.14`, `"hello"`) |
 | **6. Dynamic Block Variable** | Variable bound via `getlink` | `b` from `getlink b 0` | Unquoted Python identifier (`b`) |
 
 ---
@@ -64,6 +66,7 @@ hp = sensor(b, "@health")
 ## 4. SSOT-Backed Identification (Zero Hardcoding)
 
 `mlog-py` does not hardcode device names or rely on string prefixes like `"cell"` or `"display"`. Instead:
+
 1. **Opcode Signature Metadata (`src/metadata.py`)**: Defines parameter roles (e.g. `drawflush` parameter 0 is `target_display`, `read` parameter 1 is `cell_block`, `control` parameter 1 is `target_block`).
 2. **Dynamic Variable Tracking**: Identifies if a variable was defined via `getlink` or dynamic block lookup.
 3. **Registry Validation**: Matches against official registry entries to verify property types.
