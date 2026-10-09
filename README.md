@@ -190,6 +190,7 @@ Detailed architecture specifications are available in [`docs/`](docs/):
 - [Decompiler Specification](docs/decompiler.md): CFG reconstruction, structuring, and function recovery.
 - [Semantic Argument Recovery](docs/semantic-arguments.md): Hardware link detection and quoting rules.
 - [Source Mapping](docs/source-mapping.md): Provenance tracking, debug comments, and JSON export.
+- [Upstream Mindustry Sync Guide](docs/mindustry-updates.md): Guide for updating and syncing mlog-py when new Mindustry versions release.
 
 ---
 
