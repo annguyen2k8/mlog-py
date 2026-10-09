@@ -5,7 +5,9 @@ and runtime implementations. Generates IDE typing stubs (.pyi) for VS Code / Pyl
 and keeps runtime module, IDE stubs, and compiler passes strictly synchronized.
 """
 
+import math
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from .mlog_registry import (
@@ -84,11 +86,122 @@ def _rt_draw(type_: Any, *params: Any) -> None:
 def _rt_drawflush(display: Any) -> None:
     return None
 
+MAX_TEXT_BUFFER: int = 400
+_rt_print_buffer: List[str] = []
+
+
+def _rt_format_print_value(value: Any) -> str:
+    """Format a value according to Mindustry Logic LExecutor.PrintI rules.
+
+    References:
+    - LExecutor.PrintI.run (Mindustry Java):
+        - if value.isobj: toString(value.objval)
+        - else: if Math.abs(numval - Math.round(numval)) < 0.00001: Math.round(numval) else: numval
+    - LExecutor.PrintI.toString (Mindustry Java):
+        - null -> "null"
+        - String -> s
+        - MappableContent -> content.name
+        - Content -> "[content]"
+        - Building -> build.block.name
+        - Unit -> unit.type.name
+        - Enum -> e.name()
+        - Team -> team.name
+        - other -> "[object]"
+    - GlobalVars.java:
+        - "false" = 0, "true" = 1 (booleans in Mindustry Logic are numbers 1 and 0)
+    - LVar.java:
+        - invalid(numval) (NaN or Infinite) -> sets objval = null, isobj = true -> formats as "null"
+    """
+    if value is None:
+        return "null"
+
+    # In Mindustry Logic, booleans true/false are numeric constants 1/0
+    if isinstance(value, bool):
+        return "1" if value else "0"
+
+    if isinstance(value, int):
+        return str(value)
+
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            return "null"
+        rounded = round(value)
+        if abs(value - rounded) < 0.00001:
+            return str(int(rounded))
+        return str(value)
+
+    if isinstance(value, str):
+        return value
+
+    if isinstance(value, Enum):
+        if hasattr(value, "value") and isinstance(value.value, str):
+            val_str = value.value
+            if val_str.startswith("@"):
+                return val_str[1:]
+            return val_str
+        return value.name
+
+    if hasattr(value, "block") and hasattr(value.block, "name"):
+        return str(value.block.name)
+    if hasattr(value, "type") and hasattr(value.type, "name"):
+        return str(value.type.name)
+    if hasattr(value, "name") and isinstance(value.name, str):
+        val_name = value.name
+        if val_name.startswith("@"):
+            return val_name[1:]
+        return val_name
+
+    return "[object]"
+
+
 def _rt_print(value: Any = "") -> None:
+    """Append text or a value to the processor print buffer.
+
+    Mindustry engine rules (LExecutor.PrintI):
+    1. If exec.textBuffer.length() >= maxTextBuffer (400), return immediately.
+    2. Convert value according to toString / numeric formatting.
+    3. Append value up to remaining capacity: Math.min(length, maxTextBuffer - current_length).
+    """
+    current_len = sum(len(s) for s in _rt_print_buffer)
+    if current_len >= MAX_TEXT_BUFFER:
+        return None
+
+    str_val = _rt_format_print_value(value)
+    remaining = MAX_TEXT_BUFFER - current_len
+    if len(str_val) > remaining:
+        _rt_print_buffer.append(str_val[:remaining])
+    else:
+        _rt_print_buffer.append(str_val)
     return None
 
-def _rt_printflush(message: Any) -> None:
+
+def _rt_printflush(message: Any = None) -> None:
+    """Flush the print buffer to a message block and clear the buffer.
+
+    Mindustry engine rules (LExecutor.PrintFlushI):
+    1. If target is a printable building (e.g. message block), write textBuffer to target.
+    2. exec.textBuffer.setLength(0) is ALWAYS called unconditionally, even if target
+       is null, invalid, destroyed, or not a printable building.
+    """
+    text = "".join(_rt_print_buffer)
+    if hasattr(message, "print") and callable(getattr(message, "print")):
+        message.print(text)
+    elif hasattr(message, "message"):
+        setattr(message, "message", text)
+    elif isinstance(message, dict):
+        message["message"] = text
+    _rt_print_buffer.clear()
     return None
+
+
+def get_print_buffer() -> str:
+    """Return accumulated text in runtime print buffer (useful for testing and simulation)."""
+    return "".join(_rt_print_buffer)
+
+
+def clear_print_buffer() -> None:
+    """Clear runtime print buffer."""
+    _rt_print_buffer.clear()
 
 def _rt_read(*args: Any) -> Any:
     return 0
@@ -378,6 +491,13 @@ INTRINSIC_DEFINITIONS: List[IntrinsicDef] = [
         summary="Append text or a value to the processor print buffer",
         docstring=(
             "Append text or a value to the processor print buffer.\n\n"
+            "Note: Mindustry Logic's print does NOT append a newline character.\n"
+            "Multiple consecutive print() calls concatenate directly into a single string.\n"
+            "To insert a newline, explicitly include '\\n' in the text string (e.g. print('Line 1\\n')).\n\n"
+            "The processor print buffer has a maximum capacity of 400 characters (maxTextBuffer = 400).\n"
+            "If the buffer is already full (>= 400 characters), subsequent calls are ignored.\n"
+            "If a string exceeds remaining capacity, it is truncated to fit.\n"
+            "Numbers within 0.00001 of an integer format as integers; null/NaN/Inf format as 'null'.\n\n"
             "Args:\n"
             "    value: Text string literal or variable to print."
         ),
@@ -388,7 +508,10 @@ INTRINSIC_DEFINITIONS: List[IntrinsicDef] = [
             IntrinsicSignature(
                 params=[IntrinsicParam("value", "Any")],
                 return_type="None",
-                docstring="Append value to print buffer.",
+                docstring=(
+                    "Append value to print buffer without trailing newline.\n"
+                    "Buffer capacity is 400 chars; consecutive calls concatenate directly."
+                ),
             ),
         ],
         runtime_fn=_rt_print,
@@ -397,7 +520,9 @@ INTRINSIC_DEFINITIONS: List[IntrinsicDef] = [
         name="printflush",
         summary="Flush the print buffer to a message block",
         docstring=(
-            "Flush the print buffer to a message block.\n\n"
+            "Flush the print buffer to a message block and clear the buffer.\n\n"
+            "If target is a valid printable block (e.g. message1), text is displayed on the block.\n"
+            "The processor print buffer is always cleared unconditionally to length 0.\n\n"
             "Args:\n"
             "    message: Target message block."
         ),
@@ -408,7 +533,7 @@ INTRINSIC_DEFINITIONS: List[IntrinsicDef] = [
             IntrinsicSignature(
                 params=[IntrinsicParam("message", "Any")],
                 return_type="None",
-                docstring="Flush print buffer to message block.",
+                docstring="Flush print buffer to message block and clear the buffer unconditionally.",
             ),
         ],
         runtime_fn=_rt_printflush,

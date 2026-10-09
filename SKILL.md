@@ -67,9 +67,17 @@ The Python DSL is strongly typed and checked against Mindustry's engine classes:
   from mlog import SensorProperty, ControlProperty, UnitControl, DrawType, LogicOp, Condition, Units, raw, null
   ```
 - **Physical Hardware Links vs Variables**:
-  - Direct hardware links are quoted strings: `read(val, "cell1", 0)`, `drawflush("display1")`, `printflush("message1")`.
+  - Direct hardware links are quoted strings: `val = read("cell1", 0)`, `drawflush("display1")`, `printflush("message1")`.
   - Dynamic links bound via `b = getlink(0)` are unquoted Python identifiers.
-- **Special Registers**: Emitted as quoted strings with `@` prefix: `set("@counter", 10)`, `sensor(u, "@unit", "@dead")`.
+- **Special Registers**: Emitted as quoted strings with `@` prefix: `set("@counter", 10)`, `u = sensor("@unit", "@dead")`.
+- **Print Buffer Semantics (`print` & `printflush`)**:
+  - In Mindustry Logic (`LExecutor.PrintI`), `print` appends text directly to the processor's internal `textBuffer`. It does **not** append a newline (`\n`) or space.
+  - Consecutive `print()` statements concatenate content on the same line (e.g. `print("Status: ")` then `print("ONLINE")` outputs `"Status: ONLINE"`).
+  - To insert a newline, the string literal must explicitly include `\n` (e.g. `print("Line 1\n")`).
+  - **Buffer Limit**: The processor buffer is capped at 400 characters (`maxTextBuffer = 400`). If `length() >= 400`, `print()` calls are ignored. Text exceeding remaining capacity is truncated (`append(strValue, 0, Math.min(len, 400 - current_len))`).
+  - **Value Formatting**: Booleans in Mindustry Logic are numbers `1` and `0` (`GlobalVars.java`). Numbers within `0.00001` of an integer format as integers (`Math.round(val)`). Invalid numbers (`NaN`, `Infinity`) become `null` and format as `"null"`.
+  - **Flush Semantics**: `printflush(target)` copies text to the target block (if printable) and **unconditionally** clears the processor buffer to length 0 (`textBuffer.setLength(0)`), even if target is null, invalid, or non-printable.
+  - Neither compiler nor decompiler may artificially synthesize `\n` or alter `print` calls, preserving exact 1-to-1 instruction semantics.
 
 ---
 

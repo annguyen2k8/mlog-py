@@ -566,13 +566,25 @@ def packcolor(r: Any, g: Any, b: Any, a: Any) -> Any:
 def print(value: Any) -> None:
     """Append text or a value to the processor print buffer.
     
+    Note: Mindustry Logic's print does NOT append a newline character.
+    Multiple consecutive print() calls concatenate directly into a single string.
+    To insert a newline, explicitly include '\n' in the text string (e.g. print('Line 1\n')).
+    
+    The processor print buffer has a maximum capacity of 400 characters (maxTextBuffer = 400).
+    If the buffer is already full (>= 400 characters), subsequent calls are ignored.
+    If a string exceeds remaining capacity, it is truncated to fit.
+    Numbers within 0.00001 of an integer format as integers; null/NaN/Inf format as 'null'.
+    
     Args:
         value: Text string literal or variable to print.
     """
     ...
 
 def printflush(message: Any) -> None:
-    """Flush the print buffer to a message block.
+    """Flush the print buffer to a message block and clear the buffer.
+    
+    If target is a valid printable block (e.g. message1), text is displayed on the block.
+    The processor print buffer is always cleared unconditionally to length 0.
     
     Args:
         message: Target message block.
