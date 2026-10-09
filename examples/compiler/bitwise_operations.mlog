@@ -1,0 +1,8 @@
+set mask 255
+set val 42
+op and masked val mask
+op or combined val 128
+op not inverted val 0
+op xor toggled val 15
+op shl shifted_left val 2
+op shr shifted_right val 1

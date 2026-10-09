@@ -43,6 +43,22 @@ printflush message1
 drawflush display1
 """,
     ),
+    (
+        "Bitwise Operations",
+        """op and a x y
+op or b x y
+op xor c x y
+op not d x 0
+op shl e x 2
+op shr f x 2
+""",
+    ),
+    (
+        "Min and Max Built-ins",
+        """op min m a b
+op max x a b
+""",
+    ),
 ]
 
 def main():

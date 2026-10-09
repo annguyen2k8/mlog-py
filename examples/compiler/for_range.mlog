@@ -1,0 +1,10 @@
+set total 0
+set i 1
+jump 10 greaterThanEq i 10
+jump 5 notEqual i 5
+jump 8 always 0 0
+jump 7 lessThanEq i 7
+jump 10 always 0 0
+op add total total i
+op add i i 2
+jump 2 always 0 0

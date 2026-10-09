@@ -1,0 +1,6 @@
+op and a x y
+op or b x y
+op xor c x y
+op not d x 0
+op shl e x 2
+op shr f x 2

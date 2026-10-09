@@ -149,8 +149,9 @@ $$
 \xrightarrow{\text{validator.py}} \text{Vanilla MLog}
 $$
 
-1. **AST Whitelist (`parser.py`)**: Rejects unsupported features (`class`,
-   `list`, `dict`, `for ... in`) with source locations.
+1. **AST Whitelist (`parser.py`)**: Whitelists supported AST nodes (including
+   `for ... in range(...)`). Rejects unsupported features (`class`, `list`,
+   `dict`, non-range iterators) with source locations.
 2. **IR Lowering (`compiler.py`)**: Generates symbolic nodes (`IRLabel`,
    `IRSet`, `IROp`, `IRJump`, `IRRaw`) with compiler temporaries (`__tmp0`).
    Implements short-circuit evaluation for `and`, `or`, `not`.
@@ -256,7 +257,7 @@ The framework provides guaranteed round-trip verification across three flows:
 
 ## 7. Testing Requirements & Corpus Structure
 
-- **Test Suite**: 329 automated tests in `tests/test_*.py`.
+- **Test Suite**: 377 automated tests in `tests/test_*.py`.
 - **Hardening Corpus (`tests/corpus/`)**: 32 real-world programs across 6
   categories:
   - `handwritten/`: Real game controller scripts (turrets, mining drones,

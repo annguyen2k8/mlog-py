@@ -112,8 +112,8 @@ wait 0.5
 
 ## Key Features
 
-- **Structured Control Flow**: `while`, `break`, `continue`, `if`, `elif`, and `else` with automatic label and instruction address resolution.
-- **Arithmetic & Comparison**: Expressions (`+`, `-`, `*`, `/`, `//`, `%`, `==`, `!=`, `<`, `<=`, `>`, `>=`) lowered with deterministic temporary variable management.
+- **Structured Control Flow**: `for` loops with `range(...)`, `while`, `break`, `continue`, `if`, `elif`, and `else` with automatic label and instruction address resolution.
+- **Arithmetic, Bitwise & Math**: Full expression support (`+`, `-`, `*`, `/`, `//`, `%`, bitwise `&`, `|`, `^`, `~`, `<<`, `>>`, built-in `min` and `max`) lowered with deterministic temporary variable management and strict 64-bit integer hardening.
 - **Short-Circuit Boolean Logic**: Full support for `and`, `or`, and `not` with standard Python short-circuit evaluation.
 - **Mindustry Compiler Intrinsics**: Direct access to Mindustry instructions (`sensor`, `control`, `ucontrol`, `draw`, `read`, `write`, `print`, `ubind`, `lookup`, etc.).
 - **Verified Registry & Enums**: Enums (`SensorProperty`, `ControlProperty`, `UnitControl`, `DrawType`, `LogicOp`, `Condition`, `Units`, etc.) verified against vanilla Mindustry source.

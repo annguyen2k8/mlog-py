@@ -1,0 +1,6 @@
+set val1 15
+set val2 27
+op min lowest val1 val2
+op max highest val1 val2
+op max __tmp0 val1 0
+op min bounded __tmp0 100

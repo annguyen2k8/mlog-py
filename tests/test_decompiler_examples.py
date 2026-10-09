@@ -68,9 +68,10 @@ class TestDecompilerExamples(unittest.TestCase):
                             used_names.add(node.id)
 
                 # Find any DSL symbol used without being imported or locally defined
+                # Note: min and max are Python built-ins and intentionally not imported from mlog
                 available_symbols = imported_from_mlog | locally_defined
                 for name in used_names:
-                    if name in MLOG_EXPORTS:
+                    if name in MLOG_EXPORTS and name not in {"min", "max"}:
                         self.assertIn(
                             name,
                             available_symbols,
