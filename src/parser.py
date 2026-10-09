@@ -16,7 +16,6 @@ UNSUPPORTED_NAMES = {
     ast.Delete: "del statement",
     ast.AugAssign: "augmented assignment (e.g. +=)",
     ast.AnnAssign: "annotated assignment",
-    ast.For: "for loop",
     ast.AsyncFor: "async for loop",
     ast.With: "with statement",
     ast.AsyncWith: "async with statement",
@@ -119,6 +118,7 @@ class ASTValidator(ast.NodeVisitor):
             ast.Expr,
             ast.If,
             ast.While,
+            ast.For,
             ast.Break,
             ast.Continue,
             ast.Pass,
@@ -190,6 +190,22 @@ class ASTValidator(ast.NodeVisitor):
         if not isinstance(target, ast.Name):
             self.error("assignment target must be a simple variable name (unpacking not supported)", target)
         self.visit(node.value)
+
+    def visit_For(self, node: ast.For):
+        if not isinstance(node.target, ast.Name):
+            self.error("for loop target must be a simple variable name", node.target)
+        if not isinstance(node.iter, ast.Call) or not isinstance(node.iter.func, ast.Name) or node.iter.func.id != "range":
+            self.error("for loop only supports 'range(...)' as iterator", node.iter)
+        if len(node.iter.args) not in (1, 2, 3):
+            self.error("range() expects 1 to 3 arguments in for loop", node.iter)
+        if node.iter.keywords:
+            self.error("range() does not support keyword arguments", node.iter)
+        for arg in node.iter.args:
+            self.visit(arg)
+        for stmt in node.body:
+            self.visit(stmt)
+        for stmt in node.orelse:
+            self.visit(stmt)
 
     def visit_Call(self, node: ast.Call):
         if not isinstance(node.func, ast.Name):

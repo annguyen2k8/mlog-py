@@ -1066,14 +1066,119 @@ class Compiler:
         # Emit loop end label
         self.instructions.append(IRLabel(name=while_end, loc=loc))
 
+    def compile_for(self, node: ast.For):
+        """Compile a for loop (e.g. for i in range(...): ...).
+
+        Supports range(stop), range(start, stop), range(start, stop, step).
+        Step can be positive, negative, or a dynamic expression.
+        Continue statements safely target for_latch, executing the step increment
+        before looping back to the condition check.
+        """
+        loc = self.loc(node)
+        target_name = self.format_name(node.target.id, node.target)
+
+        # Parse range arguments
+        args = node.iter.args
+        if len(args) == 1:
+            start_expr = ast.Constant(value=0)
+            stop_expr = args[0]
+            step_expr = ast.Constant(value=1)
+        elif len(args) == 2:
+            start_expr = args[0]
+            stop_expr = args[1]
+            step_expr = ast.Constant(value=1)
+        else:
+            start_expr = args[0]
+            stop_expr = args[1]
+            step_expr = args[2]
+
+        # 1. Initialize loop variable: target = start
+        start_val = self.compile_expr(start_expr)
+        self.instructions.append(IRSet(to=target_name, from_=start_val, loc=loc))
+
+        # Evaluate stop and step values into registers/temporaries
+        stop_val = self.compile_expr(stop_expr)
+        step_val = self.compile_expr(step_expr)
+
+        # Determine step sign statically if possible
+        static_step = _get_literal_int(step_expr)
+        if static_step == 0:
+            self.error("range() step argument must not be zero", step_expr)
+
+        for_check = self.new_label("for_check")
+        for_body = self.new_label("for_body")
+        for_latch = self.new_label("for_latch")
+        for_end = self.new_label("for_end")
+
+        # Push loop context: 'continue' jumps to for_latch (to run step increment),
+        # 'break' jumps to for_end
+        self._loop_stack.append((for_latch, for_end))
+
+        # Loop condition check
+        self.instructions.append(IRLabel(name=for_check, loc=loc))
+        if static_step is not None:
+            if static_step > 0:
+                # If target >= stop, loop finishes -> jump to for_end
+                self.instructions.append(
+                    IRJump(target=for_end, cond="greaterThanEq", a=target_name, b=stop_val, loc=loc)
+                )
+            else:
+                # Step is negative: if target <= stop, loop finishes -> jump to for_end
+                self.instructions.append(
+                    IRJump(target=for_end, cond="lessThanEq", a=target_name, b=stop_val, loc=loc)
+                )
+        else:
+            # Dynamic step: branch on step > 0
+            neg_step_lbl = self.new_label("for_neg_step")
+            self.instructions.append(
+                IRJump(target=neg_step_lbl, cond="lessThanEq", a=step_val, b="0", loc=loc)
+            )
+            # Positive step: if target >= stop -> for_end
+            self.instructions.append(
+                IRJump(target=for_end, cond="greaterThanEq", a=target_name, b=stop_val, loc=loc)
+            )
+            self.instructions.append(
+                IRJump(target=for_body, cond="always", a="0", b="0", loc=loc)
+            )
+            # Negative step check
+            self.instructions.append(IRLabel(name=neg_step_lbl, loc=loc))
+            self.instructions.append(
+                IRJump(target=for_end, cond="lessThanEq", a=target_name, b=stop_val, loc=loc)
+            )
+            self.instructions.append(IRLabel(name=for_body, loc=loc))
+
+        # Loop body
+        for stmt in node.body:
+            self.compile_stmt(stmt)
+
+        # Latch: increment target by step and jump back to for_check
+        self.instructions.append(IRLabel(name=for_latch, loc=loc))
+        self.instructions.append(
+            IROp(op="add", dest=target_name, a=target_name, b=step_val, loc=loc)
+        )
+        self.instructions.append(
+            IRJump(target=for_check, cond="always", a="0", b="0", loc=loc)
+        )
+
+        # Pop loop context
+        self._loop_stack.pop()
+
+        # Orelse block (executed on normal loop exhaustion)
+        if node.orelse:
+            for stmt in node.orelse:
+                self.compile_stmt(stmt)
+
+        # Loop end label
+        self.instructions.append(IRLabel(name=for_end, loc=loc))
+
     def compile_break(self, node: ast.Break):
         """Compile a break statement."""
         loc = self.loc(node)
         if not self._loop_stack:
             self.error("'break' outside of loop", node)
-        _, while_end = self._loop_stack[-1]
+        _, for_or_while_end = self._loop_stack[-1]
         self.instructions.append(
-            IRJump(target=while_end, cond="always", a="0", b="0", loc=loc)
+            IRJump(target=for_or_while_end, cond="always", a="0", b="0", loc=loc)
         )
 
     def compile_continue(self, node: ast.Continue):
@@ -1081,9 +1186,9 @@ class Compiler:
         loc = self.loc(node)
         if not self._loop_stack:
             self.error("'continue' outside of loop", node)
-        while_start, _ = self._loop_stack[-1]
+        latch_or_start, _ = self._loop_stack[-1]
         self.instructions.append(
-            IRJump(target=while_start, cond="always", a="0", b="0", loc=loc)
+            IRJump(target=latch_or_start, cond="always", a="0", b="0", loc=loc)
         )
 
     def compile_function_def(self, node: ast.FunctionDef):
@@ -1128,6 +1233,8 @@ class Compiler:
             self.compile_if(stmt)
         elif isinstance(stmt, ast.While):
             self.compile_while(stmt)
+        elif isinstance(stmt, ast.For):
+            self.compile_for(stmt)
         elif isinstance(stmt, ast.Break):
             self.compile_break(stmt)
         elif isinstance(stmt, ast.Continue):

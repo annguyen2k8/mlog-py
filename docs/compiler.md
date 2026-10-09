@@ -14,7 +14,7 @@ The compiler targets a strict, strongly-typed subset of Python designed for Mind
 | **Arithmetic** | `+`, `-`, `*`, `/`, `//`, `%`, `**` | `op add`, `op sub`, `op mul`, `op div`, `op idiv`, `op mod` |
 | **Comparisons** | `==`, `!=`, `<`, `<=`, `>`, `>=` | `op equal`, `op notEqual`, `op lessThan`, `op lessThanEq` |
 | **Boolean Logic** | `and`, `or`, `not` | Short-circuit conditional jumps |
-| **Control Flow** | `if`, `elif`, `else`, `while`, `break`, `continue` | Forward and backward numeric jumps |
+| **Control Flow** | `if`, `elif`, `else`, `while`, `for ... in range(...)`, `break`, `continue` | Forward and backward numeric jumps |
 | **Built-in Registers** | `@counter`, `@time`, `@tick`, `@unit` | Runtime processor registers |
 | **Intrinsics** | `sensor()`, `control()`, `draw()`, `read()`, `write()`, etc. | Canonical Mindustry Logic instructions |
 
@@ -24,7 +24,7 @@ Features incompatible with Mindustry's flat processor memory model are rejected 
 
 - **Classes & Objects**: `class`, inheritance, methods
 - **Data Collections**: Lists (`[]`), Dictionaries (`{}`), Sets, Tuples
-- **Iteration**: `for ... in` loops, list comprehensions, generator expressions
+- **Container Iteration**: `for ... in <collection>` (only `range(...)` is supported), list comprehensions, generator expressions
 - **Exceptions**: `try/except`, `raise`, `finally`
 - **Asynchronous Code**: `async def`, `await`
 
