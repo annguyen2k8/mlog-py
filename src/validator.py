@@ -4,7 +4,7 @@ Validates that emitted mlog lines conform to vanilla Mindustry processor grammar
 opcode signatures, valid numeric addresses in jumps, and line length limits.
 """
 
-from typing import List, Optional
+from typing import List
 
 
 class ValidationError(Exception):

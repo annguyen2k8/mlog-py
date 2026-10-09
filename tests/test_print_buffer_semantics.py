@@ -13,7 +13,6 @@ Verifies:
 import ast
 import unittest
 
-from src.compiler import compile_source_to_ir
 from src.decompiler import decompile
 from src.metadata import (
     _rt_print,

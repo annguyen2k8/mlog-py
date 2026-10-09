@@ -6,9 +6,9 @@ SSOT: src.metadata.MLOG_EXPORTS and src.metadata.ALL_REGISTRY_ENUMS.
 """
 
 import ast
-from typing import Any, Iterable, Optional, Set, Union
+from typing import Any, Iterable, Optional, Set
 
-from src.metadata import ALL_REGISTRY_ENUMS, ALLOWED_INTRINSICS, MLOG_EXPORTS
+from src.metadata import ALL_REGISTRY_ENUMS, MLOG_EXPORTS
 
 
 def _collect_expr_symbols(expr: Any, symbols: Set[str]) -> None:

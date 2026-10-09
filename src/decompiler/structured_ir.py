@@ -6,7 +6,7 @@ Instruction, Unstructured) independent of high-level expression synthesis or var
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Set
+from typing import Dict, List, Optional, Set
 
 from .instruction import MlogInstruction
 from .semantics import format_semantic_argument, UNARY_LOGIC_OPS

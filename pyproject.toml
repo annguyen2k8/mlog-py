@@ -31,9 +31,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Anzuno/mlog-py"
-Repository = "https://github.com/Anzuno/mlog-py"
-Issues = "https://github.com/Anzuno/mlog-py/issues"
+Homepage = "https://github.com/annguyen2k8/mlog-py"
+Repository = "https://github.com/annguyen2k8/mlog-py"
+Issues = "https://github.com/annguyen2k8/mlog-py/issues"
 
 [project.scripts]
 mlog-py = "src.mlog:main"
@@ -47,4 +47,4 @@ namespaces = true
 py-modules = ["compiler", "mlog"]
 
 [tool.setuptools.package-data]
-src = ["*.pyi", "*.java"]
+src = ["*.pyi"]

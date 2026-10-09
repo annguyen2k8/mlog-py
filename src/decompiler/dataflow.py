@@ -15,7 +15,6 @@ from .expression import (
     ConstantExpr,
     Expr,
     UnaryExpr,
-    UnknownExpr,
     VariableExpr,
     parse_operand_to_expr,
 )
@@ -28,17 +27,12 @@ from .semantics import (
 )
 from .structured_ir import (
     AssignNode,
-    BreakNode,
-    ContinueNode,
     ExprStmtNode,
     IfNode,
     InstructionNode,
-    PassNode,
     StructuredNode,
     StructuredProgram,
-    UnstructuredNode,
     WhileNode,
-    condition_to_python,
 )
 from .function_ir import CallNode, ReturnNode
 

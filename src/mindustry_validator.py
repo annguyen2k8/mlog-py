@@ -15,16 +15,24 @@ def _find_classpath() -> Optional[str]:
     """Discover classpath for Mindustry engine and MindustryHarness."""
     src_dir = os.path.dirname(os.path.abspath(__file__))
     mlog_py_root = os.path.abspath(os.path.join(src_dir, ".."))
-    harness_build = os.path.join(mlog_py_root, "build")
+    harness_build = os.environ.get("MINDUSTRY_HARNESS_BUILD", os.path.join(mlog_py_root, "build"))
 
     # Mindustry core classes
-    mindustry_core_classes = os.path.abspath(
-        os.path.join(mlog_py_root, "..", "Mindustry", "core", "build", "classes", "java", "main")
-    )
+    env_core = os.environ.get("MINDUSTRY_CORE_PATH")
+    if env_core:
+        mindustry_core_classes = os.path.abspath(env_core)
+    else:
+        mindustry_core_classes = os.path.abspath(
+            os.path.join(mlog_py_root, "..", "Mindustry", "core", "build", "classes", "java", "main")
+        )
 
     # Arc dependencies from Gradle cache
-    gradle_cache = os.path.expanduser("~/.gradle/caches/modules-2/files-2.1/com.github.Anuken.Arc")
-    arc_jars = glob.glob(os.path.join(gradle_cache, "**", "*.jar"), recursive=True)
+    env_arc = os.environ.get("ARC_JARS_PATH")
+    if env_arc and os.path.isdir(env_arc):
+        arc_jars = glob.glob(os.path.join(env_arc, "**", "*.jar"), recursive=True)
+    else:
+        gradle_cache = os.path.expanduser("~/.gradle/caches/modules-2/files-2.1/com.github.Anuken.Arc")
+        arc_jars = glob.glob(os.path.join(gradle_cache, "**", "*.jar"), recursive=True)
 
     if not os.path.exists(harness_build):
         return None

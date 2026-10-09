@@ -5,12 +5,10 @@ from ControlFlowGraph without guessing. Fallbacks to UnstructuredNode on irreduc
 or unstructured jump patterns to guarantee semantic correctness.
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Set
 
-from .cfg import BasicBlock, CFGEdge, ControlFlowGraph, EdgeType, build_cfg
-from .errors import CFGError
-from .instruction import MlogInstruction
+from .cfg import BasicBlock, CFGEdge, ControlFlowGraph, build_cfg
 from .dataflow import (
     DataflowTransformer,
     condition_to_expr,

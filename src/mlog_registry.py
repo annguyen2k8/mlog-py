@@ -11,7 +11,7 @@ Supports explicit raw() bypass for forward-compatibility.
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 
 from .errors import CompileError, SourceLocation
 from .mlog_registry_data import (
@@ -20,7 +20,6 @@ from .mlog_registry_data import (
     CONTROL_PROPERTIES,
     GRAPHICS_TYPES,
     ITEMS,
-    LACCESS_ALL,
     LIQUIDS,
     LOGIC_OPERATIONS,
     RADAR_SORTS,

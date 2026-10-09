@@ -7,7 +7,7 @@ Provides bidirectional lookup (Python <-> MLog), debug mode formatting, and dete
 
 from dataclasses import dataclass, field
 import json
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .instruction import MlogInstruction
 

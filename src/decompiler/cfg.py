@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Set, Tuple
 
-from .errors import CFGError
 from .instruction import MlogInstruction
 from .parser import parse_mlog
 

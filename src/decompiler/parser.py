@@ -4,7 +4,7 @@ Parses canonical Mindustry Logic (mlog) source text into a strongly-typed sequen
 of MlogInstruction objects, enforcing processor limits and grammar rules.
 """
 
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 from ..errors import SourceLocation
 from ..validator import (

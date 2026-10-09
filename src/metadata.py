@@ -6,7 +6,7 @@ and keeps runtime module, IDE stubs, and compiler passes strictly synchronized.
 """
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
@@ -24,7 +24,6 @@ from .mlog_registry import (
     Teams,
     UnitControl,
     Units,
-    ENUM_CLASS_TO_REGISTRY,
 )
 
 

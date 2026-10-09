@@ -8,17 +8,15 @@ Guarantees semantic correctness and strict Zero Guessing.
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
-from .cfg import BasicBlock, ControlFlowGraph, build_cfg
+from .cfg import ControlFlowGraph
 from .dataflow import (
     DataflowTransformer,
     condition_to_expr,
-    is_compiler_temporary,
     parse_operand_to_expr,
 )
-from .expression import Expr, VariableExpr
+from .expression import Expr
 from .function_ir import CallNode, FunctionDef, FunctionProgram, Parameter, ReturnNode
 from .instruction import MlogInstruction
-from .parser import parse_mlog
 from .semantics import (
     collect_program_defined_variables,
     get_instruction_dest_vars,
@@ -30,9 +28,7 @@ from .structured_ir import (
     ContinueNode,
     IfNode,
     InstructionNode,
-    PassNode,
     StructuredNode,
-    StructuredProgram,
     WhileNode,
     condition_to_python,
 )
