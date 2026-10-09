@@ -87,28 +87,25 @@ debug_code = decompile(mlog_code, debug=True)
 ```python
 from mlog import sensor, control, wait, SensorProperty, ControlProperty
 
-while True:
-    heat = sensor("reactor1", SensorProperty.HEAT)
-    if heat > 0.8:
-        control(ControlProperty.ENABLED, "reactor1", 0)
-    else:
-        control(ControlProperty.ENABLED, "reactor1", 1)
-    wait(0.5)
-```
+heat = sensor("reactor1", SensorProperty.HEAT)
 
-> **Note**: Mindustry Logic runs processor programs continuously, so `while True` here is an explicit Python representation of the program's persistent execution cycle.
+if heat > 0.8:
+    control(ControlProperty.ENABLED, "reactor1", 0)
+else:
+    control(ControlProperty.ENABLED, "reactor1", 1)
+
+wait(0.5)
+```
 
 ### Compiled MLog Output (`reactor.mlog`)
 
 ```text
-jump 8 equal true 0
 sensor heat reactor1 @heat
-jump 5 lessThanEq heat 0.8
+jump 4 lessThanEq heat 0.8
 control enabled reactor1 0 0 0 0
-jump 6 always 0 0
+jump 5 always 0 0
 control enabled reactor1 1 0 0 0
 wait 0.5
-jump 0 always 0 0
 ```
 
 ---
