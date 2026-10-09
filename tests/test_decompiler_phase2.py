@@ -182,7 +182,7 @@ set z 5
         py = prog.to_python()
         ast.parse(py)
         self.assertIn("while i < 10:", py)
-        self.assertIn('op("add", i, i, 1)', py)
+        self.assertIn('i = op("add", i, 1)', py)
         self.assertIn("z = 5", py)
 
     def test_while_true_infinite_loop(self):

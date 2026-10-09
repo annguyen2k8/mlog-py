@@ -19,8 +19,13 @@ from .expression import (
     VariableExpr,
     parse_operand_to_expr,
 )
-from .instruction import MlogInstruction
-from .semantics import get_instruction_dest_vars, get_instruction_read_vars
+from .semantics import (
+    ArgumentSemanticRole,
+    UNARY_LOGIC_OPS,
+    get_argument_semantic_role,
+    get_instruction_dest_vars,
+    get_instruction_read_vars,
+)
 from .structured_ir import (
     AssignNode,
     BreakNode,
@@ -74,6 +79,54 @@ def condition_to_expr(cond: str, a: str, b: str, invert: bool = False) -> Expr:
     }
     py_op = cmp_map.get(cond, "==")
     return BinaryExpr(op=py_op, left=a_expr, right=b_expr)
+
+
+def semantic_argument_to_expr(
+    opcode: str,
+    arg_idx: int,
+    arg: str,
+    defined_variables: Optional[Set[str]],
+    all_args: Tuple[str, ...],
+) -> Expr:
+    """Convert an instruction argument to an Expr node respecting semantic roles and SSOT."""
+    if arg == "true":
+        return ConstantExpr(value=True, raw_str=arg)
+    if arg == "false":
+        return ConstantExpr(value=False, raw_str=arg)
+    if arg == "null":
+        return ConstantExpr(value=None, raw_str=arg)
+    if arg.startswith('"') and arg.endswith('"'):
+        return ConstantExpr(value=arg[1:-1], raw_str=arg)
+    if arg.startswith("@"):
+        return ConstantExpr(value=arg, raw_str=arg)
+    if arg.isdigit() or (arg.startswith("-") and arg[1:].isdigit()):
+        try:
+            return ConstantExpr(value=int(arg), raw_str=arg)
+        except ValueError:
+            pass
+    try:
+        val = float(arg)
+        return ConstantExpr(value=val, raw_str=arg)
+    except ValueError:
+        pass
+
+    role = get_argument_semantic_role(opcode, arg_idx, all_args)
+    if role == ArgumentSemanticRole.BLOCK_OR_DEVICE:
+        if defined_variables is not None and arg in defined_variables:
+            return VariableExpr(name=arg)
+        return ConstantExpr(value=arg, raw_str=arg)
+
+    if role == ArgumentSemanticRole.KEYWORD_OR_ENUM:
+        return ConstantExpr(value=arg, raw_str=arg)
+
+    if role == ArgumentSemanticRole.VARIABLE_DEF:
+        return VariableExpr(name=arg)
+
+    if arg.isidentifier() and not arg.startswith("@"):
+        return VariableExpr(name=arg)
+
+    return ConstantExpr(value=arg, raw_str=arg)
+
 
 
 def substitute_variable(expr: Expr, var_name: str, replacement: Expr) -> Expr:
@@ -249,15 +302,84 @@ class DataflowTransformer:
                         result.append(AssignNode(target=dest, value=UnaryExpr("~", a_expr), source_addresses=[instr.address]))
                         continue
 
-                    # B.3: General logic operation call: op("max", a, b)
+                    # B.3: General logic operation call: op("max", a, b) or op("rand", a)
                     call_args = [ConstantExpr(op_name), a_expr]
-                    if len(args) > 3:
+                    if len(args) > 3 and op_name not in UNARY_LOGIC_OPS:
                         call_args.append(b_expr)
                     result.append(AssignNode(target=dest, value=CallExpr("op", call_args), source_addresses=[instr.address]))
                     continue
 
+                defined_vars = getattr(node, "defined_variables", None)
+
+                # Case C: read dest cell address -> dest = read(cell, address)
+                if op == "read" and len(args) == 3:
+                    dest = args[0]
+                    if dest.isidentifier() and not dest.startswith("@"):
+                        cell_expr = semantic_argument_to_expr("read", 1, args[1], defined_vars, args)
+                        addr_expr = semantic_argument_to_expr("read", 2, args[2], defined_vars, args)
+                        result.append(AssignNode(target=dest, value=CallExpr("read", [cell_expr, addr_expr]), source_addresses=[instr.address]))
+                        continue
+
+                # Case D: sensor dest block prop -> dest = sensor(block, prop)
+                if op == "sensor" and len(args) == 3:
+                    dest = args[0]
+                    if dest.isidentifier() and not dest.startswith("@"):
+                        block_expr = semantic_argument_to_expr("sensor", 1, args[1], defined_vars, args)
+                        prop_expr = semantic_argument_to_expr("sensor", 2, args[2], defined_vars, args)
+                        result.append(AssignNode(target=dest, value=CallExpr("sensor", [block_expr, prop_expr]), source_addresses=[instr.address]))
+                        continue
+
+                # Case E: getlink dest index -> dest = getlink(index)
+                if op == "getlink" and len(args) == 2:
+                    dest = args[0]
+                    if dest.isidentifier() and not dest.startswith("@"):
+                        idx_expr = semantic_argument_to_expr("getlink", 1, args[1], defined_vars, args)
+                        result.append(AssignNode(target=dest, value=CallExpr("getlink", [idx_expr]), source_addresses=[instr.address]))
+                        continue
+
+                # Case F: lookup type dest index -> dest = lookup(type, index)
+                if op == "lookup" and len(args) == 3:
+                    dest = args[1]
+                    if dest.isidentifier() and not dest.startswith("@"):
+                        type_expr = semantic_argument_to_expr("lookup", 0, args[0], defined_vars, args)
+                        idx_expr = semantic_argument_to_expr("lookup", 2, args[2], defined_vars, args)
+                        result.append(AssignNode(target=dest, value=CallExpr("lookup", [type_expr, idx_expr]), source_addresses=[instr.address]))
+                        continue
+
+                # Case G: packcolor dest r g b a -> dest = packcolor(r, g, b, a)
+                if op == "packcolor" and len(args) == 5:
+                    dest = args[0]
+                    if dest.isidentifier() and not dest.startswith("@"):
+                        params = [semantic_argument_to_expr("packcolor", i, args[i], defined_vars, args) for i in range(1, 5)]
+                        result.append(AssignNode(target=dest, value=CallExpr("packcolor", params), source_addresses=[instr.address]))
+                        continue
+
+                # Case H: radar target1 target2 target3 sort turret sort_order output -> output = radar(...)
+                if op == "radar" and len(args) >= 7:
+                    dest = args[6]
+                    if dest.isidentifier() and not dest.startswith("@"):
+                        params = [semantic_argument_to_expr("radar", i, args[i], defined_vars, args) for i in range(6)]
+                        result.append(AssignNode(target=dest, value=CallExpr("radar", params), source_addresses=[instr.address]))
+                        continue
+
+                # Case I: uradar target1 target2 target3 sort 0 sort_order output -> output = uradar(...)
+                if op == "uradar":
+                    if len(args) == 7:
+                        dest = args[6]
+                        if dest.isidentifier() and not dest.startswith("@"):
+                            params = [semantic_argument_to_expr("uradar", i, args[i], defined_vars, args) for i in (0, 1, 2, 3, 5)]
+                            result.append(AssignNode(target=dest, value=CallExpr("uradar", params), source_addresses=[instr.address]))
+                            continue
+                    elif len(args) == 6:
+                        dest = args[5]
+                        if dest.isidentifier() and not dest.startswith("@"):
+                            params = [semantic_argument_to_expr("uradar", i, args[i], defined_vars, args) for i in range(5)]
+                            result.append(AssignNode(target=dest, value=CallExpr("uradar", params), source_addresses=[instr.address]))
+                            continue
+
                 # Fallback: keep InstructionNode untouched (Zero Guessing)
                 result.append(node)
+
 
             elif isinstance(node, IfNode):
                 # Recursively convert then and else branches

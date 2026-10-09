@@ -85,6 +85,7 @@ _PARAM_ROLE_MAP: Dict[str, ArgumentSemanticRole] = {
     "type": ArgumentSemanticRole.KEYWORD_OR_ENUM,
     "action": ArgumentSemanticRole.KEYWORD_OR_ENUM,
     "locate": ArgumentSemanticRole.KEYWORD_OR_ENUM,
+    "flag": ArgumentSemanticRole.KEYWORD_OR_ENUM,
     "target1": ArgumentSemanticRole.KEYWORD_OR_ENUM,
     "target2": ArgumentSemanticRole.KEYWORD_OR_ENUM,
     "target3": ArgumentSemanticRole.KEYWORD_OR_ENUM,
@@ -92,6 +93,12 @@ _PARAM_ROLE_MAP: Dict[str, ArgumentSemanticRole] = {
     "unit_type": ArgumentSemanticRole.KEYWORD_OR_ENUM,
     "cond": ArgumentSemanticRole.KEYWORD_OR_ENUM,
     "prop": ArgumentSemanticRole.KEYWORD_OR_ENUM,
+}
+
+
+UNARY_LOGIC_OPS: Set[str] = {
+    "not", "abs", "sign", "log", "log10", "floor", "ceil",
+    "round", "sqrt", "rand", "sin", "cos", "tan", "asin", "acos", "atan",
 }
 
 
@@ -113,6 +120,10 @@ def get_argument_semantic_role(
         if action == "getBlock" and arg_idx in (3, 4, 5):
             return ArgumentSemanticRole.VARIABLE_DEF
         return ArgumentSemanticRole.OPERAND
+
+    # Unary op dummy second operand (b in 'op rand xM wB b')
+    if opcode == "op" and args and len(args) > 0 and args[0] in UNARY_LOGIC_OPS and arg_idx >= 3:
+        return ArgumentSemanticRole.KEYWORD_OR_ENUM
 
     # Lookup intrinsic definition from metadata
     idef = _INTRINSIC_BY_NAME.get(opcode)
@@ -170,6 +181,8 @@ def get_instruction_dest_vars(instr: MlogInstruction) -> List[str]:
         return [args[4], args[5], args[6], args[7]]
     if op == "ucontrol" and len(args) >= 6 and args[0] == "getBlock":
         return [args[3], args[4], args[5]]
+    if op == "unpackcolor" and len(args) >= 4:
+        return [args[0], args[1], args[2], args[3]]
     return []
 
 
@@ -192,7 +205,11 @@ def get_instruction_read_vars(
     args = instr.args
     reads: List[str] = []
 
+    is_unary_op = (op == "op" and len(args) > 0 and args[0] in UNARY_LOGIC_OPS)
+
     for idx, arg in enumerate(args):
+        if is_unary_op and idx >= 3:
+            continue
         if is_special_constant(arg) or is_numeric_literal(arg) or is_string_literal(arg):
             continue
         if arg in ("true", "false", "null") or not arg.isidentifier():
@@ -255,13 +272,13 @@ def format_semantic_argument(
             return arg
         return quote_string_literal(arg)
 
-    if role == ArgumentSemanticRole.VARIABLE_DEF:
-        if arg.isidentifier() and not arg.startswith("@"):
-            return arg
+    if role == ArgumentSemanticRole.KEYWORD_OR_ENUM:
+        # Keywords, operations, modes, and enum literals must always be string literals in Python DSL
         return quote_string_literal(arg)
 
-    # For general OPERAND or KEYWORD_OR_ENUM:
+    # For general OPERAND:
     if arg.isidentifier() and not arg.startswith("@"):
         return arg
 
     return quote_string_literal(arg)
+

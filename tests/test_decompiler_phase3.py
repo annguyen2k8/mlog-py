@@ -256,9 +256,9 @@ packcolor col 1 0 0 1
 """
         py = decompile(mlog)
         # Verify instructions remain valid without making assumptions or inventing APIs
-        self.assertIn("ucontrol(move, x, y, 0, 0, 0)", py)
-        self.assertIn("draw(clear, 0, 0, 0, 0, 0, 0)", py)
-        self.assertIn("packcolor(col, 1, 0, 0, 1)", py)
+        self.assertIn('ucontrol("move", x, y, 0, 0, 0)', py)
+        self.assertIn('draw("clear", 0, 0, 0, 0, 0, 0)', py)
+        self.assertIn("col = packcolor(1, 0, 0, 1)", py)
 
     # -----------------------------------------------------------------------
     # 7. End-to-End Round-Trip Regression Tests (mlog -> Python -> compiler -> mlog)

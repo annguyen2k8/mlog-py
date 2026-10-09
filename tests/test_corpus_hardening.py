@@ -297,7 +297,7 @@ class TestCorpusRegressionCases(unittest.TestCase):
         mlog = "draw line 10.5 20.5 30.5 40.5 0 0\nwait 0.25\n"
         py = decompile(mlog)
         ast.parse(py)
-        self.assertIn("draw(line, 10.5, 20.5, 30.5, 40.5, 0, 0)", py)
+        self.assertIn('draw("line", 10.5, 20.5, 30.5, 40.5, 0, 0)', py)
         self.assertIn("wait(0.25)", py)
 
     def test_at_constant_quoted_in_assignments(self):

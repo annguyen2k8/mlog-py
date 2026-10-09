@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Set
 
 from .instruction import MlogInstruction
-from .semantics import format_semantic_argument
+from .semantics import format_semantic_argument, UNARY_LOGIC_OPS
 
 
 # Mapping of Mindustry logic comparison operators to Python operators
@@ -99,12 +99,70 @@ def instruction_to_python(
     if op == "op" and len(args) >= 3:
         op_name = args[0]
         dest = args[1]
-        dest_str = repr(dest) if dest.startswith("@") or not dest.isidentifier() else dest
         a = format_operand(args[2])
-        if len(args) == 4:
+        is_unary = op_name in UNARY_LOGIC_OPS
+        if dest.isidentifier() and not dest.startswith("@"):
+            if len(args) == 4 and not is_unary:
+                b = format_operand(args[3])
+                return f'{dest} = op("{op_name}", {a}, {b})'
+            return f'{dest} = op("{op_name}", {a})'
+        dest_str = repr(dest)
+        if len(args) == 4 and not is_unary:
             b = format_operand(args[3])
             return f'op("{op_name}", {dest_str}, {a}, {b})'
         return f'op("{op_name}", {dest_str}, {a})'
+
+    if op == "read" and len(args) == 3:
+        dest = args[0]
+        if dest.isidentifier() and not dest.startswith("@"):
+            cell = format_semantic_argument("read", 1, args[1], defined_variables, args)
+            addr = format_semantic_argument("read", 2, args[2], defined_variables, args)
+            return f"{dest} = read({cell}, {addr})"
+
+    if op == "sensor" and len(args) == 3:
+        dest = args[0]
+        if dest.isidentifier() and not dest.startswith("@"):
+            block = format_semantic_argument("sensor", 1, args[1], defined_variables, args)
+            prop = format_semantic_argument("sensor", 2, args[2], defined_variables, args)
+            return f"{dest} = sensor({block}, {prop})"
+
+    if op == "getlink" and len(args) == 2:
+        dest = args[0]
+        if dest.isidentifier() and not dest.startswith("@"):
+            idx = format_semantic_argument("getlink", 1, args[1], defined_variables, args)
+            return f"{dest} = getlink({idx})"
+
+    if op == "lookup" and len(args) == 3:
+        dest = args[1]
+        if dest.isidentifier() and not dest.startswith("@"):
+            type_ = format_semantic_argument("lookup", 0, args[0], defined_variables, args)
+            idx = format_semantic_argument("lookup", 2, args[2], defined_variables, args)
+            return f"{dest} = lookup({type_}, {idx})"
+
+    if op == "packcolor" and len(args) == 5:
+        dest = args[0]
+        if dest.isidentifier() and not dest.startswith("@"):
+            params = [format_semantic_argument("packcolor", i, args[i], defined_variables, args) for i in range(1, 5)]
+            return f"{dest} = packcolor({', '.join(params)})"
+
+    if op == "radar" and len(args) >= 7:
+        dest = args[6]
+        if dest.isidentifier() and not dest.startswith("@"):
+            params = [format_semantic_argument("radar", i, args[i], defined_variables, args) for i in range(6)]
+            return f"{dest} = radar({', '.join(params)})"
+
+    if op == "uradar":
+        if len(args) == 7:
+            dest = args[6]
+            if dest.isidentifier() and not dest.startswith("@"):
+                params = [format_semantic_argument("uradar", i, args[i], defined_variables, args) for i in (0, 1, 2, 3, 5)]
+                return f"{dest} = uradar({', '.join(params)})"
+        elif len(args) == 6:
+            dest = args[5]
+            if dest.isidentifier() and not dest.startswith("@"):
+                params = [format_semantic_argument("uradar", i, args[i], defined_variables, args) for i in range(5)]
+                return f"{dest} = uradar({', '.join(params)})"
+
 
     if op == "stop":
         return "stop()"

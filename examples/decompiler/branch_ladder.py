@@ -1,5 +1,7 @@
 # Decompiled from branch_ladder.mlog
 # Verified via ast.parse and semantic argument recovery
+from mlog import jump
+
 a = 15
 if a > 20:
     res = 1

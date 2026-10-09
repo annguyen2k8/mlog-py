@@ -1,5 +1,7 @@
 # Decompiled from nested_loops.mlog
 # Verified via ast.parse and semantic argument recovery
+from mlog import print, printflush
+
 r = 0
 while True:
     if r < 3:

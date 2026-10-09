@@ -140,8 +140,9 @@ class ConstantExpr(Expr):
                 return repr(self.value)
             if self.value.startswith('"') and self.value.endswith('"'):
                 return self.value
-            # Normal string literal
-            return repr(self.value)
+            # Normal string literal with canonical double quotes
+            escaped = self.value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+            return f'"{escaped}"'
         return str(self.value)
 
 
