@@ -10,12 +10,32 @@ import mindustry.logic.LAssembler;
 import mindustry.logic.LStatement;
 import mindustry.logic.LStatements;
 
+import mindustry.logic.LExecutor;
+import mindustry.logic.LVar;
+
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 
 public class MindustryHarness {
     public static void main(String[] args) {
+        boolean runMode = false;
+        int maxSteps = 10000;
+        for (int i = 0; i < args.length; i++) {
+            if ("--run".equals(args[i])) {
+                runMode = true;
+                if (i + 1 < args.length && !args[i + 1].startsWith("--")) {
+                    try {
+                        maxSteps = Integer.parseInt(args[++i]);
+                    } catch (NumberFormatException ignored) {}
+                }
+            } else if ("--steps".equals(args[i]) && i + 1 < args.length) {
+                try {
+                    maxSteps = Integer.parseInt(args[++i]);
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+
         try {
             Core.files = new MockFiles();
             Vars.content = new ContentLoader();
@@ -55,7 +75,28 @@ public class MindustryHarness {
                 }
             }
 
-            System.out.println("OK:" + asm.instructions.length);
+            if (runMode) {
+                LExecutor exec = new LExecutor();
+                exec.load(asm);
+                int steps = 0;
+                while (exec.counter.numval < exec.instructions.length && exec.counter.numval >= 0 && !exec.stop && steps < maxSteps) {
+                    exec.runOnce();
+                    steps++;
+                }
+
+                System.out.println("RUN_OK:" + steps);
+                for (LVar v : exec.vars) {
+                    if (v != null && v.name != null && !v.name.startsWith("@") && !v.name.startsWith("___")) {
+                        if (v.isobj) {
+                            System.out.println("VAR:" + v.name + "=" + (v.objval != null ? v.objval.toString() : "null"));
+                        } else {
+                            System.out.println("VAR:" + v.name + "=" + v.numval);
+                        }
+                    }
+                }
+            } else {
+                System.out.println("OK:" + asm.instructions.length);
+            }
             System.exit(0);
         } catch (Throwable t) {
             System.err.println("ERROR: " + t.getMessage());

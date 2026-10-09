@@ -110,6 +110,60 @@ def validate_with_mindustry(
         return False, err or f"Exited with return code {proc.returncode}", -1
 
 
+def run_with_mindustry(
+    mlog_text: str, max_steps: int = 1000, timeout_sec: float = 30.0
+) -> Tuple[bool, dict, str]:
+    """Execute mlog text using Mindustry's actual LAssembler and LExecutor.
+
+    Returns:
+        (success: bool, vars_dict: dict[str, Union[float, str]], message: str)
+    """
+    cp = get_classpath()
+    if not cp:
+        return False, {}, "Mindustry runtime classpath not available"
+
+    java_bin = shutil.which("java")
+    if not java_bin:
+        return False, {}, "Java runtime not available"
+
+    try:
+        proc = subprocess.run(
+            [java_bin, "-cp", cp, "mindustry.test.MindustryHarness", "--run", str(max_steps)],
+            input=mlog_text,
+            text=True,
+            capture_output=True,
+            timeout=timeout_sec,
+        )
+    except subprocess.TimeoutExpired:
+        return False, {}, f"Execution timed out after {timeout_sec}s"
+    except Exception as e:
+        return False, {}, f"Subprocess error: {e}"
+
+    if proc.returncode == 0:
+        vars_dict = {}
+        steps_msg = "OK"
+        for line in proc.stdout.splitlines():
+            if line.startswith("RUN_OK:"):
+                steps_msg = line.strip()
+            elif line.startswith("VAR:"):
+                var_content = line[4:].strip()
+                if "=" in var_content:
+                    var_name, var_val_str = var_content.split("=", 1)
+                    var_name = var_name.strip()
+                    var_val_str = var_val_str.strip()
+                    try:
+                        vars_dict[var_name] = float(var_val_str)
+                    except ValueError:
+                        vars_dict[var_name] = var_val_str
+        return True, vars_dict, steps_msg
+    else:
+        err = proc.stderr.strip()
+        if not err:
+            err = proc.stdout.strip()
+        return False, {}, err or f"Exited with return code {proc.returncode}"
+
+
+
 if __name__ == "__main__":
     import sys
 

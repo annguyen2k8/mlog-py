@@ -20,6 +20,7 @@ from .expression import (
     BinaryExpr,
     CallExpr,
     ConstantExpr,
+    UnaryExpr,
     parse_operand_to_expr,
 )
 from .semantics import collect_program_defined_variables
@@ -353,6 +354,11 @@ class CFGStructurer:
                                     inlined = True
                                 elif op_name in ("min", "max"):
                                     sub_expr = CallExpr(op_name, [a_expr, b_expr])
+                                    cond_expr = substitute_variable(cond_expr, dest, sub_expr)
+                                    cond_str = cond_expr.to_python()
+                                    inlined = True
+                                elif op_name == "not":
+                                    sub_expr = UnaryExpr("~", a_expr)
                                     cond_expr = substitute_variable(cond_expr, dest, sub_expr)
                                     cond_str = cond_expr.to_python()
                                     inlined = True

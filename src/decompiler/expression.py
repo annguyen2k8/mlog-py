@@ -231,7 +231,7 @@ class BinaryExpr(Expr):
         right_str = self.right.to_python()
         if self.right.precedence < self.precedence:
             right_str = f"({right_str})"
-        elif self.right.precedence == self.precedence and self.op in ("-", "/", "//", "%", "**"):
+        elif self.right.precedence == self.precedence and self.op in ("-", "/", "//", "%", "**", "<<", ">>"):
             right_str = f"({right_str})"
 
         return f"{left_str} {self.op} {right_str}"

@@ -38,6 +38,25 @@ BIN_OP_MAP = {
     ast.BitXor: "xor",
 }
 
+BITWISE_BIN_OPS = (ast.BitAnd, ast.BitOr, ast.BitXor, ast.LShift, ast.RShift)
+MIN_INT64 = -9223372036854775808
+MAX_INT64 = 9223372036854775807
+
+
+def _is_literal_float(node: ast.AST) -> bool:
+    """Check if node is an explicit float literal."""
+    return isinstance(node, ast.Constant) and isinstance(node.value, float)
+
+
+def _get_literal_int(node: ast.AST) -> Optional[int]:
+    """Extract integer value if node is a literal integer or negated literal integer."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, int) and not isinstance(node.value, bool):
+        return node.value
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+        if isinstance(node.operand, ast.Constant) and isinstance(node.operand.value, int) and not isinstance(node.operand.value, bool):
+            return -node.operand.value
+    return None
+
 CMP_OP_MAP = {
     ast.Eq: "equal",
     ast.NotEq: "notEqual",
@@ -117,13 +136,20 @@ class Compiler:
             return "@counter"
         return name
 
-    def format_constant(self, val: object, loc: SourceLocation) -> str:
+    def format_constant(self, val: object, loc: SourceLocation, is_negated: bool = False) -> str:
         """Format a constant literal for mlog."""
         if isinstance(val, bool):
             return "true" if val else "false"
-        elif val is None:
-            return "null"
-        elif isinstance(val, (int, float)):
+        elif isinstance(val, int):
+            max_limit = -MIN_INT64 if is_negated else MAX_INT64
+            min_limit = MIN_INT64
+            if val < min_limit or val > max_limit:
+                raise CompileError(
+                    f"integer literal {val} exceeds signed 64-bit integer range [{MIN_INT64}, {MAX_INT64}]",
+                    loc,
+                )
+            return str(val)
+        elif isinstance(val, float):
             return str(val)
         elif isinstance(val, str):
             if val.startswith("@"):
@@ -159,6 +185,24 @@ class Compiler:
                 self.error(f"unsupported binary operator: {op_cls.__name__}", expr)
             op_name = BIN_OP_MAP[op_cls]
 
+            # Semantic hardening: bitwise operator checks on literal operands
+            if op_cls in BITWISE_BIN_OPS:
+                if _is_literal_float(expr.left) or _is_literal_float(expr.right):
+                    self.error(
+                        f"unsupported operand type for bitwise operator {op_cls.__name__}: float literal",
+                        expr,
+                    )
+                if op_cls in (ast.LShift, ast.RShift):
+                    shift_val = _get_literal_int(expr.right)
+                    if shift_val is not None:
+                        if shift_val < 0:
+                            self.error("negative shift count is not supported", expr)
+                        elif shift_val >= 64:
+                            self.error(
+                                f"shift count {shift_val} >= 64 exceeds 64-bit integer width",
+                                expr,
+                            )
+
             # Compile left and right operands to temporary or literal values
             left_val = self.compile_expr(expr.left)
             right_val = self.compile_expr(expr.right)
@@ -171,7 +215,20 @@ class Compiler:
 
         elif isinstance(expr, ast.UnaryOp):
             if isinstance(expr.op, ast.USub):
-                val = self.compile_expr(expr.operand)
+                if isinstance(expr.operand, ast.Constant):
+                    # -2**63 (-9223372036854775808): Arc/Mindustry parser fails on token
+                    # "9223372036854775808" (returns Double.NaN -> parsed as identifier).
+                    # Lowering -2**63 to `op shl dest 1 63` produces exact Long.MIN_VALUE
+                    # in Mindustry runtime without relying on the problematic token.
+                    if expr.operand.value == -MIN_INT64:
+                        dest = target_dest if target_dest is not None else self.new_temp(loc)
+                        self.instructions.append(
+                            IROp(op="shl", dest=dest, a="1", b="63", loc=loc)
+                        )
+                        return dest
+                    val = self.format_constant(expr.operand.value, self.loc(expr.operand), is_negated=True)
+                else:
+                    val = self.compile_expr(expr.operand)
                 dest = target_dest if target_dest is not None else self.new_temp(loc)
                 self.instructions.append(
                     IROp(op="sub", dest=dest, a="0", b=val, loc=loc)
@@ -180,6 +237,11 @@ class Compiler:
             elif isinstance(expr.op, ast.UAdd):
                 return self.compile_expr(expr.operand, target_dest=target_dest)
             elif isinstance(expr.op, ast.Invert):
+                if _is_literal_float(expr.operand):
+                    self.error(
+                        "unsupported operand type for bitwise Invert (~): float literal",
+                        expr,
+                    )
                 val = self.compile_expr(expr.operand)
                 dest = target_dest if target_dest is not None else self.new_temp(loc)
                 self.instructions.append(
