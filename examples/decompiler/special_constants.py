@@ -1,4 +1,4 @@
-# Decompiled from special_registers.mlog
+# Decompiled from special_constants.mlog
 # Verified via ast.parse and semantic argument recovery
 from mlog import sensor, set
 

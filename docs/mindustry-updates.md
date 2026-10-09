@@ -63,6 +63,7 @@ git diff <old_tag> <new_tag> -- core/src/mindustry/logic/
 ```
 
 **Key upstream files to review:**
+
 1. `core/src/mindustry/logic/LStatements.java`: Syntax definitions of user-facing MLog instructions.
 2. `core/src/mindustry/logic/LAssembler.java`: Parser and assembler transforming MLog into bytecode.
 3. `core/src/mindustry/logic/LExecutor.java`: Virtual machine executing instructions (`LVar`, `OpI`, operations).
@@ -77,9 +78,11 @@ Depending on the nature of the upstream changes, update the relevant modules:
 2. **New Opcodes or Instruction Syntax**:
    - Add the definition to the Single Source of Truth: `src/metadata.py`.
    - Regenerate IDE typing stubs (`mlog.pyi`):
+
      ```bash
      python3 src/metadata.py
      ```
+
    - Update the Compiler (AST $\to$ IR lowering): `src/compiler.py`.
    - Update the Decompiler (IR $\to$ Python structured recovery): `src/decompiler/`.
 3. **Add Validation & Regression Tests**:

@@ -131,7 +131,7 @@ for i in range(10):
             self.assertEqual(vars_d.get("i"), 6.0)
 
     def test_for_range_example_break_and_continue_in_if(self):
-        """Regression test for examples/compiler/for_range.py with if-continue and if-break."""
+        """Regression test for examples/compiler/for_loop.py with if-continue and if-break."""
         code = """
 total = 0
 for i in range(1, 10, 2):

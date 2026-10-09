@@ -1,4 +1,4 @@
-# Decompiled from print_buffer.mlog
+# Decompiled from print_message.mlog
 # Verified via ast.parse and semantic argument recovery
 # Note: print() appends to Mindustry's print buffer without automatic newlines; consecutive calls concatenate.
 from mlog import print, printflush

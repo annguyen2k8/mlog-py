@@ -11,7 +11,9 @@ The compiler targets a strict, strongly-typed subset of Python designed for Mind
 | Feature | Supported Syntax | Output MLog Example |
 | :--- | :--- | :--- |
 | **Assignments** | `x = 10`, `b = a` | `set x 10`, `set b a` |
-| **Arithmetic** | `+`, `-`, `*`, `/`, `//`, `%`, `**` | `op add`, `op sub`, `op mul`, `op div`, `op idiv`, `op mod` |
+| **Arithmetic** | `+`, `-`, `*`, `/`, `//`, `%`, `**` | `op add`, `op sub`, `op mul`, `op div`, `op idiv`, `op mod`, `op pow` |
+| **Bitwise Operators** | `&`, `\|`, `^`, `~`, `<<`, `>>` | `op and`, `op or`, `op xor`, `op not`, `op shl`, `op shr` |
+| **Math Functions** | `min(a, b)`, `max(a, b)` | `op min dest a b`, `op max dest a b` |
 | **Comparisons** | `==`, `!=`, `<`, `<=`, `>`, `>=` | `op equal`, `op notEqual`, `op lessThan`, `op lessThanEq` |
 | **Boolean Logic** | `and`, `or`, `not` | Short-circuit conditional jumps |
 | **Control Flow** | `if`, `elif`, `else`, `while`, `for ... in range(...)`, `break`, `continue` | Forward and backward numeric jumps |

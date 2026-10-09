@@ -1,4 +1,4 @@
-# Decompiled from memory_cell_io.mlog
+# Decompiled from memory_cell.mlog
 # Verified via ast.parse and semantic argument recovery
 from mlog import read, write
 

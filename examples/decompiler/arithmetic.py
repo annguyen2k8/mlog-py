@@ -1,4 +1,4 @@
-# Decompiled from arithmetic_dataflow.mlog
+# Decompiled from arithmetic.mlog
 # Verified via ast.parse and semantic argument recovery
 x = 10
 y = 20

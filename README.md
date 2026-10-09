@@ -6,7 +6,9 @@ A robust, verified compiler and decompiler suite connecting a strongly-typed sub
 
 ## What is mlog-py?
 
-`mlog-py` enables developers to write readable, strongly-typed Python code that compiles directly into optimized Mindustry Logic (`.mlog`) instructions, as well as decompile raw `.mlog` bytecode back into structured Python DSL.
+In the strategy game **Mindustry**, logic processors execute low-level assembly-like instructions (`.mlog`) to automate factories, control defense units, and monitor reactors. Writing large programs directly in the in-game editor is tedious, repetitive, and hard to maintain.
+
+`mlog-py` lets you write clean, modern, strongly-typed Python code that compiles directly into optimized Mindustry Logic (`.mlog`) instructions ready to paste into any processor. It also works in reverse: paste existing `.mlog` bytecode into the decompiler to generate clean, readable Python DSL.
 
 - **Compile (Python DSL → MLog)**: Write loops, conditionals, expressions, and hardware interactions in Python; compile directly to vanilla mlog processor instructions.
 - **Decompile (MLog → Python DSL)**: Reverse-engineer existing in-game logic into clean, readable Python code with structured `while`/`if` blocks and recovered expressions.
@@ -80,9 +82,11 @@ debug_code = decompile(mlog_code, debug=True)
 
 ---
 
-## Example
+## Example: Reactor Safety Controller
 
-### Python DSL (`reactor.py`)
+A complete beginner-friendly example protecting a Thorium reactor from overheating:
+
+### Python Source (`examples/compiler/reactor_safety.py`)
 
 ```python
 from mlog import sensor, control, wait, SensorProperty, ControlProperty
@@ -97,7 +101,13 @@ else:
 wait(0.5)
 ```
 
-### Compiled MLog Output (`reactor.mlog`)
+### Compile to MLog
+
+```bash
+mlog-py compile examples/compiler/reactor_safety.py
+```
+
+### Compiled Output (`examples/compiler/reactor_safety.mlog`)
 
 ```text
 sensor heat reactor1 @heat
@@ -107,6 +117,23 @@ jump 5 always 0 0
 control enabled reactor1 1 0 0 0
 wait 0.5
 ```
+
+### How to Use in Mindustry
+
+1. Copy the compiled `.mlog` output above to your clipboard.
+2. In Mindustry, build a Micro/Logic/Hyper Processor and connect it to your reactor (`reactor1`).
+3. Click the processor, click **Edit**, and select **Import from clipboard**.
+
+---
+
+## Examples Catalog
+
+Explore our comprehensive, paired examples in [`examples/`](examples/README.md):
+
+- **Arithmetic & Bitwise**: [`arithmetic.py`](examples/compiler/arithmetic.py), [`bitwise.py`](examples/compiler/bitwise.py), [`min_max.py`](examples/compiler/min_max.py)
+- **Control Flow**: [`for_loop.py`](examples/compiler/for_loop.py), [`while_loop.py`](examples/compiler/while_loop.py), [`conditionals.py`](examples/compiler/conditionals.py), [`nested_loops.py`](examples/compiler/nested_loops.py)
+- **Game Hardware**: [`reactor_safety.py`](examples/compiler/reactor_safety.py), [`display_graphics.py`](examples/compiler/display_graphics.py), [`print_message.py`](examples/compiler/print_message.py), [`memory_cell.py`](examples/compiler/memory_cell.py)
+- **Interactive Demos**: [`roundtrip_demo.py`](examples/compiler/roundtrip_demo.py), [`roundtrip_verify.py`](examples/decompiler/roundtrip_verify.py)
 
 ---
 
@@ -152,7 +179,7 @@ mlog-py/
 │   ├── metadata.py      # Single Source of Truth (SSOT)
 │   ├── validator.py     # Static verification & processor limits
 │   └── decompiler/      # Decompiler pipeline (CFG, structurer, dataflow)
-├── docs/                # Technical specifications and documentation
+├── docs/                # Technical specifications (English & Tiếng Việt)
 ├── examples/            # Paired compiler and decompiler examples
 └── tests/               # Automated test suite and corpus
 ```
@@ -167,7 +194,7 @@ The project maintains a comprehensive automated test suite verifying both compil
 python3 -m unittest discover -s tests -p "test_*.py"
 ```
 
-- **377 Automated Tests**: 100% passing baseline across compiler, registry, CFG, structuring, dataflow, function recovery, bitwise operators, min/max, for loops, and source mapping.
+- **380 Automated Tests**: 100% passing baseline across compiler, registry, CFG, structuring, dataflow, function recovery, bitwise operators, min/max, for loops, and source mapping.
 - **Real-World Test Corpus**: 32 representative programs across handwritten scripts, compiler-generated programs, control flow patterns, and pathological edge cases.
 - **Round-Trip Verification**: Guarantees that MLog → Decompiler → Compiler produces valid, identical instructions.
 
