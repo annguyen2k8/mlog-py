@@ -6,8 +6,10 @@ Usage:
 
 from src.mlog import compile_py
 
-PYTHON_CODE = """# Reactor Safety System
-from mlog import sensor, control, wait, SensorProperty, ControlProperty
+DEMOS = [
+    (
+        "Reactor Safety System (Sensors & Conditionals)",
+        """from mlog import sensor, control, wait, SensorProperty, ControlProperty
 
 heat = sensor("reactor1", SensorProperty.HEAT)
 if heat > 0.5:
@@ -15,19 +17,42 @@ if heat > 0.5:
 else:
     control(ControlProperty.ENABLED, "reactor1", 1)
 wait(0.5)
-"""
+""",
+    ),
+    (
+        "For-Range Loop with Break & Continue in If Branches",
+        """total = 0
+for i in range(1, 10, 2):
+    if i == 5:
+        continue
+    if i > 7:
+        break
+    total = total + i
+""",
+    ),
+    (
+        "Bitwise Operations & Min/Max Built-ins",
+        """val1 = 42
+val2 = 255
+masked = (val1 & 15) | 128
+bounded = min(max(masked, 0), 100)
+""",
+    ),
+]
+
 
 def main():
-    print("=== SOURCE PYTHON DSL ===")
-    print(PYTHON_CODE)
+    print("=== PYTHON-TO-MLOG COMPILATION WORKFLOW DEMOS ===\n")
+    for title, code in DEMOS:
+        print(f"--- {title} ---")
+        print("Source Python DSL:")
+        print(code.strip())
+        print("\nCompiled MLog Output:")
+        res = compile_py(code)
+        print(res.mlog.strip())
+        lines = [l for l in res.mlog.splitlines() if l.strip()]
+        print(f"Instruction count: {len(lines)}\n")
 
-    print("=== COMPILING TO MLOG ===")
-    result = compile_py(PYTHON_CODE, filename="reactor_safety.py")
-    print(result.mlog)
-
-    print("=== COMPILED INSTRUCTION COUNT ===")
-    lines = [l for l in result.mlog.splitlines() if l.strip()]
-    print(f"Total instructions: {len(lines)}")
 
 if __name__ == "__main__":
     main()

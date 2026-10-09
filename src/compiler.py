@@ -1036,15 +1036,17 @@ class Compiler:
         loc = self.loc(node)
         while_start = self.new_label("while_start")
         while_end = self.new_label("while_end")
+        while_orelse = self.new_label("while_orelse") if node.orelse else while_end
 
         # Emit loop start label
         self.instructions.append(IRLabel(name=while_start, loc=loc))
 
         # Push loop context for break and continue
+        # break jumps to while_end (skipping orelse)
         self._loop_stack.append((while_start, while_end))
 
-        # Compile condition: if false, jump to while_end
-        self.compile_condition(node.test, true_label=None, false_label=while_end)
+        # Compile condition: if false, jump to while_orelse (or while_end if no orelse)
+        self.compile_condition(node.test, true_label=None, false_label=while_orelse)
 
         # Compile loop body
         for stmt in node.body:
@@ -1060,6 +1062,7 @@ class Compiler:
 
         # Compile orelse block if present (executed on normal termination)
         if node.orelse:
+            self.instructions.append(IRLabel(name=while_orelse, loc=loc))
             for stmt in node.orelse:
                 self.compile_stmt(stmt)
 
@@ -1109,23 +1112,24 @@ class Compiler:
         for_body = self.new_label("for_body")
         for_latch = self.new_label("for_latch")
         for_end = self.new_label("for_end")
+        for_orelse = self.new_label("for_orelse") if node.orelse else for_end
 
         # Push loop context: 'continue' jumps to for_latch (to run step increment),
-        # 'break' jumps to for_end
+        # 'break' jumps to for_end (skipping orelse)
         self._loop_stack.append((for_latch, for_end))
 
         # Loop condition check
         self.instructions.append(IRLabel(name=for_check, loc=loc))
         if static_step is not None:
             if static_step > 0:
-                # If target >= stop, loop finishes -> jump to for_end
+                # If target >= stop, loop finishes -> jump to for_orelse
                 self.instructions.append(
-                    IRJump(target=for_end, cond="greaterThanEq", a=target_name, b=stop_val, loc=loc)
+                    IRJump(target=for_orelse, cond="greaterThanEq", a=target_name, b=stop_val, loc=loc)
                 )
             else:
-                # Step is negative: if target <= stop, loop finishes -> jump to for_end
+                # Step is negative: if target <= stop, loop finishes -> jump to for_orelse
                 self.instructions.append(
-                    IRJump(target=for_end, cond="lessThanEq", a=target_name, b=stop_val, loc=loc)
+                    IRJump(target=for_orelse, cond="lessThanEq", a=target_name, b=stop_val, loc=loc)
                 )
         else:
             # Dynamic step: branch on step > 0
@@ -1133,9 +1137,9 @@ class Compiler:
             self.instructions.append(
                 IRJump(target=neg_step_lbl, cond="lessThanEq", a=step_val, b="0", loc=loc)
             )
-            # Positive step: if target >= stop -> for_end
+            # Positive step: if target >= stop -> for_orelse
             self.instructions.append(
-                IRJump(target=for_end, cond="greaterThanEq", a=target_name, b=stop_val, loc=loc)
+                IRJump(target=for_orelse, cond="greaterThanEq", a=target_name, b=stop_val, loc=loc)
             )
             self.instructions.append(
                 IRJump(target=for_body, cond="always", a="0", b="0", loc=loc)
@@ -1143,7 +1147,7 @@ class Compiler:
             # Negative step check
             self.instructions.append(IRLabel(name=neg_step_lbl, loc=loc))
             self.instructions.append(
-                IRJump(target=for_end, cond="lessThanEq", a=target_name, b=stop_val, loc=loc)
+                IRJump(target=for_orelse, cond="lessThanEq", a=target_name, b=stop_val, loc=loc)
             )
             self.instructions.append(IRLabel(name=for_body, loc=loc))
 
@@ -1165,6 +1169,7 @@ class Compiler:
 
         # Orelse block (executed on normal loop exhaustion)
         if node.orelse:
+            self.instructions.append(IRLabel(name=for_orelse, loc=loc))
             for stmt in node.orelse:
                 self.compile_stmt(stmt)
 

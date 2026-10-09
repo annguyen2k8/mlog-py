@@ -130,6 +130,97 @@ for i in range(10):
             self.assertEqual(vars_d.get("s"), 13.0)
             self.assertEqual(vars_d.get("i"), 6.0)
 
+    def test_for_range_example_break_and_continue_in_if(self):
+        """Regression test for examples/compiler/for_range.py with if-continue and if-break."""
+        code = """
+total = 0
+for i in range(1, 10, 2):
+    if i == 5:
+        continue
+    if i > 7:
+        break
+    total = total + i
+"""
+        res = compile_py(code)
+        lines = [l for l in res.mlog.splitlines() if l.strip()]
+
+        # Control flow structure assertions
+        self.assertIn("set total 0", lines[0])
+        self.assertIn("set i 1", lines[1])
+        # Loop condition check: i >= 10 jumps to end (line 10)
+        self.assertIn("greaterThanEq i 10", lines[2])
+        # if i == 5: continue
+        self.assertIn("notEqual i 5", lines[3])
+        self.assertIn("always 0 0", lines[4])  # jump to latch
+        # if i > 7: break
+        self.assertIn("lessThanEq i 7", lines[5])
+        self.assertIn("always 0 0", lines[6])  # jump to end
+        # body: total = total + i
+        self.assertIn("op add total total i", lines[7])
+        # latch: i = i + 2, jump back to check
+        self.assertIn("op add i i 2", lines[8])
+        self.assertIn("jump 2 always 0 0", lines[9])
+
+        if is_mindustry_available():
+            ok, vars_d, msg = run_with_mindustry(res.mlog + "\nend")
+            self.assertTrue(ok, f"Runtime error: {msg}")
+            # i = 1 (total=1), 3 (total=4), 5 (continue, total=4), 7 (total=11), 9 (break, total=11)
+            self.assertEqual(vars_d.get("total"), 11.0)
+            self.assertEqual(vars_d.get("i"), 9.0)
+
+    def test_for_range_break_continue_in_if_elif_else(self):
+        """break and continue inside chained if-elif-else branches."""
+        code = """
+total = 0
+for i in range(1, 10, 2):
+    if i == 5:
+        continue
+    elif i > 7:
+        break
+    else:
+        total = total + i
+"""
+        res = compile_py(code)
+        if is_mindustry_available():
+            ok, vars_d, msg = run_with_mindustry(res.mlog + "\nend")
+            self.assertTrue(ok, f"Runtime error: {msg}")
+            self.assertEqual(vars_d.get("total"), 11.0)
+            self.assertEqual(vars_d.get("i"), 9.0)
+
+    def test_for_range_orelse_normal_and_break(self):
+        """for-else must execute else on normal loop exhaustion and skip on break."""
+        # 1. Normal exhaustion -> executes else
+        code_normal = """
+ran_else = 0
+for i in range(3):
+    if i == 10:
+        break
+else:
+    ran_else = 1
+"""
+        res_normal = compile_py(code_normal)
+        if is_mindustry_available():
+            ok, vars_d, msg = run_with_mindustry(res_normal.mlog + "\nend")
+            self.assertTrue(ok, f"Runtime error: {msg}")
+            self.assertEqual(vars_d.get("ran_else"), 1.0)
+            self.assertEqual(vars_d.get("i"), 3.0)
+
+        # 2. Break inside if -> skips else
+        code_break = """
+ran_else = 0
+for i in range(3):
+    if i == 1:
+        break
+else:
+    ran_else = 1
+"""
+        res_break = compile_py(code_break)
+        if is_mindustry_available():
+            ok, vars_d, msg = run_with_mindustry(res_break.mlog + "\nend")
+            self.assertTrue(ok, f"Runtime error: {msg}")
+            self.assertEqual(vars_d.get("ran_else"), 0.0)
+            self.assertEqual(vars_d.get("i"), 1.0)
+
     def test_for_loop_nested(self):
         """Nested for loops must maintain independent loop stacks and latches."""
         code = """
