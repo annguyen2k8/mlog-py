@@ -91,6 +91,9 @@ Python Source (.py)
  [parser.py]          AST Validation & Whitelisting
        │
        ▼
+ [compiler.py]        Compile-Time Constant Folding (AST Pass)
+       │
+       ▼
  [compiler.py]        AST Lowering to Symbolic IR & Temporary Variable Generation
        │
        ▼
@@ -113,9 +116,33 @@ Vanilla MLog (.mlog)
 
 Validates that every AST node belongs to the supported subset. Reports syntax errors with precise source coordinates (`filename:line:col`).
 
-### Pass 2: Symbolic IR Lowering (`src/compiler.py`)
+### Pass 2: Compile-Time Constant Folding & Symbolic IR Lowering (`src/compiler.py`)
 
-Lowers Python AST statements and expressions into symbolic IR nodes (`IRLabel`, `IRSet`, `IROp`, `IRJump`, `IRRaw`).
+#### Compile-Time Constant Folding (`ConstantFolder`)
+
+Before lowering to IR, pure compile-time constant expressions are recursively evaluated:
+
+- **Supported Operations**:
+  - Arithmetic: `+`, `-`, `*`, `/`, `//`, `%`, `**`
+  - Bitwise: `&`, `|`, `^`, `<<`, `>>`
+  - Comparisons: `==`, `!=`, `<`, `<=`, `>`, `>=`
+  - Boolean: `and`, `or`, `not`
+  - String concatenation: `+` on string literals
+- **Semantic Preservation (Mindustry & Python Fidelity)**:
+  - **Safe Integer Limits**: Restricted to IEEE-754 double precision bounds `[-9007199254740991, 9007199254740991]` (`2^53 - 1`). Larger operations defer to runtime to preserve exact Mindustry engine precision behaviors.
+  - **Modulo (`%`)**: Only non-negative modulo (`left >= 0 and right > 0`) is folded. Negative modulo operations defer to runtime to match Mindustry's truncated modulo.
+  - **Division by Zero**: Skipped at compile time and emitted as `op div`/`op idiv` so Mindustry handles IEEE-754 `Infinity`/`NaN` at runtime.
+  - **Shift Bounds**: Shift counts `< 0` or `>= 64` are left unfolded to allow standard compiler error validation.
+  - **Intrinsics**: `min()` and `max()` function calls are never folded, preserving native `op min` and `op max` instruction dispatch.
+  - **Standalone Literals**: Standalone negative numbers (`-5`) and bitwise inverts (`~5`) preserve native lowering (`op sub 0 5` and `op not 5 0`).
+- **Array Static Resolution**:
+  - `Array("cell1", size=2 * 8)`: Resolves array size statically to 16 before memory allocation.
+  - `arr[1 + 2] = 42`: Folds index offset statically to slot 3, eliminating temporary variable creation and enabling static bounds checking.
+- **Strictly No Dead Code Elimination**: Control flow structures (`If`, `While`, `For`) and dead branches are never stripped or pruned; conditional jumps and dead branch bodies remain fully preserved.
+
+#### Symbolic IR Lowering
+
+Lowers AST statements and expressions into symbolic IR nodes (`IRLabel`, `IRSet`, `IROp`, `IRJump`, `IRRaw`):
 
 - **Temporary Generation**: Deterministic naming (`__tmp0`, `__tmp1`, ...) for nested expression intermediate values.
 - **Short-Circuit Evaluation**: Translates `and` / `or` chains into conditional branch ladders:
@@ -158,6 +185,12 @@ mlog-py compile input.py -o output.mlog
 
 # Inspect IR instructions and resolved label table
 mlog-py compile input.py --debug
+
+# Disable compile-time constant folding
+mlog-py compile input.py -o output.mlog --no-fold-constants
+
+# Validate with official Mindustry engine (requires Java)
+mlog-py compile input.py --mindustry
 ```
 
 ### Python API
@@ -167,14 +200,22 @@ from src.mlog import compile_py
 
 python_source = """
 from mlog import printflush
-print("hello world")
+x = (10 + 20) * 2
+print(x)
 printflush("message1")
 """
 
-# Standard compilation
+# Standard compilation (with constant folding enabled by default)
 result = compile_py(python_source, filename="example.py")
 print(result.mlog)
+# Output:
+# set x 60
+# print x
+# printflush message1
+
+# Disable constant folding
+result_unfolded = compile_py(python_source, fold_constants=False)
 
 # Compilation with functions enabled
-result = compile_py(python_source, allow_functions=True)
+result_fn = compile_py(python_source, allow_functions=True)
 ```

@@ -1,11 +1,19 @@
-"""Optimizer interface and stubs for Mindustry Logic IR.
+"""Optimizer interface and passes for Mindustry Logic IR.
 
-Phase 1 keeps optimization disabled to ensure strict correctness.
-Phase 2 can implement concrete passes (constant folding, dead code elimination, etc.).
+Phase 1 keeps IR optimization disabled (PassThrough) to ensure strict correctness.
+Phase 2 provides AST-level constant folding and future optimization passes.
 """
 
 from typing import List
 from .ir import IRNode
+from .compiler import ConstantFolder, fold_constants
+
+__all__ = [
+    "IROptimizer",
+    "PassThroughOptimizer",
+    "ConstantFolder",
+    "fold_constants",
+]
 
 
 class IROptimizer:
@@ -21,3 +29,4 @@ class PassThroughOptimizer(IROptimizer):
 
     def optimize(self, instructions: List[IRNode]) -> List[IRNode]:
         return list(instructions)
+
