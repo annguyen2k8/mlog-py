@@ -743,7 +743,22 @@ def write(input: Any, cell: Any, address: Any) -> None:
     """
     ...
 
+# ---------------------------------------------------------------------------
+# Array Class (Memory Cell / Bank Allocator)
+# ---------------------------------------------------------------------------
+
+class Array:
+    """Fixed-size memory array backed by a Mindustry Memory Cell (max 64) or Memory Bank (max 512)."""
+    block: str
+    size: int
+    dtype: type
+    def __init__(self, block: str, size: int, dtype: Union[type, str] = int) -> None: ...
+    def __getitem__(self, index: int) -> Any: ...
+    def __setitem__(self, index: int, value: Any) -> None: ...
+    def __len__(self) -> int: ...
+
 __all__ = [
+    "Array",
     "CompileResult",
     "Condition",
     "ControlProperty",

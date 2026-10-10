@@ -28,6 +28,7 @@ from .mlog_registry import (
     Units,
 )
 from .metadata import (
+    Array,
     MLOG_EXPORTS,
     _rt_control as control,
     _rt_draw as draw,

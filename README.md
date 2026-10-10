@@ -138,7 +138,7 @@ Explore our comprehensive, paired examples in [`examples/`](examples/README.md):
 
 - **Arithmetic & Bitwise**: [`arithmetic.py`](examples/compiler/arithmetic.py), [`bitwise.py`](examples/compiler/bitwise.py), [`min_max.py`](examples/compiler/min_max.py)
 - **Control Flow**: [`for_loop.py`](examples/compiler/for_loop.py), [`while_loop.py`](examples/compiler/while_loop.py), [`conditionals.py`](examples/compiler/conditionals.py), [`nested_loops.py`](examples/compiler/nested_loops.py)
-- **Game Hardware**: [`reactor_safety.py`](examples/compiler/reactor_safety.py), [`display_graphics.py`](examples/compiler/display_graphics.py), [`print_message.py`](examples/compiler/print_message.py), [`memory_cell.py`](examples/compiler/memory_cell.py)
+- **Game Hardware**: [`reactor_safety.py`](examples/compiler/reactor_safety.py), [`display_graphics.py`](examples/compiler/display_graphics.py), [`print_message.py`](examples/compiler/print_message.py), [`memory_cell.py`](examples/compiler/memory_cell.py), [`array_memory.py`](examples/compiler/array_memory.py)
 - **Interactive Demos**: [`roundtrip_demo.py`](examples/compiler/roundtrip_demo.py), [`roundtrip_verify.py`](examples/decompiler/roundtrip_verify.py)
 
 ---
@@ -147,6 +147,7 @@ Explore our comprehensive, paired examples in [`examples/`](examples/README.md):
 
 - **Structured Control Flow**: `for` loops with `range(...)`, `while`, `break`, `continue`, `if`, `elif`, and `else` with automatic label and instruction address resolution.
 - **Arithmetic, Bitwise & Math**: Full expression support (`+`, `-`, `*`, `/`, `//`, `%`, bitwise `&`, `|`, `^`, `~`, `<<`, `>>`, built-in `min` and `max`) lowered with deterministic temporary variable management and strict 64-bit integer hardening.
+- **Memory Arrays & Static Allocation**: High-level `Array("cell1", size=10)` abstraction with compile-time contiguous layout tracking, capacity validation (64 for cells, 512 for banks), base offset calculations, and static index bounds checking.
 - **Short-Circuit Boolean Logic**: Full support for `and`, `or`, and `not` with standard Python short-circuit evaluation.
 - **Mindustry Compiler Intrinsics**: Direct access to Mindustry instructions (`sensor`, `control`, `ucontrol`, `draw`, `read`, `write`, `print`, `ubind`, `lookup`, etc.).
 - **Verified Registry & Enums**: Enums (`SensorProperty`, `ControlProperty`, `UnitControl`, `DrawType`, `LogicOp`, `Condition`, `Units`, etc.) verified against vanilla Mindustry source.
