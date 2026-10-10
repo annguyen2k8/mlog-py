@@ -21,6 +21,7 @@ These examples show how to write Python code that compiles directly into Mindust
 | [`display_graphics.py`](compiler/display_graphics.py) | Logic Displays | Drawing shapes (`clear`, `color`, `rect`, `line`) and flushing to display screens. |
 | [`print_message.py`](compiler/print_message.py) | Message Displays | Concatenating text into processor buffers and outputting to message blocks via `printflush`. |
 | [`memory_cell.py`](compiler/memory_cell.py) | Memory Cells | Saving and loading persistent variables using `read()` and `write()` on memory cells. |
+| [`array_memory.py`](compiler/array_memory.py) | Memory Arrays | High-level `Array` API with static contiguous memory allocation and bounds checking on cells/banks. |
 | [`block_vs_variable.py`](compiler/block_vs_variable.py) | Block Links vs Variables | Clear distinction between hardware link names (`"cell1"`) and dynamic variables (`b`). |
 | [`special_constants.py`](compiler/special_constants.py) | Special Variables | Using built-in game constants and registers (`@this`, `@time`, `@counter`, `@health`). |
 | [`functions.py`](compiler/functions.py) | Custom Procedures | Defining reusable functions with arguments and return values. |

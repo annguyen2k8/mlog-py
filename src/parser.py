@@ -40,7 +40,6 @@ UNSUPPORTED_NAMES = {
     ast.DictComp: "dict comprehension",
     ast.GeneratorExp: "generator expression",
     ast.Await: "await expression",
-    ast.Subscript: "subscript indexing ([...])",
     ast.Starred: "starred expression (*args)",
     ast.Slice: "slice",
 }
@@ -134,6 +133,7 @@ class ASTValidator(ast.NodeVisitor):
             ast.BoolOp,
             ast.Call,
             ast.Attribute,
+            ast.Subscript,
             # Operators
             ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod,
             ast.Pow, ast.LShift, ast.RShift, ast.BitOr, ast.BitAnd, ast.BitXor,
@@ -187,9 +187,20 @@ class ASTValidator(ast.NodeVisitor):
         if len(node.targets) != 1:
             self.error("multiple/chained assignment targets are not supported", node)
         target = node.targets[0]
-        if not isinstance(target, ast.Name):
-            self.error("assignment target must be a simple variable name (unpacking not supported)", target)
+        if isinstance(target, ast.Subscript):
+            self.visit_Subscript(target)
+        elif isinstance(target, ast.Name):
+            pass
+        else:
+            self.error("assignment target must be a simple variable name or array index (unpacking not supported)", target)
         self.visit(node.value)
+
+    def visit_Subscript(self, node: ast.Subscript):
+        if not isinstance(node.value, ast.Name):
+            self.error("subscript indexing is only supported on simple array names (e.g. a[i])", node)
+        if isinstance(node.slice, ast.Slice):
+            self.error("slicing is not supported on arrays", node)
+        self.visit(node.slice)
 
     def visit_For(self, node: ast.For):
         if not isinstance(node.target, ast.Name):
@@ -211,6 +222,20 @@ class ASTValidator(ast.NodeVisitor):
         if not isinstance(node.func, ast.Name):
             self.error("only compiler intrinsic calls are supported", node)
         func_name = node.func.id
+        if func_name == "Array":
+            for kw in node.keywords:
+                if kw.arg not in ("size", "block"):
+                    self.error(f"unexpected keyword argument '{kw.arg}' in Array()", kw)
+            for arg in node.args:
+                self.visit(arg)
+            for kw in node.keywords:
+                self.visit(kw.value)
+            return
+        if func_name == "len":
+            if len(node.args) != 1 or node.keywords:
+                self.error("len() expects exactly 1 argument and no keyword arguments", node)
+            self.visit(node.args[0])
+            return
         if func_name not in ALLOWED_INTRINSICS:
             if self.allow_functions and func_name in self.defined_functions:
                 pass

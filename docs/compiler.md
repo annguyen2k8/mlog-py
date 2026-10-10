@@ -19,16 +19,49 @@ The compiler targets a strict, strongly-typed subset of Python designed for Mind
 | **Control Flow** | `if`, `elif`, `else`, `while`, `for ... in range(...)`, `break`, `continue` | Forward and backward numeric jumps |
 | **Built-in Registers** | `@counter`, `@time`, `@tick`, `@unit` | Runtime processor registers |
 | **Intrinsics** | `sensor()`, `control()`, `draw()`, `read()`, `write()`, etc. | Canonical Mindustry Logic instructions |
+| **Memory Arrays** | `arr = Array("cell1", size=10)`, `arr[i]`, `arr[i] = val`, `len(arr)` | Contiguous static allocation, `read`, `write` |
 
 ### Explicitly Rejected Constructs
 
 Features incompatible with Mindustry's flat processor memory model are rejected during AST validation:
 
 - **Classes & Objects**: `class`, inheritance, methods
-- **Data Collections**: Lists (`[]`), Dictionaries (`{}`), Sets, Tuples
+- **Data Collections**: Lists (`[]`), Dictionaries (`{}`), Sets, Tuples (Dynamic collections are unsupported; use fixed-size `Array` mapped to hardware memory blocks instead)
 - **Container Iteration**: `for ... in <collection>` (only `range(...)` is supported), list comprehensions, generator expressions
 - **Exceptions**: `try/except`, `raise`, `finally`
 - **Asynchronous Code**: `async def`, `await`
+
+### Static Memory Allocation & Array API
+
+The compiler provides a high-level `Array` abstraction backed by hardware Memory Cells and Memory Banks:
+
+```python
+from mlog import Array
+
+# Allocate array of 10 integers on cell1
+arr = Array("cell1", size=10)
+arr[0] = 42
+val = arr[0]
+n = len(arr)
+```
+
+- **Hardware Capacities & Naming**:
+  - Memory Cell (`cell`, `cell1`, `cell2`, ... matching `^cell\d*$`): maximum 64 slots (indices `0..63`).
+  - Memory Bank (`bank`, `bank1`, `bank2`, ... matching `^bank\d*$`): maximum 512 slots (indices `0..511`).
+  - Block names are normalized case-insensitively (`cell1` and `Cell1` reference the same physical block).
+- **Static Allocator (`src/allocator.py`)**:
+  - Allocates non-overlapping contiguous slices in independent address spaces per block.
+  - Slices are packed starting at offset `0`. Subsequent arrays on the same block advance the offset.
+  - Enforces total allocated size $\le$ block capacity; raises compile-time errors if capacity is exceeded.
+  - Top-level arrays are registered in a compiler pre-pass, ensuring full visibility inside procedures (`allow_functions=True`).
+- **Index Bounds & Type Safety Limits**:
+  - **Static bounds checking**: Literal indices outside `[0, size - 1]` trigger compile-time `CompileError`. Literal negative indices, floats, strings, and booleans are strictly rejected at compile time.
+  - **Unchecked dynamic bounds**: For dynamic indices (`arr[i]` where `i` is a variable or runtime expression), bounds checking is not emitted by default to preserve processor instruction budget (1000 instruction limit). If a dynamic index exceeds `size` on a shared block, it may access or overwrite adjacent arrays on that block.
+  - **Type enforcement limits**: Array elements must be integers. Literal floats, strings, and booleans are rejected at compile time. Dynamic expressions (e.g. `sensor(...)`) are not statically type-inferred and write their computed value directly to the cell.
+  - **Constant length**: `len(arr)` resolves at compile time to the static integer size.
+- **Base Offset Optimization**:
+  - When `base_offset == 0`, dynamic index reads/writes directly reference the index operand without an extra addition instruction.
+  - When `base_offset > 0`, the compiler emits `op add __tmp index base_offset` before `read`/`write`.
 
 ---
 
