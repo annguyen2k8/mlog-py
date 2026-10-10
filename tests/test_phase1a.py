@@ -58,7 +58,7 @@ class TestPhase1A(unittest.TestCase):
             ("for i in [1, 2]: pass", "for loop only supports 'range(...)' as iterator"),
             ("for a, b in range(10): pass", "for loop target must be a simple variable name"),
             ("try: pass\nexcept: pass", "unsupported Python feature: try/except statement"),
-            ("x += 1", "unsupported Python feature: augmented assignment"),
+            ("x: int = 1", "unsupported Python feature: annotated assignment"),
             ("a = b = 1", "multiple/chained assignment targets are not supported"),
             ("a, b = 1, 2", "assignment target must be a simple variable name"),
         ]
