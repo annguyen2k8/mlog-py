@@ -14,7 +14,6 @@ UNSUPPORTED_NAMES = {
     ast.ClassDef: "class definition",
     ast.Return: "return statement",
     ast.Delete: "del statement",
-    ast.AugAssign: "augmented assignment (e.g. +=)",
     ast.AnnAssign: "annotated assignment",
     ast.AsyncFor: "async for loop",
     ast.With: "with statement",
@@ -114,6 +113,7 @@ class ASTValidator(ast.NodeVisitor):
         allowed_nodes = (
             ast.Module,
             ast.Assign,
+            ast.AugAssign,
             ast.Expr,
             ast.If,
             ast.While,
@@ -193,6 +193,25 @@ class ASTValidator(ast.NodeVisitor):
             pass
         else:
             self.error("assignment target must be a simple variable name or array index (unpacking not supported)", target)
+        self.visit(node.value)
+
+    def visit_AugAssign(self, node: ast.AugAssign):
+        if isinstance(node.target, ast.Subscript):
+            self.visit_Subscript(node.target)
+        elif isinstance(node.target, ast.Name):
+            pass
+        else:
+            self.error(
+                "augmented assignment target must be a simple variable name or array index (unpacking not supported)",
+                node.target,
+            )
+        op_cls = type(node.op)
+        if op_cls not in (
+            ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod,
+            ast.Pow, ast.LShift, ast.RShift, ast.BitOr, ast.BitAnd, ast.BitXor,
+        ):
+            op_name = "@=" if op_cls is ast.MatMult else f"{op_cls.__name__}="
+            self.error(f"unsupported augmented assignment operator: '{op_name}'", node)
         self.visit(node.value)
 
     def visit_Subscript(self, node: ast.Subscript):
