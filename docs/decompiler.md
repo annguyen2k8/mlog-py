@@ -96,6 +96,7 @@ Python DSL Source (.py) / SourceMap (.json)
 - Categorizes instruction arguments into 6 distinct semantic roles using the Single Source of Truth (`src/metadata.py`).
 - Emits physical hardware links as string literals (`"cell1"`, `"display1"`) to prevent Python `NameError` exceptions.
 - See [semantic-arguments.md](semantic-arguments.md) for full specification.
+- For instruction-to-source provenance tracking (Phase 4.5), see [source-mapping.md](source-mapping.md).
 
 ---
 
@@ -103,6 +104,12 @@ Python DSL Source (.py) / SourceMap (.json)
 
 ```python
 from src.decompiler import decompile, decompile_with_source_map
+
+mlog_text = """
+sensor heat reactor1 @heat
+jump 4 lessThanEq heat 0.5
+control enabled reactor1 0 0 0 0
+"""
 
 # Basic decompilation
 python_code = decompile(mlog_text)

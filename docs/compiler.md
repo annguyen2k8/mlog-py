@@ -101,19 +101,25 @@ Validates the emitted MLog against vanilla Mindustry processor constraints:
 
 ```bash
 # Compile Python file to stdout
-python3 compiler.py input.py
+mlog-py compile input.py
 
 # Compile Python file to output mlog
-python3 compiler.py input.py -o output.mlog
+mlog-py compile input.py -o output.mlog
 
 # Inspect IR instructions and resolved label table
-python3 compiler.py input.py --debug
+mlog-py compile input.py --debug
 ```
 
 ### Python API
 
 ```python
 from src.mlog import compile_py
+
+python_source = """
+from mlog import printflush
+print("hello world")
+printflush("message1")
+"""
 
 # Standard compilation
 result = compile_py(python_source, filename="example.py")

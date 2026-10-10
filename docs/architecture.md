@@ -82,6 +82,9 @@ The forward compiler translates a verified Python subset into canonical MLog ins
 6. **Engine Verification Harness (`src/mindustry_validator.py`, `tools/harness/MindustryHarness.java`)**:
    Verifies emitted mlog bytecode against Mindustry's live `LParser` and `LAssembler` running in the Java Virtual Machine.
 
+> [!NOTE]
+> For compiler pipeline passes, syntax subset tables, and CLI usage, see [compiler.md](compiler.md).
+
 ---
 
 ## 3. Decompiler Subsystem (MLog → Python DSL)
@@ -103,6 +106,9 @@ The reverse decompiler reconstructs high-level, human-readable Python DSL from f
 
 5. **Phase 4.5 & 5: Source Mapping & Semantic Argument Recovery (`src/decompiler/sourcemap.py`, `src/decompiler/semantics.py`)**:
    Tracks instruction provenance throughout all transformations. Classifies tokens into 6 distinct semantic roles using the Single Source of Truth, ensuring physical hardware links (`"cell1"`, `"display1"`) are emitted as string literals rather than bare undefined Python variables.
+
+> [!NOTE]
+> For detailed decompiler passes, see [decompiler.md](decompiler.md). For dedicated specifications, see [source-mapping.md](source-mapping.md) and [semantic-arguments.md](semantic-arguments.md).
 
 ---
 

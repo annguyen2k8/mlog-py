@@ -1,4 +1,4 @@
-# mlog-py: Python-to-Mindustry Logic (mlog) Transpiler / Compiler & Decompiler
+# mlog-py: Python-to-Mindustry Logic (mlog) Compiler & Decompiler
 
 A robust, verified compiler and decompiler suite connecting a strongly-typed subset of Python with vanilla Mindustry Logic (mlog).
 
@@ -6,14 +6,14 @@ A robust, verified compiler and decompiler suite connecting a strongly-typed sub
 
 ## What is mlog-py?
 
-In the strategy game **Mindustry**, logic processors execute low-level assembly-like instructions (`.mlog`) to automate factories, control defense units, and monitor reactors. Writing large programs directly in the in-game editor is tedious, repetitive, and hard to maintain.
+In the strategy game **Mindustry**, logic processors execute low-level assembly-like instructions (`.mlog`) to automate factories, defense units, and reactors. Writing logic by hand in the in-game editor is tedious and prone to errors.
 
-`mlog-py` lets you write clean, modern, strongly-typed Python code that compiles directly into optimized Mindustry Logic (`.mlog`) instructions ready to paste into any processor. It also works in reverse: paste existing `.mlog` bytecode into the decompiler to generate clean, readable Python DSL.
+`mlog-py` bridges Python and Mindustry Logic in both directions:
 
-- **Compile (Python DSL → MLog)**: Write loops, conditionals, expressions, and hardware interactions in Python; compile directly to vanilla mlog processor instructions.
-- **Decompile (MLog → Python DSL)**: Reverse-engineer existing in-game logic into clean, readable Python code with structured `while`/`if` blocks and recovered expressions.
-- **Round-Trip Verification**: Decompiled Python code re-compiles cleanly back into valid, functionally identical mlog bytecode.
-- **Strong Typing & IDE Stubs**: Full auto-complete, signature help, and inline documentation in VS Code and Pylance via `mlog.pyi`.
+- **Compile (Python DSL → MLog)**: Write loops, conditionals, expressions, and hardware controls in Python; compile directly to vanilla `.mlog` instructions ready to paste into any processor.
+- **Decompile (MLog → Python DSL)**: Reverse-engineer existing in-game logic into clean, readable Python code with structured `if`/`while` blocks, math expressions, and functions.
+- **Round-Trip Verification**: Decompiled Python code recompiles cleanly into valid, functionally identical MLog bytecode.
+- **Strong Typing & IDE Stubs**: Full autocomplete, signature help, and inline documentation in VS Code and Pylance via `mlog.pyi`.
 
 ---
 
@@ -21,7 +21,13 @@ In the strategy game **Mindustry**, logic processors execute low-level assembly-
 
 ### Installation
 
-Install from source or local wheel:
+From GitHub:
+
+```bash
+pip install git+https://github.com/annguyen2k8/mlog-py.git
+```
+
+From source:
 
 ```bash
 git clone https://github.com/annguyen2k8/mlog-py.git
@@ -31,7 +37,7 @@ pip install .
 
 ### 1. Compile Python to MLog
 
-Use the `mlog-py compile` CLI (or legacy `mlog-py input.py` / `python3 compiler.py input.py`):
+Use the `mlog-py compile` CLI:
 
 ```bash
 # Compile to stdout
@@ -46,7 +52,7 @@ mlog-py compile input.py --debug
 
 ### 2. Decompile MLog to Python DSL
 
-Use the `mlog-py decompile` CLI (or Python API):
+Use the `mlog-py decompile` CLI:
 
 ```bash
 # Decompile to stdout
@@ -179,7 +185,7 @@ mlog-py/
 │   ├── metadata.py      # Single Source of Truth (SSOT)
 │   ├── validator.py     # Static verification & processor limits
 │   └── decompiler/      # Decompiler pipeline (CFG, structurer, dataflow)
-├── docs/                # Technical specifications (English & Tiếng Việt)
+├── docs/                # Technical documentation and specifications
 ├── examples/            # Paired compiler and decompiler examples
 └── tests/               # Automated test suite and corpus
 ```

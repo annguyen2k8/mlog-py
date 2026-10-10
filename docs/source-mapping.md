@@ -54,18 +54,27 @@ The `SourceMap` object (`src/decompiler/sourcemap.py`) provides constant-time $O
 ```python
 from src.decompiler import decompile_with_source_map
 
+mlog_text = """
+sensor heat reactor1 @heat
+jump 4 lessThanEq heat 0.5
+control enabled reactor1 0 0 0 0
+jump 5 always 0 0
+control enabled reactor1 1 0 0 0
+wait 0.5
+"""
+
 code, sm = decompile_with_source_map(mlog_text)
 
-# Query MLog addresses that produced Python line 2
-mlog_addrs = sm.python_to_mlog(python_line=2)
+# Query MLog addresses that produced Python line 4 (`if heat > 0.5:`)
+mlog_addrs = sm.python_to_mlog(python_line=4)
 # Returns: [1, 3]
 
 # Query Python line corresponding to MLog instruction address 4
 py_line = sm.mlog_to_python(mlog_address=4)
-# Returns: 5
+# Returns: 7
 
-# Get original MlogInstruction objects for Python line 1
-instrs = sm.get_instructions_for_python_line(python_line=1)
+# Get original MlogInstruction objects for Python line 3
+instrs = sm.get_instructions_for_python_line(python_line=3)
 ```
 
 ---
