@@ -1,0 +1,11 @@
+set total 150
+set flags 18
+set is_valid true
+set title "Reactor Monitor"
+write total cell1 3
+print title
+print "\nTotal: "
+print total
+print "\nFlags: "
+print flags
+printflush message1

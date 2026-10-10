@@ -81,6 +81,7 @@ def compile_py(
     optimize: bool = False,
     validate: bool = True,
     allow_functions: bool = False,
+    fold_constants: bool = True,
 ) -> CompileResult:
     """Compile Python subset source code into canonical vanilla mlog.
 
@@ -90,6 +91,7 @@ def compile_py(
         optimize: Enable optimization passes (PassThrough in Phase 1).
         validate: Validate emitted mlog against Mindustry syntax rules.
         allow_functions: Allow user-defined function definitions and calls.
+        fold_constants: Enable compile-time constant folding (default: True).
 
     Returns:
         CompileResult containing the emitted mlog, IR instructions, and label table.
@@ -98,7 +100,11 @@ def compile_py(
     tree = parse_and_validate(source, filename, allow_functions=allow_functions)
 
     # 2. Lower AST to IR
-    compiler = Compiler(filename, allow_functions=allow_functions)
+    compiler = Compiler(
+        filename,
+        allow_functions=allow_functions,
+        fold_constants=fold_constants,
+    )
     ir = compiler.compile(tree)
 
     # 3. Optimize (Phase 1: PassThrough)
@@ -130,6 +136,7 @@ def _cli_compile(args: argparse.Namespace) -> int:
             source=source,
             filename=args.input_file,
             validate=not args.no_validate,
+            fold_constants=not getattr(args, "no_fold_constants", False),
         )
     except (CompileError, ValidationError) as e:
         _cli_print(f"Compilation error: {e}", file=sys.stderr)
@@ -243,6 +250,11 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         "--mindustry",
         action="store_true",
         help="Validate generated mlog using Mindustry's actual engine (requires Java)",
+    )
+    compile_p.add_argument(
+        "--no-fold-constants",
+        action="store_true",
+        help="Disable compile-time constant folding",
     )
 
     # Subcommand: decompile (MLog -> Python DSL)

@@ -1,6 +1,7 @@
 """Compiler: lowers validated Python AST to intermediate representation (IR)."""
 
 import ast
+import math
 from typing import List, Optional, Set, Tuple, Union
 
 from .errors import CompileError, SourceLocation
@@ -57,6 +58,27 @@ AUG_ASSIGN_OPS = {
 BITWISE_BIN_OPS = (ast.BitAnd, ast.BitOr, ast.BitXor, ast.LShift, ast.RShift)
 MIN_INT64 = -9223372036854775808
 MAX_INT64 = 9223372036854775807
+# IEEE-754 double safe integer limits (Mindustry runtime uses double for all numbers)
+MAX_SAFE_INT = (1 << 53) - 1  # 9007199254740991
+MIN_SAFE_INT = -MAX_SAFE_INT   # -9007199254740991
+
+
+def _extract_const_val(node: ast.AST) -> Tuple[bool, object]:
+    """Extract constant literal value from an AST node if it is a pure constant literal.
+    Supports ast.Constant, as well as literal signed numbers (ast.UnaryOp with USub/UAdd).
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float, str, bool)):
+        return True, node.value
+    if isinstance(node, ast.UnaryOp):
+        if isinstance(node.op, ast.USub) and isinstance(node.operand, ast.Constant):
+            val = node.operand.value
+            if isinstance(val, (int, float)) and not isinstance(val, bool):
+                return True, -val
+        elif isinstance(node.op, ast.UAdd) and isinstance(node.operand, ast.Constant):
+            val = node.operand.value
+            if isinstance(val, (int, float)) and not isinstance(val, bool):
+                return True, val
+    return False, None
 
 
 def _is_literal_float(node: ast.AST) -> bool:
@@ -170,12 +192,208 @@ def _parse_array_call(compiler: "Compiler", call: ast.Call, loc: SourceLocation)
     return block_name, size_val, dtype_str
 
 
+class ConstantFolder(ast.NodeTransformer):
+    """AST transformer that safely folds pure compile-time constant expressions.
+
+    Strictly preserves Python and Mindustry runtime semantics:
+    - Arithmetic operations (+, -, *, /, //, %, **) on numbers and + on strings
+    - Bitwise operations (&, |, ^, <<, >>) within IEEE-754 safe integer bounds
+    - Unary operations (+, not)
+    - Comparison operations (==, !=, <, <=, >, >=, is, is not) between literals
+    - Boolean operations (and, or)
+    - Preserves exact source location on folded nodes
+    - Skips folding when operations may divide by zero, exceed IEEE-754 safe integer
+      boundaries [-9007199254740991, 9007199254740991], or diverge between Python
+      and Mindustry (such as negative % modulo).
+    - Preserves standalone unary minus (-x) and bitwise not (~x) for native instruction lowering.
+    - Preserves intrinsic min() and max() function calls for runtime op dispatch.
+    - Never modifies control flow or performs dead code elimination.
+    """
+
+    def visit_UnaryOp(self, node: ast.UnaryOp):
+        self.generic_visit(node)
+        if isinstance(node.op, ast.UAdd):
+            if isinstance(node.operand, ast.Constant):
+                val = node.operand.value
+                if isinstance(val, (int, float)) and not isinstance(val, bool):
+                    return ast.copy_location(ast.Constant(value=val), node)
+        elif isinstance(node.op, ast.Not):
+            ok, val = _extract_const_val(node.operand)
+            # Mindustry strings are non-null objects and always truthy when compared with 0.
+            # Only fold 'not' on numeric and boolean literals to prevent truthiness divergence.
+            if ok and isinstance(val, (int, float, bool)):
+                return ast.copy_location(ast.Constant(value=not val), node)
+        return node
+
+    def visit_BinOp(self, node: ast.BinOp):
+        self.generic_visit(node)
+        ok1, v1 = _extract_const_val(node.left)
+        ok2, v2 = _extract_const_val(node.right)
+        if not (ok1 and ok2):
+            return node
+
+        # Ensure safe integer ranges (IEEE-754 double precision in Mindustry runtime)
+        if isinstance(v1, int) and not isinstance(v1, bool):
+            if v1 < MIN_SAFE_INT or v1 > MAX_SAFE_INT:
+                return node
+        if isinstance(v2, int) and not isinstance(v2, bool):
+            if v2 < MIN_SAFE_INT or v2 > MAX_SAFE_INT:
+                return node
+
+        res = None
+
+        # Arithmetic & String
+        if isinstance(node.op, ast.Add):
+            if isinstance(v1, (int, float)) and isinstance(v2, (int, float)) and not isinstance(v1, bool) and not isinstance(v2, bool):
+                res = v1 + v2
+            elif isinstance(v1, str) and isinstance(v2, str):
+                res = v1 + v2
+        elif isinstance(node.op, ast.Sub):
+            if isinstance(v1, (int, float)) and isinstance(v2, (int, float)) and not isinstance(v1, bool) and not isinstance(v2, bool):
+                res = v1 - v2
+        elif isinstance(node.op, ast.Mult):
+            if isinstance(v1, (int, float)) and isinstance(v2, (int, float)) and not isinstance(v1, bool) and not isinstance(v2, bool):
+                res = v1 * v2
+        elif isinstance(node.op, ast.Div):
+            if isinstance(v1, (int, float)) and isinstance(v2, (int, float)) and not isinstance(v1, bool) and not isinstance(v2, bool):
+                if v2 != 0:
+                    res = float(v1) / float(v2)
+        elif isinstance(node.op, ast.FloorDiv):
+            if isinstance(v1, (int, float)) and isinstance(v2, (int, float)) and not isinstance(v1, bool) and not isinstance(v2, bool):
+                if v2 != 0:
+                    res = v1 // v2
+                    if isinstance(v1, int) and isinstance(v2, int):
+                        res = int(res)
+                    else:
+                        res = float(res)
+        elif isinstance(node.op, ast.Mod):
+            if isinstance(v1, (int, float)) and isinstance(v2, (int, float)) and not isinstance(v1, bool) and not isinstance(v2, bool):
+                # Mindustry op mod differs from Python for negative numbers, only fold positive
+                if v1 >= 0 and v2 > 0:
+                    res = v1 % v2
+                    if isinstance(v1, int) and isinstance(v2, int):
+                        res = int(res)
+                    else:
+                        res = float(res)
+        elif isinstance(node.op, ast.Pow):
+            if isinstance(v1, (int, float)) and isinstance(v2, (int, float)) and not isinstance(v1, bool) and not isinstance(v2, bool):
+                if not (v1 == 0 and v2 <= 0) and not (v1 < 0 and not isinstance(v2, int)) and abs(v2) <= 100:
+                    try:
+                        calc = v1 ** v2
+                        if not isinstance(calc, complex):
+                            if isinstance(v1, int) and isinstance(v2, int) and v2 >= 0:
+                                res = int(calc)
+                            else:
+                                res = float(calc)
+                    except Exception:
+                        pass
+        elif isinstance(node.op, ast.BitAnd):
+            if isinstance(v1, int) and isinstance(v2, int):
+                res = v1 & v2
+                if isinstance(v1, bool) and isinstance(v2, bool):
+                    res = bool(res)
+        elif isinstance(node.op, ast.BitOr):
+            if isinstance(v1, int) and isinstance(v2, int):
+                res = v1 | v2
+                if isinstance(v1, bool) and isinstance(v2, bool):
+                    res = bool(res)
+        elif isinstance(node.op, ast.BitXor):
+            if isinstance(v1, int) and isinstance(v2, int):
+                res = v1 ^ v2
+                if isinstance(v1, bool) and isinstance(v2, bool):
+                    res = bool(res)
+        elif isinstance(node.op, ast.LShift):
+            if isinstance(v1, int) and isinstance(v2, int) and not isinstance(v1, bool) and not isinstance(v2, bool):
+                if 0 <= v2 < 64:
+                    res = v1 << v2
+        elif isinstance(node.op, ast.RShift):
+            if isinstance(v1, int) and isinstance(v2, int) and not isinstance(v1, bool) and not isinstance(v2, bool):
+                if 0 <= v2 < 64:
+                    res = v1 >> v2
+
+        if res is not None:
+            if isinstance(res, int) and not isinstance(res, bool):
+                if res < MIN_SAFE_INT or res > MAX_SAFE_INT:
+                    return node
+            if isinstance(res, float):
+                if math.isnan(res) or math.isinf(res):
+                    return node
+            return ast.copy_location(ast.Constant(value=res), node)
+        return node
+
+    def visit_Compare(self, node: ast.Compare):
+        self.generic_visit(node)
+        if len(node.ops) == 1 and len(node.comparators) == 1:
+            ok1, v1 = _extract_const_val(node.left)
+            ok2, v2 = _extract_const_val(node.comparators[0])
+            if ok1 and ok2:
+                if isinstance(v1, int) and not isinstance(v1, bool) and (v1 < MIN_SAFE_INT or v1 > MAX_SAFE_INT):
+                    return node
+                if isinstance(v2, int) and not isinstance(v2, bool) and (v2 < MIN_SAFE_INT or v2 > MAX_SAFE_INT):
+                    return node
+                op = node.ops[0]
+                res = None
+                types_ok = (
+                    (isinstance(v1, (int, float)) and isinstance(v2, (int, float)))
+                    or (isinstance(v1, str) and isinstance(v2, str))
+                    or (isinstance(v1, bool) and isinstance(v2, bool))
+                )
+                if types_ok:
+                    if isinstance(op, ast.Eq): res = (v1 == v2)
+                    elif isinstance(op, ast.NotEq): res = (v1 != v2)
+                    elif isinstance(op, ast.Lt): res = (v1 < v2)
+                    elif isinstance(op, ast.LtE): res = (v1 <= v2)
+                    elif isinstance(op, ast.Gt): res = (v1 > v2)
+                    elif isinstance(op, ast.GtE): res = (v1 >= v2)
+                    elif isinstance(op, ast.Is): res = (v1 is v2)
+                    elif isinstance(op, ast.IsNot): res = (v1 is not v2)
+                if res is not None:
+                    return ast.copy_location(ast.Constant(value=bool(res)), node)
+        return node
+
+    def visit_BoolOp(self, node: ast.BoolOp):
+        self.generic_visit(node)
+        extracted = [_extract_const_val(v) for v in node.values]
+        if all(ok for ok, _ in extracted):
+            vals = [val for _, val in extracted]
+            # Mindustry strings are non-null objects and always truthy when compared with 0 ("" != 0 is true).
+            # Skip folding when any operand is a string to allow Mindustry runtime to evaluate it natively.
+            if any(isinstance(val, str) for val in vals):
+                return node
+            if isinstance(node.op, ast.And):
+                res = vals[0]
+                for v in vals[1:]:
+                    if not res:
+                        break
+                    res = v
+                return ast.copy_location(ast.Constant(value=res), node)
+            elif isinstance(node.op, ast.Or):
+                res = vals[0]
+                for v in vals[1:]:
+                    if res:
+                        break
+                    res = v
+                return ast.copy_location(ast.Constant(value=res), node)
+        return node
+
+
+def fold_constants(tree: ast.AST) -> ast.AST:
+    """Fold pure compile-time constant expressions in an AST."""
+    return ConstantFolder().visit(tree)
+
+
 class Compiler:
     """Lowers a validated Python AST into a list of IR instructions."""
 
-    def __init__(self, filename: str = "<stdin>", allow_functions: bool = False):
+    def __init__(
+        self,
+        filename: str = "<stdin>",
+        allow_functions: bool = False,
+        fold_constants: bool = True,
+    ):
         self.filename = filename
         self.allow_functions = allow_functions
+        self.fold_constants = fold_constants
         self.instructions: List[IRNode] = []
         self._temp_counter = 0
         self._label_counter = 0
@@ -1670,6 +1888,9 @@ class Compiler:
 
     def compile(self, tree: ast.Module) -> List[IRNode]:
         """Compile an AST module into a list of IR nodes."""
+        if self.fold_constants:
+            tree = fold_constants(tree)
+
         self.instructions.clear()
         self._temp_counter = 0
         self._label_counter = 0
@@ -1716,8 +1937,10 @@ def compile_source_to_ir(
     source: str,
     filename: str = "<stdin>",
     allow_functions: bool = False,
+    fold_constants: bool = True,
 ) -> List[IRNode]:
     """Parse, validate, and compile Python source code into IR."""
     tree = parse_and_validate(source, filename, allow_functions=allow_functions)
-    compiler = Compiler(filename, allow_functions=allow_functions)
+    compiler = Compiler(filename, allow_functions=allow_functions, fold_constants=fold_constants)
     return compiler.compile(tree)
+
