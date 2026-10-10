@@ -38,17 +38,34 @@ The compiler provides a high-level `Array` abstraction backed by hardware Memory
 ```python
 from mlog import Array
 
-# Allocate array of 10 integers on cell1
-arr = Array("cell1", size=10)
-arr[0] = 42
-val = arr[0]
-n = len(arr)
+# Allocate array of 10 integers on cell1 (default dtype=int)
+arr_int = Array("cell1", size=10)
+arr_int[0] = 42
+
+# Allocate array of 10 floating-point numbers on cell1 (dtype=float)
+arr_float = Array("cell1", size=10, dtype=float)
+arr_float[0] = 3.14159
+
+# Allocate array of 10 booleans on cell1 (dtype=bool)
+arr_bool = Array("cell1", size=10, dtype=bool)
+arr_bool[0] = True
 ```
 
 - **Hardware Capacities & Naming**:
   - Memory Cell (`cell`, `cell1`, `cell2`, ... matching `^cell\d*$`): maximum 64 slots (indices `0..63`).
   - Memory Bank (`bank`, `bank1`, `bank2`, ... matching `^bank\d*$`): maximum 512 slots (indices `0..511`).
   - Block names are normalized case-insensitively (`cell1` and `Cell1` reference the same physical block).
+- **Data Types (`dtype`)**:
+  - `dtype=int` (default): stores integers. Literal float, string, and boolean assignments are strictly rejected at compile time.
+  - `dtype=float`: stores 64-bit IEEE 754 floating-point numbers. Supports float literals, integer literals, and runtime numeric expressions (e.g. `sensor(...)`). String and boolean literals are rejected.
+  - `dtype=bool`: stores boolean flags encoded strictly as `False = 0`, `True = 1` (`0.0` and `1.0` in Mindustry double registers).
+    - **Literal assignment**: only `True` and `False` are permitted; integer (`0`, `1`), float, and string literals are strictly rejected at compile time and runtime.
+    - **Dynamic expression policy**: comparisons (`x > y`) and boolean operations (`not x`) write `0` or `1` directly. General dynamic expressions are automatically normalized via `op notEqual __bool_val expr 0` to preserve the `0`/`1` memory invariant.
+    - **NaN / Infinity truthiness nuance**: in Mindustry Logic VM, `LVar.setnum` converts `NaN` and `Infinity` to object `null` (treated as `0.0` in numeric operations), so `op notEqual` normalizes them to `0` (False). In contrast, native Python evaluates `bool(float('nan'))` and `bool(float('inf'))` as `True`.
+    - **Reading policy & foreign data divergence**:
+      - In runtime Python emulation, reading an element returns `bool` (`True` or `False`). If memory contains a value other than `0` or `1` (e.g. from foreign processor memory corruption or raw `write`), runtime emulation strictly raises `ValueError`.
+      - In compiled MLog, reading emits zero-overhead `read dest cell addr` without redundant normalization. If foreign data like `42` exists in the cell, MLog truthiness (`if arr[i]:` testing `!= 0`) evaluates to true, while exact equality (`if arr[i] == True:` testing `== 1`) evaluates to false.
+  - Array indices (`arr[i]`): must always be integer slots (`0 <= i < size`) regardless of `dtype`.
 - **Static Allocator (`src/allocator.py`)**:
   - Allocates non-overlapping contiguous slices in independent address spaces per block.
   - Slices are packed starting at offset `0`. Subsequent arrays on the same block advance the offset.
@@ -57,7 +74,7 @@ n = len(arr)
 - **Index Bounds & Type Safety Limits**:
   - **Static bounds checking**: Literal indices outside `[0, size - 1]` trigger compile-time `CompileError`. Literal negative indices, floats, strings, and booleans are strictly rejected at compile time.
   - **Unchecked dynamic bounds**: For dynamic indices (`arr[i]` where `i` is a variable or runtime expression), bounds checking is not emitted by default to preserve processor instruction budget (1000 instruction limit). If a dynamic index exceeds `size` on a shared block, it may access or overwrite adjacent arrays on that block.
-  - **Type enforcement limits**: Array elements must be integers. Literal floats, strings, and booleans are rejected at compile time. Dynamic expressions (e.g. `sensor(...)`) are not statically type-inferred and write their computed value directly to the cell.
+  - **Type enforcement limits**: Array elements must match the array's `dtype`. Dynamic expressions write their computed runtime value directly to the underlying memory block.
   - **Constant length**: `len(arr)` resolves at compile time to the static integer size.
 - **Base Offset Optimization**:
   - When `base_offset == 0`, dynamic index reads/writes directly reference the index operand without an extra addition instruction.

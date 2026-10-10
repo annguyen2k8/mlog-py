@@ -1062,36 +1062,66 @@ ALL_REGISTRY_ENUMS: Dict[str, type] = {
 class Array:
     """Runtime representation and emulation of fixed-size Memory Cell / Bank arrays."""
 
-    def __init__(self, block: str, size: int):
+    def __init__(self, block: str, size: int, dtype: Union[type, str] = int):
         if not isinstance(block, str):
             raise TypeError("Array block must be a string (e.g. 'cell1', 'bank1')")
         if not isinstance(size, int) or isinstance(size, bool) or size <= 0:
             raise ValueError(f"Array size must be a positive integer, got {size!r}")
+
+        if dtype in (int, "int"):
+            self.dtype = int
+            self._data: List[Union[int, float, bool]] = [0] * size
+        elif dtype in (float, "float"):
+            self.dtype = float
+            self._data = [0.0] * size
+        elif dtype in (bool, "bool"):
+            self.dtype = bool
+            self._data = [False] * size
+        else:
+            raise TypeError(f"unsupported Array dtype '{dtype}': expected int, float, or bool")
+
         self.block = block
         self.size = size
-        self._data: List[int] = [0] * size
 
     def __len__(self) -> int:
         return self.size
 
-    def __getitem__(self, index: int) -> int:
+    def __getitem__(self, index: int) -> Union[int, float, bool]:
         if not isinstance(index, int) or isinstance(index, bool):
             raise TypeError("Array index must be an integer, got boolean" if isinstance(index, bool) else "Array index must be an integer")
         if index < 0 or index >= self.size:
             raise IndexError(f"Array index out of bounds: {index} is not in range [0, {self.size})")
-        return self._data[index]
+        val = self._data[index]
+        if self.dtype is bool:
+            if val is True or val == 1:
+                return True
+            elif val is False or val == 0:
+                return False
+            else:
+                raise ValueError(f"Invalid boolean encoding in Array: expected 0 or 1, got {val!r}")
+        return val
 
-    def __setitem__(self, index: int, value: int):
+    def __setitem__(self, index: int, value: Any):
         if not isinstance(index, int) or isinstance(index, bool):
             raise TypeError("Array index must be an integer, got boolean" if isinstance(index, bool) else "Array index must be an integer")
         if index < 0 or index >= self.size:
             raise IndexError(f"Array index out of bounds: {index} is not in range [0, {self.size})")
-        if not isinstance(value, int) or isinstance(value, bool):
-            raise TypeError(f"Array only stores integers, got {type(value).__name__}")
-        self._data[index] = int(value)
+
+        if self.dtype is int:
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise TypeError(f"Array only stores integers, got {type(value).__name__}")
+            self._data[index] = int(value)
+        elif self.dtype is float:
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                raise TypeError(f"Array of type 'float' only stores numbers, got {type(value).__name__}")
+            self._data[index] = float(value)
+        elif self.dtype is bool:
+            if not isinstance(value, bool):
+                raise TypeError(f"Array of type 'bool' only stores booleans, got {type(value).__name__}")
+            self._data[index] = bool(value)
 
     def __repr__(self) -> str:
-        return f"Array({self.block!r}, size={self.size})"
+        return f"Array({self.block!r}, size={self.size}, dtype={self.dtype.__name__})"
 
 
 # Complete set of symbols exported by the official `mlog` package
@@ -1228,9 +1258,10 @@ def generate_pyi() -> str:
     lines.append('    """Fixed-size memory array backed by a Mindustry Memory Cell (max 64) or Memory Bank (max 512)."""')
     lines.append("    block: str")
     lines.append("    size: int")
-    lines.append("    def __init__(self, block: str, size: int) -> None: ...")
-    lines.append("    def __getitem__(self, index: int) -> int: ...")
-    lines.append("    def __setitem__(self, index: int, value: int) -> None: ...")
+    lines.append("    dtype: type")
+    lines.append("    def __init__(self, block: str, size: int, dtype: Union[type, str] = int) -> None: ...")
+    lines.append("    def __getitem__(self, index: int) -> Any: ...")
+    lines.append("    def __setitem__(self, index: int, value: Any) -> None: ...")
     lines.append("    def __len__(self) -> int: ...")
     lines.append("")
 

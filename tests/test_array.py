@@ -657,5 +657,412 @@ val = b[i]
         MlogValidator.validate(res.mlog)
 
 
+class TestFloatArray(unittest.TestCase):
+    """Tests for Phase 1: Float Array support in mlog-py."""
+
+    def test_float_array_declaration(self):
+        """Float arrays can be declared with dtype=float or positional dtype."""
+        code = """
+from mlog import Array
+
+a = Array("cell1", size=10, dtype=float)
+b = Array("cell1", 15, float)
+c = Array("bank1", 20, dtype="float")
+
+a[0] = 3.14
+b[0] = -0.001
+c[0] = 100.5
+"""
+        res = compile_py(code)
+        self.assertIn("write 3.14 cell1 0", res.mlog)
+        self.assertIn("op sub __tmp0 0 0.001", res.mlog)
+        self.assertIn("write __tmp0 cell1 10", res.mlog)
+        self.assertIn("write 100.5 bank1 0", res.mlog)
+        MlogValidator.validate(res.mlog)
+
+    def test_default_dtype_is_int_and_rejects_float(self):
+        """Default Array dtype is int, which strictly rejects float literals."""
+        code = """
+from mlog import Array
+
+a = Array("cell1", size=10)
+a[0] = 3.14
+"""
+        with self.assertRaises(CompileError) as ctx:
+            compile_py(code)
+        self.assertIn("Array only stores integers; float literal is not supported", str(ctx.exception))
+
+    def test_float_array_accepts_integer_literals(self):
+        """Float array can store integer literals (promoted to numeric in MLog)."""
+        code = """
+from mlog import Array
+
+a = Array("cell1", size=10, dtype=float)
+a[0] = 42
+"""
+        res = compile_py(code)
+        self.assertIn("write 42 cell1 0", res.mlog)
+        MlogValidator.validate(res.mlog)
+
+    def test_float_array_runtime_expressions(self):
+        """Float array stores results of runtime expressions and sensor readings."""
+        code = """
+from mlog import Array, sensor, SensorProperty
+
+arr = Array("cell1", size=5, dtype=float)
+arr[0] = sensor("reactor1", SensorProperty.HEAT)
+arr[1] = arr[0] * 1.5 + 0.25
+"""
+        res = compile_py(code)
+        self.assertIn("sensor __tmp0 reactor1 @heat", res.mlog)
+        self.assertIn("write __tmp0 cell1 0", res.mlog)
+        self.assertIn("read __tmp1 cell1 0", res.mlog)
+        self.assertIn("op mul __tmp2 __tmp1 1.5", res.mlog)
+        self.assertIn("op add __tmp3 __tmp2 0.25", res.mlog)
+        self.assertIn("write __tmp3 cell1 1", res.mlog)
+        MlogValidator.validate(res.mlog)
+
+    def test_float_array_reading_and_arithmetic(self):
+        """Reading from float array integrates seamlessly in expressions."""
+        code = """
+from mlog import Array
+
+a = Array("cell1", size=5, dtype=float)
+val = a[0] + 2.718
+"""
+        res = compile_py(code)
+        self.assertIn("read __tmp0 cell1 0", res.mlog)
+        self.assertIn("op add val __tmp0 2.718", res.mlog)
+        MlogValidator.validate(res.mlog)
+
+    def test_float_array_rejects_string_and_bool_literals(self):
+        """Float array rejects string and boolean literals."""
+        code_str = """
+from mlog import Array
+a = Array("cell1", size=5, dtype=float)
+a[0] = "text"
+"""
+        with self.assertRaises(CompileError) as ctx:
+            compile_py(code_str)
+        self.assertIn("string literal is not supported", str(ctx.exception))
+
+        code_bool = """
+from mlog import Array
+a = Array("cell1", size=5, dtype=float)
+a[0] = True
+"""
+        with self.assertRaises(CompileError) as ctx:
+            compile_py(code_bool)
+        self.assertIn("boolean literal is not supported", str(ctx.exception))
+
+    def test_float_array_rejects_float_index(self):
+        """Float array index must still be an integer slot."""
+        code = """
+from mlog import Array
+a = Array("cell1", size=5, dtype=float)
+x = a[1.5]
+"""
+        with self.assertRaises(CompileError) as ctx:
+            compile_py(code)
+        self.assertIn("array index must be an integer, got float literal", str(ctx.exception))
+
+    def test_invalid_dtype_rejected(self):
+        """Unsupported dtypes are rejected at compile time."""
+        invalid_dtypes = ["str", "list", "dict", "complex"]
+        for bad_dt in invalid_dtypes:
+            code = f"""
+from mlog import Array
+a = Array("cell1", size=5, dtype="{bad_dt}")
+"""
+            with self.assertRaises(CompileError) as ctx:
+                compile_py(code)
+            self.assertIn("unsupported Array dtype", str(ctx.exception))
+
+    def test_runtime_float_array(self):
+        """Runtime Array emulation class handles float dtype accurately."""
+        arr = Array("cell1", size=5, dtype=float)
+        self.assertEqual(arr.dtype, float)
+        self.assertEqual(arr[0], 0.0)
+
+        # Store float
+        arr[0] = 3.14159
+        self.assertAlmostEqual(arr[0], 3.14159)
+
+        # Store int (promoted to float)
+        arr[1] = 100
+        self.assertIsInstance(arr[1], float)
+        self.assertEqual(arr[1], 100.0)
+
+        # Reject bool value
+        with self.assertRaises(TypeError):
+            arr[2] = True
+
+        # Reject str value
+        with self.assertRaises(TypeError):
+            arr[2] = "invalid"
+
+        # Reject bool index
+        with self.assertRaises(TypeError):
+            _ = arr[True]
+
+        # Repr contains dtype
+        self.assertIn("dtype=float", repr(arr))
+
+    def test_float_array_mindustry_harness(self):
+        """Float array bytecode passes real Mindustry LAssembler."""
+        if not is_mindustry_available():
+            self.skipTest("Mindustry Java harness not available")
+
+        code = """
+from mlog import Array, sensor, SensorProperty
+
+readings = Array("cell1", size=10, dtype=float)
+readings[0] = sensor("reactor1", SensorProperty.HEAT)
+for i in range(5):
+    readings[i] = i * 0.25
+"""
+        res = compile_py(code)
+        valid, msg, count = validate_with_mindustry(res.mlog)
+        self.assertTrue(valid, f"Mindustry assembly error: {msg}")
+        self.assertGreater(count, 0)
+
+
+class TestBoolArray(unittest.TestCase):
+    """Tests for Phase 2: Bool Array (dtype=bool)."""
+
+    def test_bool_array_declaration(self):
+        """Array declaration accepts dtype=bool and dtype='bool'."""
+        code1 = """
+from mlog import Array
+
+flags = Array("cell1", size=10, dtype=bool)
+"""
+        res1 = compile_py(code1)
+        self.assertEqual(res1.mlog.strip(), "")
+
+        code2 = """
+from mlog import Array
+
+flags = Array("cell1", size=10, dtype="bool")
+"""
+        res2 = compile_py(code2)
+        self.assertEqual(res2.mlog.strip(), "")
+
+    def test_bool_array_literal_assignment(self):
+        """Assigning True/False literals compiles to write true/false opcodes."""
+        code = """
+from mlog import Array
+
+flags = Array("cell1", size=10, dtype=bool)
+flags[0] = True
+flags[1] = False
+"""
+        res = compile_py(code)
+        self.assertIn("write true cell1 0", res.mlog)
+        self.assertIn("write false cell1 1", res.mlog)
+        MlogValidator.validate(res.mlog)
+
+    def test_bool_array_reject_int_literal(self):
+        """Assigning integer literals to bool Array is strictly rejected at compile time."""
+        for val in ("1", "0", "42", "-1"):
+            code = f"""
+from mlog import Array
+
+flags = Array("cell1", size=10, dtype=bool)
+flags[0] = {val}
+"""
+            with self.assertRaises(CompileError) as ctx:
+                compile_py(code)
+            self.assertIn("Array of type 'bool' only stores booleans; integer literal is not supported", str(ctx.exception))
+
+    def test_bool_array_reject_float_literal(self):
+        """Assigning float literals to bool Array is rejected at compile time."""
+        for val in ("1.0", "0.0", "3.14", "-0.5"):
+            code = f"""
+from mlog import Array
+
+flags = Array("cell1", size=10, dtype=bool)
+flags[0] = {val}
+"""
+            with self.assertRaises(CompileError) as ctx:
+                compile_py(code)
+            self.assertIn("Array of type 'bool' only stores booleans; float literal is not supported", str(ctx.exception))
+
+    def test_bool_array_reject_str_literal(self):
+        """Assigning string literals to bool Array is rejected at compile time."""
+        code = """
+from mlog import Array
+
+flags = Array("cell1", size=10, dtype=bool)
+flags[0] = "true"
+"""
+        with self.assertRaises(CompileError) as ctx:
+            compile_py(code)
+        self.assertIn("Array of type 'bool' only stores booleans; string literal is not supported", str(ctx.exception))
+
+    def test_bool_array_reject_bool_index(self):
+        """Indexing a bool Array with a boolean literal is rejected at compile time."""
+        code_write = """
+from mlog import Array
+
+flags = Array("cell1", size=10, dtype=bool)
+flags[True] = True
+"""
+        with self.assertRaises(CompileError) as ctx:
+            compile_py(code_write)
+        self.assertIn("array index must be an integer, got boolean literal", str(ctx.exception))
+
+        code_read = """
+from mlog import Array
+
+flags = Array("cell1", size=10, dtype=bool)
+x = flags[False]
+"""
+        with self.assertRaises(CompileError) as ctx:
+            compile_py(code_read)
+        self.assertIn("array index must be an integer, got boolean literal", str(ctx.exception))
+
+    def test_bool_array_compare_assignment(self):
+        """Assigning comparison expressions stores 0/1 without redundant normalization opcodes."""
+        code = """
+from mlog import Array
+
+flags = Array("cell1", size=10, dtype=bool)
+flags[0] = x > 10
+flags[1] = a == b
+"""
+        res = compile_py(code)
+        self.assertIn("op greaterThan", res.mlog)
+        self.assertIn("op equal", res.mlog)
+        # Should not emit extra notEqual normalization for already-boolean comparisons
+        self.assertNotIn("op notEqual", res.mlog)
+        self.assertIn("write", res.mlog)
+        MlogValidator.validate(res.mlog)
+
+    def test_bool_array_not_assignment(self):
+        """Assigning 'not' expressions stores boolean without redundant normalization opcodes."""
+        code = """
+from mlog import Array
+
+flags = Array("cell1", size=10, dtype=bool)
+flags[0] = not is_active
+"""
+        res = compile_py(code)
+        self.assertIn("op equal", res.mlog)
+        self.assertNotIn("op notEqual", res.mlog)
+        MlogValidator.validate(res.mlog)
+
+    def test_bool_array_dynamic_normalization(self):
+        """Assigning general dynamic runtime expressions normalizes value to 0 or 1 via notEqual."""
+        code = """
+from mlog import Array
+
+flags = Array("cell1", size=10, dtype=bool)
+flags[0] = raw_number
+"""
+        res = compile_py(code)
+        self.assertIn("op notEqual", res.mlog)
+        self.assertIn("raw_number 0", res.mlog)
+        self.assertIn("write", res.mlog)
+        MlogValidator.validate(res.mlog)
+
+    def test_bool_array_read_in_condition(self):
+        """Reading bool array element directly in if condition."""
+        code = """
+from mlog import Array, print, printflush
+
+flags = Array("cell1", size=10, dtype=bool)
+if flags[0]:
+    print("ACTIVE")
+    printflush("message1")
+"""
+        res = compile_py(code)
+        self.assertIn("read", res.mlog)
+        self.assertIn("jump", res.mlog)
+        MlogValidator.validate(res.mlog)
+
+    def test_bool_array_read_to_variable(self):
+        """Reading bool array element into a variable."""
+        code = """
+from mlog import Array
+
+flags = Array("cell1", size=10, dtype=bool)
+state = flags[0]
+"""
+        res = compile_py(code)
+        self.assertIn("read state cell1 0", res.mlog)
+        MlogValidator.validate(res.mlog)
+
+    def test_runtime_bool_array(self):
+        """Runtime Array emulation class handles bool dtype accurately and strictly."""
+        arr = Array("cell1", size=5, dtype=bool)
+        self.assertEqual(arr.dtype, bool)
+        self.assertIs(arr[0], False)
+
+        # Assign True and False
+        arr[0] = True
+        self.assertIs(arr[0], True)
+        arr[1] = False
+        self.assertIs(arr[1], False)
+
+        # Reject non-bool types at runtime
+        for invalid_val in (1, 0, 42, -1):
+            with self.assertRaises(TypeError):
+                arr[2] = invalid_val
+
+        for invalid_val in (1.0, 0.0, 3.14):
+            with self.assertRaises(TypeError):
+                arr[2] = invalid_val
+
+        with self.assertRaises(TypeError):
+            arr[2] = "true"
+
+        # Reject boolean index
+        with self.assertRaises(TypeError):
+            _ = arr[True]
+
+        # Explicit policy: Reading corrupt/foreign non-0/1 values raises ValueError
+        arr._data[3] = 42
+        with self.assertRaises(ValueError) as ctx:
+            _ = arr[3]
+        self.assertIn("Invalid boolean encoding in Array: expected 0 or 1, got 42", str(ctx.exception))
+
+        arr._data[3] = -1
+        with self.assertRaises(ValueError):
+            _ = arr[3]
+
+        # Valid encoded integer 1 and 0 convert to bool True/False
+        arr._data[3] = 1
+        self.assertIs(arr[3], True)
+        arr._data[3] = 0
+        self.assertIs(arr[3], False)
+
+        # Repr
+        self.assertIn("dtype=bool", repr(arr))
+
+    def test_bool_array_mindustry_harness(self):
+        """Bool array bytecode passes real Mindustry LAssembler."""
+        if not is_mindustry_available():
+            self.skipTest("Mindustry Java harness not available")
+
+        code = """
+from mlog import Array, print, printflush
+
+status = Array("cell1", size=10, dtype=bool)
+status[0] = True
+status[1] = False
+for i in range(5):
+    status[i] = i > 2
+
+if status[3]:
+    print("Unit active")
+    printflush("message1")
+"""
+        res = compile_py(code)
+        valid, msg, count = validate_with_mindustry(res.mlog)
+        self.assertTrue(valid, f"Mindustry assembly error: {msg}")
+        self.assertGreater(count, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,14 +1,20 @@
 write 42 cell1 0
 write 99 cell1 10
+write 3.14 cell1 30
+write true cell1 40
+write false cell1 41
 set i 0
-jump 12 greaterThanEq i 10
+jump 18 greaterThanEq i 10
 op mul __tmp0 i 5
 write __tmp0 cell1 i
 read __tmp1 cell1 i
 op add __tmp2 __tmp1 10
 op add __tmp3 i 10
 write __tmp2 cell1 __tmp3
+op greaterThan __tmp4 i 5
+op add __tmp5 i 40
+write __tmp4 cell1 __tmp5
 op add i i 1
-jump 3 always 0 0
-read __tmp4 cell1 10
-write __tmp4 bank1 0
+jump 6 always 0 0
+read __tmp6 cell1 10
+write __tmp6 bank1 0

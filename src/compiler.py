@@ -46,7 +46,11 @@ MAX_INT64 = 9223372036854775807
 
 def _is_literal_float(node: ast.AST) -> bool:
     """Check if node is an explicit float literal."""
-    return isinstance(node, ast.Constant) and isinstance(node.value, float)
+    if isinstance(node, ast.Constant) and isinstance(node.value, float):
+        return True
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+        return isinstance(node.operand, ast.Constant) and isinstance(node.operand.value, float)
+    return False
 
 
 def _get_literal_int(node: ast.AST) -> Optional[int]:
@@ -56,6 +60,9 @@ def _get_literal_int(node: ast.AST) -> Optional[int]:
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
         if isinstance(node.operand, ast.Constant) and isinstance(node.operand.value, int) and not isinstance(node.operand.value, bool):
             return -node.operand.value
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.UAdd):
+        if isinstance(node.operand, ast.Constant) and isinstance(node.operand.value, int) and not isinstance(node.operand.value, bool):
+            return node.operand.value
     return None
 
 CMP_OP_MAP = {
@@ -91,16 +98,19 @@ class RawValue:
         return self.val
 
 
-def _parse_array_call(compiler: "Compiler", call: ast.Call, loc: SourceLocation) -> Tuple[str, int]:
-    """Parse and validate arguments to Array(block, size=...) or Array(block, size)."""
+def _parse_array_call(compiler: "Compiler", call: ast.Call, loc: SourceLocation) -> Tuple[str, int, str]:
+    """Parse and validate arguments to Array(block, size, dtype=...) or Array(block, size=..., dtype=...)."""
     block_node = None
     size_node = None
+    dtype_node = None
 
     for kw in call.keywords:
         if kw.arg == "size":
             size_node = kw.value
         elif kw.arg == "block":
             block_node = kw.value
+        elif kw.arg == "dtype":
+            dtype_node = kw.value
         else:
             compiler.error(f"unexpected keyword argument '{kw.arg}' in Array()", kw)
 
@@ -109,9 +119,11 @@ def _parse_array_call(compiler: "Compiler", call: ast.Call, loc: SourceLocation)
         block_node = pos_args.pop(0)
     if size_node is None and pos_args:
         size_node = pos_args.pop(0)
+    if dtype_node is None and pos_args:
+        dtype_node = pos_args.pop(0)
 
     if pos_args:
-        compiler.error(f"Array() takes at most 2 arguments, got {len(call.args) + len(call.keywords)}", call)
+        compiler.error(f"Array() takes at most 3 arguments, got {len(call.args) + len(call.keywords)}", call)
 
     if block_node is None:
         compiler.error("missing required argument 'block' in Array()", call)
@@ -128,7 +140,19 @@ def _parse_array_call(compiler: "Compiler", call: ast.Call, loc: SourceLocation)
     if size_val <= 0:
         compiler.error(f"Array size must be a positive integer (> 0), got {size_val}", size_node)
 
-    return block_name, size_val
+    dtype_str = "int"
+    if dtype_node is not None:
+        if isinstance(dtype_node, ast.Name):
+            dtype_str = dtype_node.id
+        elif isinstance(dtype_node, ast.Constant) and isinstance(dtype_node.value, str):
+            dtype_str = dtype_node.value.lower()
+        else:
+            compiler.error("Array dtype must be int, float, or bool (e.g. dtype=float)", dtype_node)
+
+        if dtype_str not in ("int", "float", "bool"):
+            compiler.error(f"unsupported Array dtype '{dtype_str}': expected int, float, or bool", dtype_node)
+
+    return block_name, size_val, dtype_str
 
 
 class Compiler:
@@ -980,15 +1004,42 @@ class Compiler:
             if arr is None:
                 self.error(f"'{arr_name}' is not an Array", target.value)
 
-            # Array stores integers
-            if _is_literal_float(node.value):
-                self.error("Array only stores integers; float literal is not supported", node.value)
-            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                self.error("Array only stores integers; string literal is not supported", node.value)
-            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool):
-                self.error("Array only stores integers; boolean literal is not supported", node.value)
+            # Type checking on assigned value based on array dtype
+            if arr.dtype == "int":
+                if _is_literal_float(node.value):
+                    self.error("Array only stores integers; float literal is not supported", node.value)
+                if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                    self.error("Array only stores integers; string literal is not supported", node.value)
+                if isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool):
+                    self.error("Array only stores integers; boolean literal is not supported", node.value)
+            elif arr.dtype == "float":
+                if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                    self.error("Array of type 'float' only stores numbers; string literal is not supported", node.value)
+                if isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool):
+                    self.error("Array of type 'float' only stores numbers; boolean literal is not supported", node.value)
+            elif arr.dtype == "bool":
+                if _get_literal_int(node.value) is not None:
+                    self.error("Array of type 'bool' only stores booleans; integer literal is not supported", node.value)
+                if _is_literal_float(node.value):
+                    self.error("Array of type 'bool' only stores booleans; float literal is not supported", node.value)
+                if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                    self.error("Array of type 'bool' only stores booleans; string literal is not supported", node.value)
 
-            val = self.compile_expr(node.value)
+            target_tmp = self.new_temp(loc) if isinstance(node.value, ast.Call) else None
+            val = self.compile_expr(node.value, target_dest=target_tmp)
+
+            if arr.dtype == "bool":
+                # Normalize dynamic expressions to boolean (0 or 1) unless syntactically known to be boolean
+                if not (
+                    (isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool))
+                    or isinstance(node.value, ast.Compare)
+                    or (isinstance(node.value, ast.UnaryOp) and isinstance(node.value.op, ast.Not))
+                ):
+                    bool_norm = self.new_temp(loc)
+                    self.instructions.append(
+                        IROp(op="notEqual", dest=bool_norm, a=val, b="0", loc=loc)
+                    )
+                    val = bool_norm
 
             # Check index type
             if _is_literal_float(target.slice):
@@ -1035,8 +1086,8 @@ class Compiler:
                 self.error("Array declaration is not allowed inside loops; declare arrays at the module level", node)
             if target_name in self._pre_allocated_arrays:
                 return
-            block_name, size_val = _parse_array_call(self, node.value, loc)
-            self.allocator.allocate(name=target_name, block=block_name, size=size_val, loc=loc)
+            block_name, size_val, dtype_val = _parse_array_call(self, node.value, loc)
+            self.allocator.allocate(name=target_name, block=block_name, size=size_val, dtype=dtype_val, loc=loc)
             return
 
         # Cannot reassign an existing Array variable
@@ -1461,8 +1512,8 @@ class Compiler:
                 if isinstance(val, ast.Call) and isinstance(val.func, ast.Name) and val.func.id == "Array":
                     target_name = stmt.targets[0].id
                     loc = self.loc(stmt)
-                    block_name, size_val = _parse_array_call(self, val, loc)
-                    self.allocator.allocate(name=target_name, block=block_name, size=size_val, loc=loc)
+                    block_name, size_val, dtype_val = _parse_array_call(self, val, loc)
+                    self.allocator.allocate(name=target_name, block=block_name, size=size_val, dtype=dtype_val, loc=loc)
                     self._pre_allocated_arrays.add(target_name)
 
         if self.allow_functions:

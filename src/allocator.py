@@ -16,6 +16,7 @@ class ArraySymbol:
     base_offset: int
     size: int
     capacity: int
+    dtype: str = "int"
 
 
 class MemoryBlockAllocator:
@@ -48,11 +49,18 @@ class MemoryBlockAllocator:
         name: str,
         block: str,
         size: int,
+        dtype: str = "int",
         loc: Optional[SourceLocation] = None,
     ) -> ArraySymbol:
         """Statically allocate a contiguous array region on the given memory block."""
         if name in self.arrays:
             raise CompileError(f"Array '{name}' is already declared", loc)
+
+        if dtype not in ("int", "float", "bool"):
+            raise CompileError(
+                f"unsupported Array dtype '{dtype}': expected int, float, or bool",
+                loc,
+            )
 
         canonical_block = block.lower()
         capacity = self.get_block_capacity(canonical_block)
@@ -86,6 +94,7 @@ class MemoryBlockAllocator:
             base_offset=base_offset,
             size=size,
             capacity=capacity,
+            dtype=dtype,
         )
         self.arrays[name] = symbol
         return symbol

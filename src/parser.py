@@ -224,7 +224,7 @@ class ASTValidator(ast.NodeVisitor):
         func_name = node.func.id
         if func_name == "Array":
             for kw in node.keywords:
-                if kw.arg not in ("size", "block"):
+                if kw.arg not in ("size", "block", "dtype"):
                     self.error(f"unexpected keyword argument '{kw.arg}' in Array()", kw)
             for arg in node.args:
                 self.visit(arg)
