@@ -1,0 +1,39 @@
+set total 0
+set step 5
+op add total total step
+op mul total total 2
+op sub total total 3
+op idiv total total 2
+set sum_sq 0
+set i 1
+jump 13 greaterThanEq i 5
+op mul __tmp0 i i
+op add sum_sq sum_sq __tmp0
+op add i i 1
+jump 8 always 0 0
+write 100 cell1 0
+read __tmp1 cell1 0
+op add __tmp2 __tmp1 25
+write __tmp2 cell1 0
+read __tmp3 cell1 0
+op idiv __tmp4 __tmp3 5
+write __tmp4 cell1 0
+write 1.0 cell1 10
+read __tmp5 cell1 10
+op add __tmp6 __tmp5 2.5
+write __tmp6 cell1 10
+read __tmp7 cell1 10
+op mul __tmp8 __tmp7 1.5
+write __tmp8 cell1 10
+set i 0
+jump 38 greaterThanEq i 10
+read __tmp9 cell1 i
+op add __tmp10 __tmp9 10
+write __tmp10 cell1 i
+op add __tmp11 i 20
+read __tmp12 cell1 __tmp11
+op xor __tmp13 __tmp12 true
+write __tmp13 cell1 __tmp11
+op add i i 1
+jump 28 always 0 0
+

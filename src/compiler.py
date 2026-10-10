@@ -40,6 +40,21 @@ BIN_OP_MAP = {
     ast.BitXor: "xor",
 }
 
+AUG_ASSIGN_OPS = {
+    ast.Add: ("add", "+="),
+    ast.Sub: ("sub", "-="),
+    ast.Mult: ("mul", "*="),
+    ast.Div: ("div", "/="),
+    ast.FloorDiv: ("idiv", "//="),
+    ast.Mod: ("mod", "%="),
+    ast.Pow: ("pow", "**="),
+    ast.LShift: ("shl", "<<="),
+    ast.RShift: ("shr", ">>="),
+    ast.BitOr: ("or", "|="),
+    ast.BitAnd: ("and", "&="),
+    ast.BitXor: ("xor", "^="),
+}
+
 BITWISE_BIN_OPS = (ast.BitAnd, ast.BitOr, ast.BitXor, ast.LShift, ast.RShift)
 MIN_INT64 = -9223372036854775808
 MAX_INT64 = 9223372036854775807
@@ -1322,6 +1337,161 @@ class Compiler:
         formatted_target = self.format_name(target_name, target)
         self.compile_expr(node.value, target_dest=formatted_target)
 
+    def compile_aug_assign(self, node: ast.AugAssign):
+        """Compile an augmented assignment statement: target op= value"""
+        loc = self.loc(node)
+        target = node.target
+        op_cls = type(node.op)
+
+        if op_cls not in AUG_ASSIGN_OPS:
+            op_sym = "@=" if op_cls is ast.MatMult else f"{op_cls.__name__}="
+            self.error(f"unsupported augmented assignment operator: '{op_sym}'", node)
+        mlog_op, op_sym = AUG_ASSIGN_OPS[op_cls]
+
+        # Case 1: Array element augmented assignment: arr[i] op= value
+        if isinstance(target, ast.Subscript):
+            if not isinstance(target.value, ast.Name):
+                self.error("subscript augmented assignment is only supported on simple array names", target.value)
+            arr_name = target.value.id
+            arr = self.allocator.get_array(arr_name)
+            if arr is None:
+                self.error(f"'{arr_name}' is not an Array", target.value)
+
+            # Check index type
+            if _is_literal_float(target.slice):
+                self.error("array index must be an integer, got float literal", target.slice)
+            if isinstance(target.slice, ast.Constant) and isinstance(target.slice.value, str):
+                self.error("array index must be an integer, got string literal", target.slice)
+            if isinstance(target.slice, ast.Constant) and isinstance(target.slice.value, bool):
+                self.error("array index must be an integer, got boolean literal", target.slice)
+
+            literal_idx = _get_literal_int(target.slice)
+            if literal_idx is not None:
+                if literal_idx < 0 or literal_idx >= arr.size:
+                    self.error(
+                        f"array index out of bounds: index {literal_idx} is outside valid range [0, {arr.size}) for Array '{arr_name}'",
+                        target.slice,
+                    )
+
+            # Type checking and semantic validation based on array dtype and operator
+            if arr.dtype == "int":
+                if _is_literal_float(node.value):
+                    self.error("Array only stores integers; float literal is not supported", node.value)
+                if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                    self.error("Array only stores integers; string literal is not supported", node.value)
+                if isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool):
+                    self.error("Array only stores integers; boolean literal is not supported", node.value)
+                if op_cls in (ast.LShift, ast.RShift):
+                    shift_val = _get_literal_int(node.value)
+                    if shift_val is not None:
+                        if shift_val < 0:
+                            self.error("negative shift count is not supported", node.value)
+                        elif shift_val >= 64:
+                            self.error(
+                                f"shift count {shift_val} >= 64 exceeds 64-bit integer width",
+                                node.value,
+                            )
+            elif arr.dtype == "float":
+                if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                    self.error("Array of type 'float' only stores numbers; string literal is not supported", node.value)
+                if isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool):
+                    self.error("Array of type 'float' only stores numbers; boolean literal is not supported", node.value)
+                if op_cls in BITWISE_BIN_OPS:
+                    self.error(f"unsupported operand type for bitwise operator {op_cls.__name__}: float Array", node)
+                if _is_literal_float(node.value) and op_cls in BITWISE_BIN_OPS:
+                    self.error(f"unsupported operand type for bitwise operator {op_cls.__name__}: float literal", node.value)
+            elif arr.dtype == "bool":
+                if op_cls not in (ast.BitAnd, ast.BitOr, ast.BitXor):
+                    self.error(
+                        f"unsupported augmented assignment operator '{op_sym}' for Array of type 'bool'; only '&=', '|=', '^=' are supported",
+                        node,
+                    )
+                if _get_literal_int(node.value) is not None:
+                    self.error("Array of type 'bool' only stores booleans; integer literal is not supported", node.value)
+                if _is_literal_float(node.value):
+                    self.error("Array of type 'bool' only stores booleans; float literal is not supported", node.value)
+                if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                    self.error("Array of type 'bool' only stores booleans; string literal is not supported", node.value)
+
+            # Compute address / offset EXACTLY ONCE
+            if literal_idx is not None:
+                addr = str(arr.base_offset + literal_idx)
+            else:
+                idx_expr = self.compile_expr(target.slice)
+                if arr.base_offset == 0:
+                    addr = idx_expr
+                else:
+                    addr = self.new_temp(loc)
+                    self.instructions.append(
+                        IROp(op="add", dest=addr, a=idx_expr, b=str(arr.base_offset), loc=loc)
+                    )
+
+            # Read current value from array at addr
+            cur_val = self.new_temp(loc)
+            self.instructions.append(
+                IRRaw(opcode="read", args=[cur_val, arr.block, addr], loc=loc)
+            )
+
+            # Evaluate RHS value
+            target_tmp = self.new_temp(loc) if isinstance(node.value, ast.Call) else None
+            val = self.compile_expr(node.value, target_dest=target_tmp)
+
+            if arr.dtype == "bool":
+                if not (
+                    (isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool))
+                    or isinstance(node.value, ast.Compare)
+                    or (isinstance(node.value, ast.UnaryOp) and isinstance(node.value.op, ast.Not))
+                ):
+                    bool_norm = self.new_temp(loc)
+                    self.instructions.append(
+                        IROp(op="notEqual", dest=bool_norm, a=val, b="0", loc=loc)
+                    )
+                    val = bool_norm
+
+            # Compute new value
+            res = self.new_temp(loc)
+            self.instructions.append(
+                IROp(op=mlog_op, dest=res, a=cur_val, b=val, loc=loc)
+            )
+
+            # Write updated value back to array at addr
+            self.instructions.append(
+                IRRaw(opcode="write", args=[res, arr.block, addr], loc=loc)
+            )
+            return
+
+        # Case 2: Simple variable target: x op= value
+        if not isinstance(target, ast.Name):
+            self.error("augmented assignment target must be a simple variable name or array index (unpacking not supported)", target)
+
+        target_name = target.id
+        if target_name in self.allocator.arrays:
+            self.error(f"cannot perform augmented assignment on Array variable '{target_name}'", target)
+
+        # Bitwise operator checks on literal operands
+        if op_cls in BITWISE_BIN_OPS:
+            if _is_literal_float(node.value):
+                self.error(
+                    f"unsupported operand type for bitwise operator {op_cls.__name__}: float literal",
+                    node.value,
+                )
+            if op_cls in (ast.LShift, ast.RShift):
+                shift_val = _get_literal_int(node.value)
+                if shift_val is not None:
+                    if shift_val < 0:
+                        self.error("negative shift count is not supported", node.value)
+                    elif shift_val >= 64:
+                        self.error(
+                            f"shift count {shift_val} >= 64 exceeds 64-bit integer width",
+                            node.value,
+                        )
+
+        formatted_target = self.format_name(target_name, target)
+        val = self.compile_expr(node.value)
+        self.instructions.append(
+            IROp(op=mlog_op, dest=formatted_target, a=formatted_target, b=val, loc=loc)
+        )
+
     def compile_condition(
         self,
         test: ast.expr,
@@ -1681,6 +1851,8 @@ class Compiler:
         """Compile a single statement."""
         if isinstance(stmt, ast.Assign):
             self.compile_assignment(stmt)
+        elif isinstance(stmt, ast.AugAssign):
+            self.compile_aug_assign(stmt)
         elif isinstance(stmt, ast.If):
             self.compile_if(stmt)
         elif isinstance(stmt, ast.While):

@@ -149,6 +149,7 @@ Explore our comprehensive, paired examples in [`examples/`](examples/README.md):
 - **Arithmetic, Bitwise & Math**: Full expression support (`+`, `-`, `*`, `/`, `//`, `%`, bitwise `&`, `|`, `^`, `~`, `<<`, `>>`, built-in `min` and `max`) lowered with deterministic temporary variable management and strict 64-bit integer hardening.
 - **Compile-Time Constant Folding**: Recursively folds pure constant expressions (`+`, `-`, `*`, `/`, `//`, `%`, `**`, `&`, `|`, `^`, `<<`, `>>`, comparisons, boolean logic, and string concatenation) at compile time while preserving Mindustry IEEE-754 runtime semantics, eliminating runtime temporaries, and statically resolving `Array` allocation sizes and subscript bounds checks.
 - **Memory Arrays & Static Allocation**: High-level `Array("cell1", size=10, dtype=...)` abstraction supporting `int`, `float`, and `bool` dtypes with compile-time contiguous layout tracking, capacity validation (64 for cells, 512 for banks), base offset calculations, and static index bounds checking.
+- **Augmented Assignment**: In-place assignment operators (`+=`, `-=`, `*=`, `/=`, `//=`, `%=`, `**=`, `&=`, `|=`, `^=`, `<<=`, `>>=`) for both scalar variables and memory arrays (`arr[i] += val`), featuring atomic single-offset address evaluation without redundant reads.
 - **Short-Circuit Boolean Logic**: Full support for `and`, `or`, and `not` with standard Python short-circuit evaluation.
 - **Mindustry Compiler Intrinsics**: Direct access to Mindustry instructions (`sensor`, `control`, `ucontrol`, `draw`, `read`, `write`, `print`, `ubind`, `lookup`, etc.).
 - **Verified Registry & Enums**: Enums (`SensorProperty`, `ControlProperty`, `UnitControl`, `DrawType`, `LogicOp`, `Condition`, `Units`, etc.) verified against vanilla Mindustry source.
@@ -202,7 +203,7 @@ The project maintains a comprehensive automated test suite verifying both compil
 python3 -m unittest discover -s tests -p "test_*.py"
 ```
 
-- **481 Automated Tests**: 100% passing baseline across compiler, registry, CFG, structuring, dataflow, function recovery, bitwise operators, min/max, for loops, memory arrays (int, float, bool), constant folding, and source mapping.
+- **520 Automated Tests**: 100% passing baseline across compiler, registry, CFG, structuring, dataflow, function recovery, bitwise operators, min/max, for loops, memory arrays (int, float, bool), augmented assignment, constant folding, and source mapping.
 - **Real-World Test Corpus**: 32 representative programs across handwritten scripts, compiler-generated programs, control flow patterns, and pathological edge cases.
 - **Round-Trip Verification**: Guarantees that MLog → Decompiler → Compiler produces valid, identical instructions.
 

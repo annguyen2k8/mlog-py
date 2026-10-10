@@ -20,6 +20,7 @@ The compiler targets a strict, strongly-typed subset of Python designed for Mind
 | **Built-in Registers** | `@counter`, `@time`, `@tick`, `@unit` | Runtime processor registers |
 | **Intrinsics** | `sensor()`, `control()`, `draw()`, `read()`, `write()`, etc. | Canonical Mindustry Logic instructions |
 | **Memory Arrays** | `arr = Array("cell1", size=10)`, `arr[i]`, `arr[i] = val`, `len(arr)` | Contiguous static allocation, `read`, `write` |
+| **Augmented Assignments** | `x += 1`, `arr[i] += 5`, `x *= 2`, `flags[i] &= True` | In-place update `op add x x 1`, single-offset `read -> op -> write` |
 
 ### Explicitly Rejected Constructs
 
@@ -79,6 +80,33 @@ arr_bool[0] = True
 - **Base Offset Optimization**:
   - When `base_offset == 0`, dynamic index reads/writes directly reference the index operand without an extra addition instruction.
   - When `base_offset > 0`, the compiler emits `op add __tmp index base_offset` before `read`/`write`.
+
+### Augmented Assignment & Single-Evaluation Semantics
+
+The compiler fully supports in-place augmented assignments on scalar variables and array elements:
+
+```python
+x += 1
+total *= 2
+arr[i] += 10
+flags[0] ^= True
+```
+
+- **Supported Operators (12 total)**:
+  - Arithmetic: `+=` (`add`), `-=` (`sub`), `*=` (`mul`), `/=` (`div`), `//=` (`idiv`), `%=` (`mod`), `**=` (`pow`)
+  - Bitwise: `&=` (`and`), `|=` (`or`), `^=` (`xor`), `<<=` (`shl`), `>>=` (`shr`)
+- **Unsupported Operators**:
+  - Matrix multiplication `@=` (`ast.MatMult`) has no Mindustry Logic semantics and is strictly rejected at compile time (`CompileError: unsupported augmented assignment operator: '@='`).
+- **Scalar Variables**:
+  - Lowered directly to `op <opcode> <target> <target> <rhs_value>` without allocating unnecessary intermediate destination registers.
+  - The right-hand side expression is evaluated first, preventing any clobbering of the target variable.
+- **Array Elements (`arr[i] op= val`) & Single-Evaluation Guarantee**:
+  - **Single Address Calculation**: When targeting array elements (`arr[expr] += val`), the index expression `expr` and physical base offset (`base_offset`) are evaluated **exactly once**.
+  - **Shared Address Register**: The resolved address register is stored in a temporary variable and reused for both the initial `read` instruction and the subsequent `write` instruction. Subscript expressions with complex calculations or side effects are never recomputed.
+  - **Dtype Type Safety Rules**:
+    - `dtype=int`: supports all 12 operators; strictly rejects float, string, and boolean literal operands.
+    - `dtype=float`: supports arithmetic operators; bitwise operators (`&=`, `|=`, `^=`, `<<=`, `>>=`) are rejected.
+    - `dtype=bool`: supports boolean bitwise operators (`&=`, `|=`, `^=`); arithmetic operators (`+=`, etc.) and non-boolean literals are rejected. Dynamic RHS expressions are automatically normalized to boolean (0 or 1) via `op notEqual` before applying the bitwise operation.
 
 ---
 
