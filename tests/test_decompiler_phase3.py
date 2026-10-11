@@ -54,7 +54,7 @@ op sub b x 3
 op mul c a b
 op div d c 2
 op idiv e c 4
-op mod f c 7
+op emod f c 7
 op pow g x 2
 op shl h x 1
 op shr i x 2
@@ -76,6 +76,13 @@ op xor l x 15
         self.assertIn("j = x & 255", py)
         self.assertIn("k = x | 128", py)
         self.assertIn("l = x ^ 15", py)
+
+    def test_mod_opcode_decompiles_to_intrinsic_op(self):
+        """Test that legacy op mod decompiles to op('mod', ...) preserving semantics."""
+        mlog = "op mod res a b\n"
+        py = decompile(mlog)
+        ast.parse(py)
+        self.assertIn('res = op("mod", a, b)', py)
 
     def test_unary_expressions(self):
         """Test unary negation and bitwise not."""

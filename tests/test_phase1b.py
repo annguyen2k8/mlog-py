@@ -41,7 +41,7 @@ class TestPhase1B(unittest.TestCase):
         source = "x = a % b"
         ir = compile_source_to_ir(source, "test.py")
         mlog, _ = Emitter(ir).emit()
-        self.assertEqual(mlog.strip(), "op mod x a b")
+        self.assertEqual(mlog.strip(), "op emod x a b")
 
     def test_nested_expression_left_compound(self):
         source = "x = (a + b) * c"

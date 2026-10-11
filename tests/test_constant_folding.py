@@ -68,7 +68,7 @@ g = 2 ** 5
         self.assertIn("set g 32", lines)
 
         # Ensure no runtime arithmetic ops were generated
-        for op in ("add", "sub", "mul", "div", "idiv", "mod", "pow"):
+        for op in ("add", "sub", "mul", "div", "idiv", "mod", "emod", "pow"):
             for line in lines:
                 self.assertFalse(line.startswith(f"op {op}"), f"Unexpected opcode 'op {op}' in: {line}")
 
@@ -330,11 +330,37 @@ x = get_val() + 5
             compile_py("x = ~1.5")
         self.assertIn("float literal", str(ctx.exception))
 
-    def test_negative_modulo_not_folded(self):
-        """Negative modulo differs between Python (floored) and Mindustry (truncated)."""
-        code = "x = -7 % 3"
-        res = compile_py(code)
-        self.assertIn("op mod", res.mlog)
+    def test_modulo_folding_and_zero_divisor(self):
+        """Modulo is folded consistently across positive and negative operands in v8 (emod)."""
+        # 1. Negative operands fold consistently with Python floored semantics
+        res_neg1 = compile_py("x = -7 % 3")
+        self.assertIn("set x 2", res_neg1.mlog)
+
+        res_neg2 = compile_py("x = 7 % -3")
+        self.assertIn("set x -2", res_neg2.mlog)
+
+        res_neg3 = compile_py("x = -7 % -3")
+        self.assertIn("set x -1", res_neg3.mlog)
+
+        res_float = compile_py("x = -7.5 % 3.0")
+        self.assertIn("set x 1.5", res_float.mlog)
+
+        # 2. When constant folding is disabled, emits runtime op emod
+        res_unfolded = compile_py("x = -7 % 3", fold_constants=False)
+        self.assertIn("op emod", res_unfolded.mlog)
+
+        # 3. Literal modulo by zero raises CompileError
+        with self.assertRaises(CompileError) as ctx1:
+            compile_py("x = 7 % 0")
+        self.assertIn("modulo by zero", str(ctx1.exception))
+
+        with self.assertRaises(CompileError) as ctx2:
+            compile_py("x = -7 % 0")
+        self.assertIn("modulo by zero", str(ctx2.exception))
+
+        with self.assertRaises(CompileError) as ctx3:
+            compile_py("x = 7.0 % 0.0")
+        self.assertIn("modulo by zero", str(ctx3.exception))
 
     def test_large_shift_not_folded(self):
         """Shift by >= 64 is rejected by semantic checks or deferred."""

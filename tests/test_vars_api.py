@@ -170,7 +170,7 @@ rem = Vars.waveNumber % 10
         self.assertIn("op add next_tick @tick 60", lines)
         self.assertIn("op mul elapsed @time 0.001", lines)
         self.assertIn("op mul scaled_pi @pi 2.0", lines)
-        self.assertIn("op mod rem @waveNumber 10", lines)
+        self.assertIn("op emod rem @waveNumber 10", lines)
 
     def test_conditionals_and_comparisons(self):
         """Vars tokens can be compared against literals and variables."""

@@ -23,7 +23,7 @@ from .expression import (
     UnaryExpr,
     parse_operand_to_expr,
 )
-from .semantics import collect_program_defined_variables
+from .semantics import UNARY_LOGIC_OPS, collect_program_defined_variables
 from .structured_ir import (
     BreakNode,
     ContinueNode,
@@ -359,6 +359,14 @@ class CFGStructurer:
                                     inlined = True
                                 elif op_name == "not":
                                     sub_expr = UnaryExpr("~", a_expr)
+                                    cond_expr = substitute_variable(cond_expr, dest, sub_expr)
+                                    cond_str = cond_expr.to_python()
+                                    inlined = True
+                                else:
+                                    call_args = [ConstantExpr(op_name), a_expr]
+                                    if len(p_instr.args) > 3 and op_name not in UNARY_LOGIC_OPS:
+                                        call_args.append(b_expr)
+                                    sub_expr = CallExpr("op", call_args)
                                     cond_expr = substitute_variable(cond_expr, dest, sub_expr)
                                     cond_str = cond_expr.to_python()
                                     inlined = True

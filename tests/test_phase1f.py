@@ -49,7 +49,7 @@ class TestPhase1F(unittest.TestCase):
         self.assertIn("op mul mul_res a b", lines)
         self.assertIn("op div div_res a b", lines)
         self.assertIn("op idiv idiv_res a b", lines)
-        self.assertIn("op mod mod_res a b", lines)
+        self.assertIn("op emod mod_res a b", lines)
         self.assertIn("op mul compound __tmp0 __tmp1", lines)
 
     # 3. comparison

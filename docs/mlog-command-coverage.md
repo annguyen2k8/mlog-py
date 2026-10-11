@@ -200,8 +200,8 @@ Toàn bộ 45 phép toán `LogicOp` đều được khai báo trong `REG_LOGIC_O
 | | `mul` | `mul` | `*` | Nhị phân | `a * b`, `a *= b` | `op("mul", d, a, b)` |
 | | `div` | `div` | `/` | Nhị phân | `a / b`, `a /= b` | `op("div", d, a, b)` |
 | | `idiv` | `idiv` | `//` | Nhị phân | `a // b`, `a //= b` | `op("idiv", d, a, b)` |
-| | `mod` | `mod` | `%` | Nhị phân | `a % b`, `a %= b` | `op("mod", d, a, b)` |
-| | `emod` | `emod` | `%%` | Nhị phân | *(Không có toán tử Python)* | `op("emod", d, a, b)` |
+| | `mod` | `mod` | `%` | Nhị phân | *(C/Java truncated remainder)* | `op("mod", d, a, b)` |
+| | `emod` | `emod` | `%%` | Nhị phân | `a % b`, `a %= b` | `op("emod", d, a, b)` |
 | | `pow` | `pow` | `^` | Nhị phân | `a ** b`, `a **= b` | `op("pow", d, a, b)` |
 | **So sánh & Logic** | `equal` | `equal` | `==` | Nhị phân | `x = a == b` (phát sinh op equal) | `op("equal", d, a, b)` |
 | | `notEqual` | `notEqual` | `not` | Nhị phân | `x = a != b` (phát sinh op notEqual) | `op("notEqual", d, a, b)` |
@@ -302,11 +302,9 @@ Toàn bộ 45 phép toán `LogicOp` đều được khai báo trong `REG_LOGIC_O
 
 Trong quá trình đối chiếu mã nguồn, một số khía cạnh kỹ thuật cần được ghi nhận là câu hỏi mở hoặc quyết định thiết kế cần thống nhất với maintainer:
 
-1. **Ngữ nghĩa modulo âm: `op mod` vs `op emod`**:
-   - `LogicOp.java` định nghĩa `mod` (`%`) là `a % b` (phép chia lấy phần dư kiểu Java, có thể ra số âm).
-   - `LogicOp.java` định nghĩa thêm `emod` (`%%`) là `(a % b + b) % b` (modulo chuẩn Euclidean, luôn ra số dương giống Python).
-   - Hiện tại `mlog-py` hạ bậc toán tử `%` của Python thành `op mod`. Điều này dẫn đến sự sai lệch ngữ nghĩa khi toán hạng âm giữa runtime Python và Mindustry (đã được ghi nhận trong audit Constant Folding).
-   - *Chưa thể kết luận*: Liệu có nên hạ bậc `%` của Python sang `op emod` để giữ trọn vẹn ngữ nghĩa Python, hay giữ nguyên `op mod` để tương thích với phần lớn code MLog truyền thống?
+1. **Ngữ nghĩa modulo: `op mod` vs `op emod` (Đã giải quyết theo ADR-001)**:
+   - Theo quyết định trong ADR-001 (`docs/adr/0001-modulo-semantics.md`) dành cho Mindustry v8 (`v160.7`), toán tử Python `%` và `%=` được ánh xạ chuẩn sang `op emod` để bảo đảm 100% ngữ nghĩa floored modulo của Python.
+   - Opcode `op mod` được bảo toàn nguyên vẹn cho lập trình viên qua intrinsic cấp thấp `op("mod", d, a, b)` và decompiler tự động bảo toàn `op mod` thành lời gọi `op("mod", ...)`.
 2. **Hạ bậc biểu thức ba ngôi (Ternary Expression) sang Opcode `select`**:
    - Mindustry v7 cung cấp lệnh `select <result> <op> <comp0> <comp1> <a <b>`.
    - Cú pháp Python `result = a if cond else b` có thể tối ưu thành 1 lệnh `select` duy nhất thay vì 2 lệnh `jump`.

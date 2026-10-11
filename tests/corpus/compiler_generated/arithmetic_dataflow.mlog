@@ -4,7 +4,7 @@ set c 30
 op add __tmp0 a b
 op mul d __tmp0 c
 op idiv __tmp1 d 5
-op mod __tmp2 b 7
+op emod __tmp2 b 7
 op sub e __tmp1 __tmp2
 op shl __tmp3 a 2
 op shr __tmp4 b 1

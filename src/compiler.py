@@ -33,7 +33,7 @@ BIN_OP_MAP = {
     ast.Mult: "mul",
     ast.Div: "div",
     ast.FloorDiv: "idiv",
-    ast.Mod: "mod",
+    ast.Mod: "emod",
     ast.Pow: "pow",
     ast.LShift: "shl",
     ast.RShift: "shr",
@@ -48,7 +48,7 @@ AUG_ASSIGN_OPS = {
     ast.Mult: ("mul", "*="),
     ast.Div: ("div", "/="),
     ast.FloorDiv: ("idiv", "//="),
-    ast.Mod: ("mod", "%="),
+    ast.Mod: ("emod", "%="),
     ast.Pow: ("pow", "**="),
     ast.LShift: ("shl", "<<="),
     ast.RShift: ("shr", ">>="),
@@ -204,13 +204,17 @@ class ConstantFolder(ast.NodeTransformer):
     - Comparison operations (==, !=, <, <=, >, >=, is, is not) between literals
     - Boolean operations (and, or)
     - Preserves exact source location on folded nodes
-    - Skips folding when operations may divide by zero, exceed IEEE-754 safe integer
-      boundaries [-9007199254740991, 9007199254740991], or diverge between Python
-      and Mindustry (such as negative % modulo).
+    - Skips folding when operations may divide by zero or exceed IEEE-754 safe integer
+      boundaries [-9007199254740991, 9007199254740991].
+    - Raises CompileError when modulo by literal zero occurs.
     - Preserves standalone unary minus (-x) and bitwise not (~x) for native instruction lowering.
     - Preserves intrinsic min() and max() function calls for runtime op dispatch.
     - Never modifies control flow or performs dead code elimination.
     """
+
+    def __init__(self, filename: str = "<stdin>"):
+        super().__init__()
+        self.filename = filename
 
     def visit_UnaryOp(self, node: ast.UnaryOp):
         self.generic_visit(node)
@@ -270,13 +274,16 @@ class ConstantFolder(ast.NodeTransformer):
                         res = float(res)
         elif isinstance(node.op, ast.Mod):
             if isinstance(v1, (int, float)) and isinstance(v2, (int, float)) and not isinstance(v1, bool) and not isinstance(v2, bool):
-                # Mindustry op mod differs from Python for negative numbers, only fold positive
-                if v1 >= 0 and v2 > 0:
+                if v2 == 0:
+                    raise CompileError("modulo by zero", get_loc(node, self.filename))
+                try:
                     res = v1 % v2
                     if isinstance(v1, int) and isinstance(v2, int):
                         res = int(res)
                     else:
                         res = float(res)
+                except ZeroDivisionError:
+                    raise CompileError("modulo by zero", get_loc(node, self.filename))
         elif isinstance(node.op, ast.Pow):
             if isinstance(v1, (int, float)) and isinstance(v2, (int, float)) and not isinstance(v1, bool) and not isinstance(v2, bool):
                 if not (v1 == 0 and v2 <= 0) and not (v1 < 0 and not isinstance(v2, int)) and abs(v2) <= 100:
@@ -379,9 +386,9 @@ class ConstantFolder(ast.NodeTransformer):
         return node
 
 
-def fold_constants(tree: ast.AST) -> ast.AST:
+def fold_constants(tree: ast.AST, filename: str = "<stdin>") -> ast.AST:
     """Fold pure compile-time constant expressions in an AST."""
-    return ConstantFolder().visit(tree)
+    return ConstantFolder(filename).visit(tree)
 
 
 class Compiler:
@@ -1920,7 +1927,7 @@ class Compiler:
     def compile(self, tree: ast.Module) -> List[IRNode]:
         """Compile an AST module into a list of IR nodes."""
         if self.fold_constants:
-            tree = fold_constants(tree)
+            tree = fold_constants(tree, self.filename)
 
         self.instructions.clear()
         self._temp_counter = 0

@@ -56,7 +56,7 @@ MLOG_TO_PY_BINARY_OPS = {
     "mul": "*",
     "div": "/",
     "idiv": "//",
-    "mod": "%",
+    "emod": "%",
     "pow": "**",
     "shl": "<<",
     "shr": ">>",
@@ -265,7 +265,7 @@ class CallExpr(Expr):
             return False
         if self.func == "op" and len(self.args) >= 1:
             first = self.args[0]
-            if isinstance(first, ConstantExpr) and first.value in ("max", "min", "abs", "floor", "ceil", "round", "sqrt"):
+            if isinstance(first, ConstantExpr) and first.value in ("max", "min", "abs", "floor", "ceil", "round", "sqrt", "mod", "emod"):
                 return False
         return True
 
