@@ -184,6 +184,36 @@ class TestModuloConstantFolding(unittest.TestCase):
         self.assertIn("op emod", res.mlog)
         self.assertNotIn("set x 1.0", res.mlog)
 
+    def test_inf_operands_not_folded_and_do_not_crash(self):
+        """Infinity operands (like 1e309, -1e309) are not folded statically and do not crash with ValueError.
+
+        Note: Mindustry v8 runtime does not support IEEE-754 infinity literals.
+        Tokens like 'inf' or '-inf' assemble as uninitialized variables (null -> 0.0 in numeric contexts).
+        We preserve AST rather than folding, avoiding compiler crash while emitting valid MLog.
+        """
+        res1 = compile_py("x = 1e309 % 2.0")
+        self.assertIn("op emod x inf 2.0", res1.mlog)
+
+        res2 = compile_py("x = 2.0 % 1e309")
+        self.assertIn("op emod x 2.0 inf", res2.mlog)
+
+        res3 = compile_py("x = -1e309 % 2.0")
+        lines3 = [l.strip() for l in res3.mlog.strip().splitlines()]
+        self.assertTrue(any("op emod x __tmp" in l for l in lines3))
+        self.assertTrue(any("op sub __tmp" in l and "0 inf" in l for l in lines3))
+
+    def test_integers_exceeding_safe_int_not_folded(self):
+        """Integers exceeding 2^53 - 1 boundaries are not folded to preserve IEEE-754 precision."""
+        res = compile_py("x = 9007199254740993 % 10")
+        self.assertIn("op emod x 9007199254740993 10", res.mlog)
+
+    def test_signed_zero_folding(self):
+        """Signed zero literals fold matching Mindustry v8 runtime semantics."""
+        self.assertIn("set x 0.0", compile_py("x = 0.0 % 3.0").mlog)
+        self.assertIn("set x 0.0", compile_py("x = -0.0 % 3.0").mlog)
+        self.assertIn("set x -0.0", compile_py("x = 0.0 % -3.0").mlog)
+        self.assertIn("set x -0.0", compile_py("x = -0.0 % -3.0").mlog)
+
 
 class TestModuloDecompilerRoundTrip(unittest.TestCase):
     """Verify decompiler converts emod to % and preserves mod as op('mod', ...)."""
@@ -328,6 +358,47 @@ op emod res_near -5.551115123125783e-17 1.0
         self.assertEqual(res.get("res_sub"), 0.0)
         self.assertEqual(res.get("res_near"), 0.0)
 
+    @unittest.skipUnless(is_mindustry_available(), "Mindustry runtime classpath not available")
+    def test_engine_signed_zeros_execution(self):
+        """Mindustry v8 runtime emod with signed zeros matches mathematical IEEE-754 signed zero rules."""
+        mlog_code = """
+op emod z1 0.0 3.0
+op emod z2 -0.0 3.0
+op emod z3 0.0 -3.0
+op emod z4 -0.0 -3.0
+op emod z5 5.0 0.0
+op emod z6 5.0 -0.0
+"""
+        ok, res, msg = run_with_mindustry(mlog_code)
+        self.assertTrue(ok, f"Harness run failed: {msg}")
+        self.assertEqual(res.get("z1"), 0.0)
+        self.assertEqual(res.get("z2"), 0.0)
+        self.assertEqual(res.get("z3"), -0.0)
+        self.assertEqual(res.get("z4"), -0.0)
+        self.assertEqual(res.get("z5"), "null")
+        self.assertEqual(res.get("z6"), "null")
+
+    @unittest.skipUnless(is_mindustry_available(), "Mindustry runtime classpath not available")
+    def test_engine_inf_and_nan_tokens_execution(self):
+        """In Mindustry v8 runtime, 'inf' and 'nan' tokens assemble as uninitialized variables (null).
+
+        When read in numeric contexts (LVar.num()), null coerces to 0.0:
+        - op emod x inf 2.0 -> ((0.0 % 2.0) + 2.0) % 2.0 = 0.0
+        - op emod x 2.0 inf -> 2.0 % 0.0 -> NaN -> stored as null
+        This differs from Python runtime (which throws ValueError or returns 2.0).
+        """
+        mlog_code = """
+op emod res_inf_left inf 2.0
+op emod res_inf_right 2.0 inf
+op emod res_nan_left nan 2.0
+op emod res_nan_right 2.0 nan
+"""
+        ok, res, msg = run_with_mindustry(mlog_code)
+        self.assertTrue(ok, f"Harness run failed: {msg}")
+        self.assertEqual(res.get("res_inf_left"), 0.0)
+        self.assertEqual(res.get("res_inf_right"), "null")
+        self.assertEqual(res.get("res_nan_left"), 0.0)
+        self.assertEqual(res.get("res_nan_right"), "null")
 
 
 if __name__ == "__main__":

@@ -276,6 +276,8 @@ class ConstantFolder(ast.NodeTransformer):
             if isinstance(v1, (int, float)) and isinstance(v2, (int, float)) and not isinstance(v1, bool) and not isinstance(v2, bool):
                 if v2 == 0:
                     raise CompileError("modulo by zero", get_loc(node, self.filename))
+                if (isinstance(v1, float) and (math.isnan(v1) or math.isinf(v1))) or (isinstance(v2, float) and (math.isnan(v2) or math.isinf(v2))):
+                    return node
                 try:
                     if isinstance(v1, int) and isinstance(v2, int):
                         res = int(v1 % v2)
@@ -297,6 +299,8 @@ class ConstantFolder(ast.NodeTransformer):
                             return node
                 except ZeroDivisionError:
                     raise CompileError("modulo by zero", get_loc(node, self.filename))
+                except ValueError:
+                    return node
         elif isinstance(node.op, ast.Pow):
             if isinstance(v1, (int, float)) and isinstance(v2, (int, float)) and not isinstance(v1, bool) and not isinstance(v2, bool):
                 if not (v1 == 0 and v2 <= 0) and not (v1 < 0 and not isinstance(v2, int)) and abs(v2) <= 100:
