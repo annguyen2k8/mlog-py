@@ -2,6 +2,7 @@
 
 import argparse
 import builtins
+import os
 import sys
 from dataclasses import dataclass
 from typing import Dict, List, Optional
@@ -176,7 +177,31 @@ def _cli_compile(args: argparse.Namespace) -> int:
             _cli_print(f"Error writing output file '{args.output_file}': {e}", file=sys.stderr)
             return 1
     elif not args.debug:
-        sys.stdout.write(result.mlog)
+        try:
+            sys.stdout.write(result.mlog)
+            sys.stdout.flush()
+        except BrokenPipeError:
+            pass
+
+    # Auto-copy clipboard: enabled by default, disabled if --no-clipboard is set or MLOG_NO_CLIPBOARD=1
+    # CLI flag (--clipboard / --no-clipboard) takes precedence over MLOG_NO_CLIPBOARD env var
+    if getattr(args, "copy_clipboard", None) is not None:
+        should_copy = args.copy_clipboard
+    elif os.environ.get("MLOG_NO_CLIPBOARD", "").lower() in ("1", "true", "yes"):
+        should_copy = False
+    else:
+        should_copy = True
+
+    if should_copy:
+        from .clipboard import copy_to_clipboard
+        ok, msg = copy_to_clipboard(result.mlog)
+        try:
+            if ok:
+                _cli_print(f"[mlog-py] {msg}", file=sys.stderr)
+            else:
+                _cli_print(f"[mlog-py] Notice: Could not copy to clipboard.\n{msg}", file=sys.stderr)
+        except BrokenPipeError:
+            pass
 
     return 0
 
@@ -258,6 +283,19 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         "--no-fold-constants",
         action="store_true",
         help="Disable compile-time constant folding",
+    )
+    compile_p.add_argument(
+        "--clipboard",
+        dest="copy_clipboard",
+        action="store_true",
+        default=None,
+        help="Copy compiled mlog to system clipboard (enabled by default)",
+    )
+    compile_p.add_argument(
+        "--no-clipboard",
+        dest="copy_clipboard",
+        action="store_false",
+        help="Disable automatic copying of compiled mlog to system clipboard",
     )
 
     # Subcommand: decompile (MLog -> Python DSL)

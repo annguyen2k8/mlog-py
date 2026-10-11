@@ -296,11 +296,14 @@ Validates the emitted MLog against vanilla Mindustry processor constraints:
 ### Command Line Interface
 
 ```bash
-# Compile Python file to stdout
+# Compile Python file to stdout (auto-copies to clipboard by default)
 mlog-py compile input.py
 
-# Compile Python file to output mlog
+# Compile Python file to output mlog (also auto-copies to clipboard)
 mlog-py compile input.py -o output.mlog
+
+# Disable automatic clipboard copying
+mlog-py compile input.py --no-clipboard
 
 # Inspect IR instructions and resolved label table
 mlog-py compile input.py --debug
@@ -311,6 +314,14 @@ mlog-py compile input.py -o output.mlog --no-fold-constants
 # Validate with official Mindustry engine (requires Java)
 mlog-py compile input.py --mindustry
 ```
+
+#### Automatic Clipboard Copying
+
+Upon successful compilation, the full MLog output is automatically copied to your system clipboard ready to paste directly into Mindustry processors:
+- **Supported Backends**: Auto-detects `termux-clipboard-set` (Termux on Android), `wl-copy` (Wayland), `xclip`/`xsel` (X11), `pbcopy` (macOS), and `clip.exe` (Windows).
+- **Pipe & Redirection Safety**: Clipboard notifications and diagnostic warnings are always emitted to `stderr`. When piping (`|`) or redirecting (`>`), `stdout` contains 100% clean MLog instructions.
+- **Graceful Fallback**: If no clipboard utility is installed, clear installation instructions are printed to `stderr` without causing compilation to fail or losing any output.
+- **Opt-out**: Use `--no-clipboard` flag or set `MLOG_NO_CLIPBOARD=1` environment variable to disable clipboard copying.
 
 ### Python API
 

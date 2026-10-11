@@ -464,12 +464,12 @@ class TestCompilerFlagAndOptimizerExport(unittest.TestCase):
             src_file.write_text("x = 20 + 30\n", encoding="utf-8")
 
             # 1. Compile with default (folded)
-            exit_code = main(["compile", str(src_file), "-o", str(out_folded)])
+            exit_code = main(["compile", str(src_file), "-o", str(out_folded), "--no-clipboard"])
             self.assertEqual(exit_code, 0)
             self.assertIn("set x 50", out_folded.read_text(encoding="utf-8"))
 
             # 2. Compile with --no-fold-constants
-            exit_code = main(["compile", str(src_file), "-o", str(out_unfolded), "--no-fold-constants"])
+            exit_code = main(["compile", str(src_file), "-o", str(out_unfolded), "--no-fold-constants", "--no-clipboard"])
             self.assertEqual(exit_code, 0)
             self.assertIn("op add x 20 30", out_unfolded.read_text(encoding="utf-8"))
 

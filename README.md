@@ -40,11 +40,14 @@ pip install .
 Use the `mlog-py compile` CLI:
 
 ```bash
-# Compile to stdout
+# Compile to stdout (automatically copies to clipboard)
 mlog-py compile input.py
 
-# Compile and output to a file
+# Compile and output to a file (also copies to clipboard)
 mlog-py compile input.py -o output.mlog
+
+# Compile without copying to clipboard
+mlog-py compile input.py --no-clipboard
 
 # Debug mode: view IR instructions and resolved label addresses
 mlog-py compile input.py --debug
