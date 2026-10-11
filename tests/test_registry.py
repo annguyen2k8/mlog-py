@@ -177,13 +177,13 @@ class TestRegistryAndEnums(unittest.TestCase):
     # 2. String Tokens and at_ Prefixes
     # -----------------------------------------------------------------------
 
-    def test_sensor_strings_and_at_names(self):
+    def test_sensor_strings_and_enum_names(self):
         source = (
             "hp1 = sensor(block1, \"@health\")\n"
             "hp2 = sensor(block1, \"health\")\n"
-            "hp3 = sensor(block1, at_health)\n"
+            "hp3 = sensor(block1, SensorProperty.HEALTH)\n"
             "copper1 = sensor(block1, \"@copper\")\n"
-            "copper2 = sensor(block1, at_copper)\n"
+            "copper2 = sensor(block1, Items.COPPER)\n"
         )
         mlog = self.check_compile(source)
         lines = mlog.splitlines()

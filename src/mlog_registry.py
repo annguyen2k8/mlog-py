@@ -68,9 +68,11 @@ class BaseRegistry:
             self.by_source_name[src.replace("-", "_").upper()] = e
             self.by_source_name[src.replace("-", "").upper()] = e
             self.by_token[e.mlog_token] = e
-            # Also allow token without '@' if it starts with '@'
+            # Also allow token with or without '@'
             if e.mlog_token.startswith("@"):
                 self.by_token[e.mlog_token[1:]] = e
+            else:
+                self.by_token["@" + e.mlog_token] = e
 
 
     def contains(self, key: str) -> bool:

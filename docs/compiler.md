@@ -108,6 +108,31 @@ flags[0] ^= True
     - `dtype=float`: supports arithmetic operators; bitwise operators (`&=`, `|=`, `^=`, `<<=`, `>>=`) are rejected.
     - `dtype=bool`: supports boolean bitwise operators (`&=`, `|=`, `^=`); arithmetic operators (`+=`, etc.) and non-boolean literals are rejected. Dynamic RHS expressions are automatically normalized to boolean (0 or 1) via `op notEqual` before applying the bitwise operation.
 
+### Sensor Properties & Hardware Attributes
+
+The compiler supports all Mindustry `LAccess` properties via the `SensorProperty` registry enum and canonical string/identifier tokens:
+
+```python
+from mlog import sensor, SensorProperty
+
+# Enum access (Recommended, fully typed)
+hp = sensor(vault1, SensorProperty.HEALTH)
+is_on = sensor(switch1, SensorProperty.ENABLED)
+cfg = sensor(sorter1, SensorProperty.CONFIG)
+
+# Canonical string token access
+hp = sensor(vault1, "@health")
+is_on = sensor(switch1, "@enabled")
+
+# Statement form
+sensor(hp, vault1, SensorProperty.HEALTH)
+```
+
+- **Dual-Purpose Controllable & Senseable Properties**:
+  - Properties with parameter length $\le 1$ in Mindustry's engine (`@enabled`, `@config`, `@color`) are both controllable and senseable. The compiler fully recognizes them in both `sensor()` and `control()` contexts.
+- **Supported Property Registry**:
+  - Full set of item, liquid, block, unit, and world attributes (e.g. `@health`, `@maxHealth`, `@efficiency`, `@progress`, `@totalItems`, `@firstItem`, `@copper`, `@lead`, `@water`, `@cryofluid`, etc.).
+
 ---
 
 ## 2. Compilation Pipeline Passes

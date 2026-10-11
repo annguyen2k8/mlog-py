@@ -81,7 +81,21 @@ def extract_laccess(java_dir: str) -> Tuple[List[str], List[str], List[str]]:
     privileged = {"cameraX", "cameraY", "cameraWidth", "cameraHeight"}
     controls = [name for name, params in constants if params is not None and len(params.strip()) > 0]
     all_props = [name for name, _ in constants]
-    senseable = [name for name, _ in constants if name not in controls and name not in privileged]
+    # In Mindustry LAccess.java, senseable properties are all entries where
+    # params.length <= 1 and not privileged.
+    # Entries with 1 parameter (enabled, config, color) are BOTH controllable and senseable.
+    senseable = []
+    for name, params in constants:
+        if name in privileged:
+            continue
+        if params is None or len(params.strip()) == 0:
+            senseable.append(name)
+        else:
+            args = [a.strip() for a in params.split(",")]
+            if args and args[0] in ("true", "false"):
+                args = args[1:]
+            if len(args) <= 1:
+                senseable.append(name)
 
     return all_props, senseable, controls
 
