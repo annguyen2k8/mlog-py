@@ -54,6 +54,59 @@ arr[2] %= 5
         res2 = compile_py('d = op("emod", a, b)')
         self.assertEqual(res2.mlog.strip(), "op emod d a b")
 
+    def test_nested_op_mod_in_expression(self):
+        """op('mod', a, b) in subexpression allocates temporary and preserves operands."""
+        res = compile_py('res = op("mod", a, b) + 1')
+        lines = [line.strip() for line in res.mlog.strip().splitlines()]
+        self.assertTrue(any(l.startswith("op mod __tmp") and "a b" in l for l in lines), f"Lines: {lines}")
+        self.assertFalse(any(l == "op mod a b 0" for l in lines), f"Operand clobbered in: {lines}")
+        self.assertTrue(any(l.startswith("op add res __tmp") for l in lines), f"Lines: {lines}")
+
+    def test_nested_op_emod_in_expression(self):
+        """op('emod', a, b) in subexpression allocates temporary and preserves operands."""
+        res = compile_py('res = op("emod", a, b) + 1')
+        lines = [line.strip() for line in res.mlog.strip().splitlines()]
+        self.assertTrue(any(l.startswith("op emod __tmp") and "a b" in l for l in lines), f"Lines: {lines}")
+        self.assertFalse(any(l == "op emod a b 0" for l in lines), f"Operand clobbered in: {lines}")
+        self.assertTrue(any(l.startswith("op add res __tmp") for l in lines), f"Lines: {lines}")
+
+    def test_nested_op_mod_in_if_condition(self):
+        """op('mod', a, b) in if condition allocates temporary and does not overwrite a."""
+        res = compile_py('if op("mod", a, b) == 0:\n    print(1)')
+        lines = [line.strip() for line in res.mlog.strip().splitlines()]
+        self.assertTrue(any(l.startswith("op mod __tmp") and "a b" in l for l in lines), f"Lines: {lines}")
+        self.assertFalse(any(l == "op mod a b 0" for l in lines), f"Operand clobbered in: {lines}")
+
+    def test_nested_op_emod_in_if_condition(self):
+        """op('emod', a, b) in if condition allocates temporary and does not overwrite a."""
+        res = compile_py('if op("emod", a, b) == 0:\n    print(1)')
+        lines = [line.strip() for line in res.mlog.strip().splitlines()]
+        self.assertTrue(any(l.startswith("op emod __tmp") and "a b" in l for l in lines), f"Lines: {lines}")
+        self.assertFalse(any(l == "op emod a b 0" for l in lines), f"Operand clobbered in: {lines}")
+
+    def test_nested_op_in_while_condition(self):
+        """op('mod', a, b) in while condition allocates temporary and does not overwrite a."""
+        res = compile_py('while op("mod", a, b) > 0:\n    print(1)')
+        lines = [line.strip() for line in res.mlog.strip().splitlines()]
+        self.assertTrue(any(l.startswith("op mod __tmp") and "a b" in l for l in lines), f"Lines: {lines}")
+        self.assertFalse(any(l == "op mod a b 0" for l in lines), f"Operand clobbered in: {lines}")
+
+    def test_op_arity_validation(self):
+        """REG_LOGIC_OPS validates arity distinguishing unary vs binary operations."""
+        # Binary operation missing an operand raises CompileError
+        with self.assertRaises(CompileError) as ctx:
+            compile_py('x = op("mod", a)')
+        self.assertIn("requires 2 operands", str(ctx.exception))
+
+        # Unary op with 1 operand succeeds with destination
+        res_unary = compile_py('x = op("abs", a)')
+        self.assertEqual(res_unary.mlog.strip(), "op abs x a 0")
+
+        # Unary op nested in subexpression allocates temporary
+        res_nested_unary = compile_py('res = op("abs", a) + 1')
+        lines = [line.strip() for line in res_nested_unary.mlog.strip().splitlines()]
+        self.assertTrue(any(l.startswith("op abs __tmp") and "a 0" in l for l in lines), f"Lines: {lines}")
+
 
 class TestModuloConstantFolding(unittest.TestCase):
     """Verify compile-time constant folding for % conforms to Python floored semantics."""
@@ -119,6 +172,18 @@ class TestModuloConstantFolding(unittest.TestCase):
         res = compile_py("x = -7 % 3", fold_constants=False)
         self.assertIn("op emod", res.mlog)
 
+    def test_subnormal_positive_float_not_folded(self):
+        """1e-17 % 1.0 diverges between Python and Java emod addition; preserves runtime op emod."""
+        res = compile_py("x = 1e-17 % 1.0")
+        self.assertIn("op emod x 1e-17 1.0", res.mlog)
+        self.assertNotIn("set x 1e-17", res.mlog)
+
+    def test_near_multiple_negative_float_not_folded(self):
+        """-(2.0**-54) % 1.0 diverges near multiples; preserves runtime op emod."""
+        res = compile_py("x = -(2.0**-54) % 1.0")
+        self.assertIn("op emod", res.mlog)
+        self.assertNotIn("set x 1.0", res.mlog)
+
 
 class TestModuloDecompilerRoundTrip(unittest.TestCase):
     """Verify decompiler converts emod to % and preserves mod as op('mod', ...)."""
@@ -155,6 +220,40 @@ class TestModuloDecompilerRoundTrip(unittest.TestCase):
 
         recompiled = compile_py(decompiled)
         self.assertEqual(mlog.strip(), recompiled.mlog.strip())
+
+    def test_roundtrip_nested_op_mod_in_expression(self):
+        """Intermediate op mod temporary inlines into expression and roundtrips without clobbering."""
+        mlog = "op mod __tmp0 a b\nop add res __tmp0 1\n"
+        decompiled = decompile(mlog)
+        ast.parse(decompiled)
+        self.assertIn('op("mod", a, b)', decompiled)
+
+        recompiled = compile_py(decompiled)
+        lines = [line.strip() for line in recompiled.mlog.strip().splitlines()]
+        self.assertTrue(any(l.startswith("op mod __tmp") and "a b" in l for l in lines), f"Lines: {lines}")
+        self.assertFalse(any(l == "op mod a b 0" for l in lines), f"Clobbered: {lines}")
+
+    def test_roundtrip_nested_op_emod_in_expression(self):
+        """Intermediate op emod temporary inlines into expression and roundtrips."""
+        mlog = "op emod __tmp0 a b\nop add res __tmp0 1\n"
+        decompiled = decompile(mlog)
+        ast.parse(decompiled)
+        self.assertIn('a % b', decompiled)
+
+        recompiled = compile_py(decompiled)
+        lines = [line.strip() for line in recompiled.mlog.strip().splitlines()]
+        self.assertTrue(any(l.startswith("op emod __tmp") and "a b" in l for l in lines), f"Lines: {lines}")
+
+    def test_roundtrip_op_mod_in_if_condition(self):
+        """op mod inlined into if condition roundtrips without clobbering input variables."""
+        mlog = "op mod __tmp0 a b\nop equal __tmp1 __tmp0 0\njump 4 equal __tmp1 false\nprint 1\n"
+        decompiled = decompile(mlog)
+        ast.parse(decompiled)
+
+        recompiled = compile_py(decompiled)
+        lines = [line.strip() for line in recompiled.mlog.strip().splitlines()]
+        self.assertTrue(any(l.startswith("op mod __tmp") and "a b" in l for l in lines), f"Lines: {lines}")
+        self.assertFalse(any(l == "op mod a b 0" for l in lines), f"Clobbered: {lines}")
 
 
 class TestModuloEngineExecution(unittest.TestCase):
@@ -201,6 +300,34 @@ op mod zero_div 7 0
         self.assertEqual(res.get("neg_divs"), 1.0)
         self.assertEqual(res.get("both_neg"), -1.0)
         self.assertEqual(res.get("zero_div"), "null")
+
+    @unittest.skipUnless(is_mindustry_available(), "Mindustry runtime classpath not available")
+    def test_engine_nested_op_mod_preserves_operands(self):
+        """Executing nested op mod in Mindustry v8 preserves input operands a and b."""
+        mlog_code = """
+set a 7
+set b 3
+op mod __tmp0 a b
+op add res __tmp0 1
+"""
+        ok, res, msg = run_with_mindustry(mlog_code)
+        self.assertTrue(ok, f"Harness run failed: {msg}")
+        self.assertEqual(res.get("a"), 7.0)
+        self.assertEqual(res.get("b"), 3.0)
+        self.assertEqual(res.get("res"), 2.0)
+
+    @unittest.skipUnless(is_mindustry_available(), "Mindustry runtime classpath not available")
+    def test_engine_unfolded_floats_execution(self):
+        """Runtime execution of unfolded float modulo edge cases evaluates accurately."""
+        mlog_code = """
+op emod res_sub 1e-17 1.0
+op emod res_near -5.551115123125783e-17 1.0
+"""
+        ok, res, msg = run_with_mindustry(mlog_code)
+        self.assertTrue(ok, f"Harness run failed: {msg}")
+        self.assertEqual(res.get("res_sub"), 0.0)
+        self.assertEqual(res.get("res_near"), 0.0)
+
 
 
 if __name__ == "__main__":

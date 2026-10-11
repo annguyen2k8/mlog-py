@@ -47,6 +47,7 @@ class RegistryEntry:
     mlog_token: str
     category: str = ""
     description: str = ""
+    arity: int = 0
 
 
 class BaseRegistry:
@@ -183,15 +184,41 @@ class DrawTypeRegistry(BaseRegistry):
         super().__init__("draw type", entries)
 
 
+UNARY_LOGIC_OPS: frozenset = frozenset({
+    "not", "abs", "sign", "log", "log10", "floor", "ceil",
+    "round", "sqrt", "rand", "sin", "cos", "tan", "asin", "acos", "atan",
+})
+
+
 class LogicOpRegistry(BaseRegistry):
     """Validates arithmetic and logic operations usable with 'op'."""
 
     def __init__(self):
         entries = [
-            RegistryEntry(source_name=op, mlog_token=op, category="op")
+            RegistryEntry(
+                source_name=op,
+                mlog_token=op,
+                category="op",
+                arity=1 if op in UNARY_LOGIC_OPS else 2,
+            )
             for op in LOGIC_OPERATIONS
         ]
         super().__init__("logic operation", entries)
+
+    def get_arity(self, key: str) -> Optional[int]:
+        """Return the arity of the logic operation (1 for unary, 2 for binary)."""
+        token = self.get_token(key)
+        if token and token in self.by_token:
+            return self.by_token[token].arity
+        return None
+
+    def is_unary(self, key: str) -> bool:
+        """Check if an operation is unary."""
+        return self.get_arity(key) == 1
+
+    def is_binary(self, key: str) -> bool:
+        """Check if an operation is binary."""
+        return self.get_arity(key) == 2
 
 
 class ConditionRegistry(BaseRegistry):

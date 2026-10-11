@@ -277,11 +277,24 @@ class ConstantFolder(ast.NodeTransformer):
                 if v2 == 0:
                     raise CompileError("modulo by zero", get_loc(node, self.filename))
                 try:
-                    res = v1 % v2
                     if isinstance(v1, int) and isinstance(v2, int):
-                        res = int(res)
+                        res = int(v1 % v2)
                     else:
-                        res = float(res)
+                        py_mod = v1 % v2
+                        rem1 = math.fmod(v1, v2)
+                        sum_val = rem1 + v2
+                        engine_mod = math.fmod(sum_val, v2)
+                        if (
+                            not math.isnan(py_mod)
+                            and not math.isnan(engine_mod)
+                            and not math.isinf(py_mod)
+                            and not math.isinf(engine_mod)
+                            and py_mod == engine_mod
+                            and math.copysign(1.0, py_mod) == math.copysign(1.0, engine_mod)
+                        ):
+                            res = float(py_mod)
+                        else:
+                            return node
                 except ZeroDivisionError:
                     raise CompileError("modulo by zero", get_loc(node, self.filename))
         elif isinstance(node.op, ast.Pow):
@@ -797,42 +810,53 @@ class Compiler:
             return to_str
 
         elif func_name == "op":
+            if not args:
+                self.error(
+                    "invalid arguments for op: expected op(op_name, dest, a, [b]) or dest = op(op_name, a, [b])",
+                    call,
+                )
+
+            op_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+            op_name = self.validate_arg(op_arg, REG_LOGIC_OPS, self.loc(args[0]))
+            is_unary = REG_LOGIC_OPS.is_unary(op_name)
+
             if len(args) == 4:
-                op_arg = self.format_intrinsic_arg(args[0], is_ident=True)
-                op_name = self.validate_arg(op_arg, REG_LOGIC_OPS, self.loc(args[0]))
                 dest = str(self.format_intrinsic_arg(args[1], is_ident=True))
                 a = str(self.format_intrinsic_arg(args[2], is_ident=False))
-                b = str(self.format_intrinsic_arg(args[3], is_ident=False))
+                b = str(self.format_intrinsic_arg(args[3], is_ident=False)) if not is_unary else "0"
                 self.instructions.append(
                     IROp(op=op_name, dest=dest, a=a, b=b, loc=loc)
                 )
                 return dest
-            elif len(args) == 3 and target_dest is not None:
-                op_arg = self.format_intrinsic_arg(args[0], is_ident=True)
-                op_name = self.validate_arg(op_arg, REG_LOGIC_OPS, self.loc(args[0]))
-                a = str(self.format_intrinsic_arg(args[1], is_ident=False))
-                b = str(self.format_intrinsic_arg(args[2], is_ident=False))
-                self.instructions.append(
-                    IROp(op=op_name, dest=target_dest, a=a, b=b, loc=loc)
-                )
-                return target_dest
-            elif len(args) == 3 and target_dest is None:
-                op_arg = self.format_intrinsic_arg(args[0], is_ident=True)
-                op_name = self.validate_arg(op_arg, REG_LOGIC_OPS, self.loc(args[0]))
-                dest = str(self.format_intrinsic_arg(args[1], is_ident=True))
-                a = str(self.format_intrinsic_arg(args[2], is_ident=False))
-                self.instructions.append(
-                    IROp(op=op_name, dest=dest, a=a, b="0", loc=loc)
-                )
-                return dest
-            elif len(args) == 2 and target_dest is not None:
-                op_arg = self.format_intrinsic_arg(args[0], is_ident=True)
-                op_name = self.validate_arg(op_arg, REG_LOGIC_OPS, self.loc(args[0]))
-                a = str(self.format_intrinsic_arg(args[1], is_ident=False))
-                self.instructions.append(
-                    IROp(op=op_name, dest=target_dest, a=a, b="0", loc=loc)
-                )
-                return target_dest
+            elif len(args) == 3:
+                if is_unary:
+                    dest = str(self.format_intrinsic_arg(args[1], is_ident=True))
+                    a = str(self.format_intrinsic_arg(args[2], is_ident=False))
+                    self.instructions.append(
+                        IROp(op=op_name, dest=dest, a=a, b="0", loc=loc)
+                    )
+                    return dest
+                else:
+                    dest = target_dest if target_dest is not None else self.new_temp(loc)
+                    a = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                    b = str(self.format_intrinsic_arg(args[2], is_ident=False))
+                    self.instructions.append(
+                        IROp(op=op_name, dest=dest, a=a, b=b, loc=loc)
+                    )
+                    return dest
+            elif len(args) == 2:
+                if is_unary:
+                    dest = target_dest if target_dest is not None else self.new_temp(loc)
+                    a = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                    self.instructions.append(
+                        IROp(op=op_name, dest=dest, a=a, b="0", loc=loc)
+                    )
+                    return dest
+                else:
+                    self.error(
+                        f"binary operation '{op_name}' requires 2 operands, got 1",
+                        call,
+                    )
             else:
                 self.error(
                     "invalid arguments for op: expected op(op_name, dest, a, [b]) or dest = op(op_name, a, [b])",

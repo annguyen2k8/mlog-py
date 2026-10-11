@@ -96,10 +96,7 @@ _PARAM_ROLE_MAP: Dict[str, ArgumentSemanticRole] = {
 }
 
 
-UNARY_LOGIC_OPS: Set[str] = {
-    "not", "abs", "sign", "log", "log10", "floor", "ceil",
-    "round", "sqrt", "rand", "sin", "cos", "tan", "asin", "acos", "atan",
-}
+from src.mlog_registry import UNARY_LOGIC_OPS
 
 
 def get_argument_semantic_role(
