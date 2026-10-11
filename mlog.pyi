@@ -10,6 +10,61 @@ from typing import Any, Dict, List, Optional, Union, overload
 null: Any = None
 
 # ---------------------------------------------------------------------------
+# Mindustry Logic Built-in Variables Namespace (Vars API)
+# ---------------------------------------------------------------------------
+
+class BuiltinVarToken:
+    """Mindustry Logic built-in variable token representation."""
+    name: str
+    token: str
+    readonly: bool
+    category: str
+    type: str
+    doc: str
+
+class Vars:
+    """Mindustry Logic built-in variables namespace.
+    Provides direct access to native Mindustry built-in variables
+    and hardware registers using canonical Mindustry names.
+    """
+    blockCount: int
+    client: int
+    clientCurrentMusic: str
+    clientLocale: str
+    clientMobile: int
+    clientMusicPlaying: int
+    clientName: str
+    clientTeam: int
+    clientUnit: Any
+    counter: int
+    ctrlCommand: int
+    ctrlPlayer: int
+    ctrlProcessor: int
+    degToRad: float
+    e: float
+    ipt: float
+    itemCount: int
+    links: int
+    liquidCount: int
+    maph: int
+    mapw: int
+    minute: float
+    pi: float
+    radToDeg: float
+    second: float
+    server: int
+    this: Any
+    thisx: float
+    thisy: float
+    tick: int
+    time: float
+    unit: Any
+    unitCount: int
+    wait: Any
+    waveNumber: int
+    waveTime: float
+
+# ---------------------------------------------------------------------------
 # Mindustry Logic Enums (Three-Tier Tier 1)
 # ---------------------------------------------------------------------------
 
@@ -762,6 +817,7 @@ class Array:
 
 __all__ = [
     "Array",
+    "BuiltinVarToken",
     "CompileResult",
     "Condition",
     "ControlProperty",
@@ -776,6 +832,7 @@ __all__ = [
     "Teams",
     "UnitControl",
     "Units",
+    "Vars",
     "compile_py",
     "control",
     "draw",

@@ -24,7 +24,11 @@ from .mlog_registry import (
     Teams,
     UnitControl,
     Units,
+    Vars,
+    BuiltinVarToken,
+    BUILTIN_VARIABLES_DATA,
 )
+from .mlog_registry_data import BUILTIN_VARS_SPEC
 
 
 @dataclass(frozen=True)
@@ -1124,17 +1128,25 @@ class Array:
         return f"Array({self.block!r}, size={self.size}, dtype={self.dtype.__name__})"
 
 
+# Mindustry Built-in Variables (legacy aliases removed in favor of Vars API)
+BUILTIN_VARIABLES: Set[str] = set()
+BUILTIN_VARIABLE_TYPES: Dict[str, str] = {}
+
+
 # Complete set of symbols exported by the official `mlog` package
 MLOG_EXPORTS: Set[str] = (
     ALLOWED_INTRINSICS
     | set(ALL_REGISTRY_ENUMS.keys())
+    | BUILTIN_VARIABLES
     | {
         "Array",
+        "BuiltinVarToken",
         "compile_py",
         "CompileResult",
         "main",
         "null",
         "raw",
+        "Vars",
     }
 )
 
@@ -1161,6 +1173,32 @@ def generate_pyi() -> str:
     lines.append("")
     lines.append("# Null constant representing null in Mindustry Logic")
     lines.append("null: Any = None")
+    lines.append("")
+
+
+    # Emit Vars Namespace
+    lines.append("# " + "-" * 75)
+    lines.append("# Mindustry Logic Built-in Variables Namespace (Vars API)")
+    lines.append("# " + "-" * 75)
+    lines.append("")
+    lines.append("class BuiltinVarToken:")
+    lines.append('    """Mindustry Logic built-in variable token representation."""')
+    lines.append("    name: str")
+    lines.append("    token: str")
+    lines.append("    readonly: bool")
+    lines.append("    category: str")
+    lines.append("    type: str")
+    lines.append("    doc: str")
+    lines.append("")
+    lines.append("class Vars:")
+    lines.append('    """Mindustry Logic built-in variables namespace.')
+    lines.append("    Provides direct access to native Mindustry built-in variables")
+    lines.append("    and hardware registers using canonical Mindustry names.")
+    lines.append('    """')
+    for spec in sorted(BUILTIN_VARS_SPEC, key=lambda s: str(s["name"])):
+        v_name = str(spec["name"])
+        v_type = str(spec.get("type", "Any"))
+        lines.append(f"    {v_name}: {v_type}")
     lines.append("")
 
     # Emit Enums

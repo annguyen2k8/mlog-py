@@ -19,7 +19,9 @@ from .mlog_registry import (
     REG_SENSOR_PROPERTIES,
     REG_UNIT_CONTROL,
     REG_UNIT_TYPES,
+    BUILTIN_VARIABLES_DATA,
 )
+from .mlog_registry_data import BUILTIN_CONSTANTS
 from .allocator import ArraySymbol, MemoryBlockAllocator
 from .parser import get_loc, parse_and_validate
 
@@ -424,14 +426,12 @@ class Compiler:
         raise CompileError(msg, self.loc(node))
 
     def format_name(self, name: str, node: ast.AST) -> str:
-        """Format an identifier name, mapping at_ prefix to @ if present."""
+        """Format an identifier name."""
         if name.startswith("__tmp"):
             self.error(
                 f"variable name '{name}' is reserved for compiler temporaries",
                 node,
             )
-        if name.startswith("at_"):
-            return "@" + name[3:]
         if name in ("counter", "_counter"):
             return "@counter"
         return name
@@ -452,8 +452,6 @@ class Compiler:
         elif isinstance(val, float):
             return str(val)
         elif isinstance(val, str):
-            if val.startswith("@"):
-                return val
             escaped = val.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
             return f'"{escaped}"'
         else:
@@ -665,10 +663,15 @@ class Compiler:
         self.error(f"unsupported expression type: {type(expr).__name__}", expr)
 
     def compile_attribute(self, node: ast.Attribute) -> str:
-        """Compile a DSL Enum attribute access, e.g. SensorProperty.HEALTH."""
+        """Compile a DSL Enum or Vars attribute access, e.g. SensorProperty.HEALTH or Vars.tick."""
         loc = self.loc(node)
         if isinstance(node.value, ast.Name):
             cls_name = node.value.id
+            if cls_name == "Vars":
+                token = BUILTIN_VARIABLES_DATA.get(node.attr)
+                if token is None:
+                    self.error(f"unknown Mindustry built-in variable: 'Vars.{node.attr}'", node)
+                return token.token
             if cls_name in ENUM_CLASS_TO_REGISTRY:
                 reg = ENUM_CLASS_TO_REGISTRY[cls_name]
                 entry = reg.by_source_name.get(node.attr.upper())
@@ -713,9 +716,14 @@ class Compiler:
         if isinstance(arg, ast.Constant):
             val = arg.value
             if isinstance(val, str):
-                if val.startswith("@"):
-                    return val
-                if is_ident or not is_string_literal:
+                if is_string_literal:
+                    escaped = (
+                        val.replace("\\", "\\\\")
+                        .replace('"', '\\"')
+                        .replace("\n", "\\n")
+                    )
+                    return f'"{escaped}"'
+                if is_ident:
                     return val
                 escaped = (
                     val.replace("\\", "\\\\")
@@ -1307,7 +1315,17 @@ class Compiler:
                 )
             return
 
-        # Case 2: Target is a simple Name
+        # Case 2: Target is Vars attribute: Vars.counter = value
+        if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "Vars":
+            token = BUILTIN_VARIABLES_DATA.get(target.attr)
+            if token is None:
+                self.error(f"unknown Mindustry built-in variable: 'Vars.{target.attr}'", target)
+            if token.readonly:
+                self.error(f"cannot assign to read-only built-in variable 'Vars.{target.attr}' ('{token.token}')", target)
+            self.compile_expr(node.value, target_dest=token.token)
+            return
+
+        # Case 3: Target is a simple Name
         assert isinstance(target, ast.Name)
         target_name = target.id
 
@@ -1460,7 +1478,20 @@ class Compiler:
             )
             return
 
-        # Case 2: Simple variable target: x op= value
+        # Case 2: Target is Vars attribute: Vars.counter op= value
+        if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "Vars":
+            token = BUILTIN_VARIABLES_DATA.get(target.attr)
+            if token is None:
+                self.error(f"unknown Mindustry built-in variable: 'Vars.{target.attr}'", target)
+            if token.readonly:
+                self.error(f"cannot assign to read-only built-in variable 'Vars.{target.attr}' ('{token.token}')", target)
+            val = self.compile_expr(node.value)
+            self.instructions.append(
+                IROp(op=mlog_op, dest=token.token, a=token.token, b=val, loc=loc)
+            )
+            return
+
+        # Case 3: Simple variable target: x op= value
         if not isinstance(target, ast.Name):
             self.error("augmented assignment target must be a simple variable name or array index (unpacking not supported)", target)
 

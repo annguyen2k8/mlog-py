@@ -108,6 +108,72 @@ flags[0] ^= True
     - `dtype=float`: supports arithmetic operators; bitwise operators (`&=`, `|=`, `^=`, `<<=`, `>>=`) are rejected.
     - `dtype=bool`: supports boolean bitwise operators (`&=`, `|=`, `^=`); arithmetic operators (`+=`, etc.) and non-boolean literals are rejected. Dynamic RHS expressions are automatically normalized to boolean (0 or 1) via `op notEqual` before applying the bitwise operation.
 
+### Mindustry Built-in Variables & Registers (`Vars` API)
+
+Mindustry processor runtime registers and global variables are directly accessible via the canonical `Vars` namespace, preserving original Mindustry variable names and capitalization:
+
+```python
+from mlog import Vars, print, lookup, LookupType
+
+# Access built-in variables across all 5 groups
+t = Vars.tick                   # Emits: set t @tick
+w = Vars.waveNumber             # Emits: set w @waveNumber
+name = Vars.clientName          # Emits: set name @clientName
+b_count = Vars.blockCount       # Emits: set b_count @blockCount
+
+# Expressions and conditionals
+next_wave = Vars.waveTime + 30  # Emits: op add next_wave @waveTime 30
+if Vars.unit == None:           # Emits: jump ... equal @unit null
+    Vars.counter = 0
+
+# Intrinsic usage
+print(Vars.clientName)          # Emits: print @clientName
+first_block = lookup(LookupType.BLOCK, Vars.blockCount)
+```
+
+#### Supported Variable Groups (36 Tokens)
+
+Audited directly from Mindustry source (`v160.7`, `GlobalVars.java`, `LAssembler.java`, `LExecutor.java`):
+
+| Group | Members | Description | Read/Write |
+| :--- | :--- | :--- | :--- |
+| **Processor** | `Vars.this`, `Vars.thisx`, `Vars.thisy`, `Vars.links`, `Vars.ipt`, `Vars.counter`, `Vars.unit` | Processor block, execution metrics, and instruction counter | `Vars.counter` is **Read-Write**; all others **Read-Only** |
+| **General** | `Vars.pi`, `Vars.e`, `Vars.degToRad`, `Vars.radToDeg`, `Vars.ctrlProcessor`, `Vars.ctrlPlayer`, `Vars.ctrlCommand` | Math constants and unit controller enums | **Read-Only** |
+| **Map** | `Vars.time`, `Vars.tick`, `Vars.second`, `Vars.minute`, `Vars.waveNumber`, `Vars.waveTime`, `Vars.mapw`, `Vars.maph`, `Vars.wait` | Playtime, countdown timers, map boundaries, wait marker | **Read-Only** |
+| **Network / Clientside** | `Vars.server`, `Vars.client`, `Vars.clientLocale`, `Vars.clientUnit`, `Vars.clientName`, `Vars.clientTeam`, `Vars.clientMobile`, `Vars.clientMusicPlaying`, `Vars.clientCurrentMusic` | Server/client status, player locale/name/team/unit (World Processor) | **Read-Only** |
+| **Lookup** | `Vars.blockCount`, `Vars.unitCount`, `Vars.itemCount`, `Vars.liquidCount` | Content counts for lookup instructions | **Read-Only** |
+
+> [!NOTE]
+> **About `@wait`**: In Mindustry `GlobalVars.java:77`, `varWait = put("@wait", null, true, true)` is located structurally within `sectionMap`, but is defined with `privileged = true` and `hidden = true`. It does not appear in `bundle.properties` (`lglobal.@wait` does not exist) or in the in-game Variable picker. In practice, `@wait` is an internal message flush synchronization sentinel for World Processors (`LStatements.FlushMessageStatement`). In regular logic processors, reading `@wait` evaluates to `null`.
+
+#### Read / Write Semantics & Runtime Behavior
+
+- **Writable Register (`Vars.counter`)**:
+  - Direct assignment (`Vars.counter = 10`) compiles to `set @counter 10`.
+  - In-place augmented assignment (`Vars.counter += 1`, `Vars.counter *= 2`) compiles to `op add @counter @counter 1`, etc.
+  - **Runtime Jump Mechanics**: In Mindustry's engine (`LExecutor.java`), the instruction loop post-increments `@counter` *before* the instruction body executes:
+    - `Vars.counter = N`: Absolute jump to instruction address `N`.
+    - `Vars.counter += N`: Relative jump. Because `@counter` has already been incremented to `address + 1`, `Vars.counter += 1` targets `(address + 1) + 1` (skipping exactly 1 instruction); `Vars.counter += 2` targets `(address + 1) + 2` (skipping 2 instructions).
+- **Read-Only Protection**:
+  - Assigning to any read-only variable (e.g. `Vars.tick = 10`, `Vars.waveNumber += 1`, `Vars.unit = u`) is strictly rejected at compile time with `CompileError: cannot assign to read-only built-in variable 'Vars.<name>' ('@<name>')`.
+  - In native Python runtime emulation, modifying read-only variables raises `AttributeError`.
+
+#### String Literal Disambiguation
+
+The compiler strictly separates string literals from built-in tokens:
+
+```python
+msg = "@tick"        # String literal -> Emits: set msg "@tick"
+t = Vars.tick        # Built-in token -> Emits: set t @tick
+
+print("@clientName") # String literal -> Emits: print "@clientName"
+print(Vars.clientName) # Built-in token -> Emits: print @clientName
+```
+
+#### Built-in Variables API
+
+All access to Mindustry built-in registers and variables is performed through the canonical `Vars` namespace (`Vars.tick`, `Vars.waveNumber`, `Vars.unit`, `Vars.counter`, etc.). Attributes on `Vars` provide typed `BuiltinVarToken` objects, enabling IDE autocompletion, static type validation, and compile-time protection against assigning to read-only variables.
+
 ### Sensor Properties & Hardware Attributes
 
 The compiler supports all Mindustry `LAccess` properties via the `SensorProperty` registry enum and canonical string/identifier tokens:

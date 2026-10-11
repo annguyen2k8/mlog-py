@@ -74,14 +74,15 @@ x += x
         MlogValidator.validate(res.mlog)
 
     def test_builtin_registers_augmented_assignment(self):
-        """Special registers like counter/@counter and @unit support augmented assignment."""
+        """Instruction counter supports augmented assignment via counter and Vars.counter."""
         code = """
+from mlog import Vars
 counter += 2
-at_unit += 1
+Vars.counter += 1
 """
         res = compile_py(code)
         self.assertIn("op add @counter @counter 2", res.mlog)
-        self.assertIn("op add @unit @unit 1", res.mlog)
+        self.assertIn("op add @counter @counter 1", res.mlog)
         MlogValidator.validate(res.mlog)
 
     def test_function_scope_augmented_assignment(self):

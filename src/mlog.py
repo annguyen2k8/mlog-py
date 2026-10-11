@@ -26,6 +26,8 @@ from .mlog_registry import (
     Teams,
     UnitControl,
     Units,
+    Vars,
+    BuiltinVarToken,
 )
 from .metadata import (
     Array,
@@ -62,6 +64,7 @@ from .validator import MlogValidator, ValidationError
 
 # Null constant representing null in Mindustry Logic
 null = None
+
 
 __all__ = sorted(list(MLOG_EXPORTS))
 

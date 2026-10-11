@@ -91,8 +91,9 @@ cmp = a < b
     def test_counter_read_and_write(self):
         """Test reading and writing @counter variable."""
         code = """
-x = at_counter
-set(at_counter, 5)
+from mlog import Vars
+x = Vars.counter
+set(Vars.counter, 5)
 set("@counter", 10)
 curr = _counter
 """
@@ -106,10 +107,11 @@ curr = _counter
     def test_counter_in_branching(self):
         """Test dynamic @counter manipulation inside conditional logic."""
         code = """
+from mlog import Vars
 if flag == 1:
-    set(at_counter, skip_target)
+    set(Vars.counter, skip_target)
 else:
-    x = at_counter
+    x = Vars.counter
 """
         res = self._compile_and_validate(code)
         lines = [line.strip() for line in res.mlog.strip().splitlines()]

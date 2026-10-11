@@ -176,12 +176,18 @@ class ASTValidator(ast.NodeVisitor):
                     self.error(f"cannot import name '{alias.name}' from '{node.module}'", node)
 
     def visit_Attribute(self, node: ast.Attribute):
-        from .mlog_registry import ENUM_CLASS_TO_REGISTRY
-        if not isinstance(node.value, ast.Name) or node.value.id not in ENUM_CLASS_TO_REGISTRY:
-            self.error(
-                f"attribute access is only supported on DSL enum types ({', '.join(sorted(ENUM_CLASS_TO_REGISTRY.keys()))})",
-                node,
-            )
+        from .mlog_registry import ENUM_CLASS_TO_REGISTRY, BUILTIN_VARIABLES_DATA
+        if isinstance(node.value, ast.Name):
+            if node.value.id == "Vars":
+                if node.attr not in BUILTIN_VARIABLES_DATA:
+                    self.error(f"unknown Mindustry built-in variable: 'Vars.{node.attr}'", node)
+                return
+            if node.value.id in ENUM_CLASS_TO_REGISTRY:
+                return
+        self.error(
+            f"attribute access is only supported on DSL enum types ({', '.join(sorted(ENUM_CLASS_TO_REGISTRY.keys()))}) and 'Vars'",
+            node,
+        )
 
     def visit_Assign(self, node: ast.Assign):
         if len(node.targets) != 1:
@@ -191,6 +197,13 @@ class ASTValidator(ast.NodeVisitor):
             self.visit_Subscript(target)
         elif isinstance(target, ast.Name):
             pass
+        elif isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "Vars":
+            from .mlog_registry import BUILTIN_VARIABLES_DATA
+            token = BUILTIN_VARIABLES_DATA.get(target.attr)
+            if token is None:
+                self.error(f"unknown Mindustry built-in variable: 'Vars.{target.attr}'", target)
+            if token.readonly:
+                self.error(f"cannot assign to read-only built-in variable 'Vars.{target.attr}' ('{token.token}')", target)
         else:
             self.error("assignment target must be a simple variable name or array index (unpacking not supported)", target)
         self.visit(node.value)
@@ -200,6 +213,13 @@ class ASTValidator(ast.NodeVisitor):
             self.visit_Subscript(node.target)
         elif isinstance(node.target, ast.Name):
             pass
+        elif isinstance(node.target, ast.Attribute) and isinstance(node.target.value, ast.Name) and node.target.value.id == "Vars":
+            from .mlog_registry import BUILTIN_VARIABLES_DATA
+            token = BUILTIN_VARIABLES_DATA.get(node.target.attr)
+            if token is None:
+                self.error(f"unknown Mindustry built-in variable: 'Vars.{node.target.attr}'", node.target)
+            if token.readonly:
+                self.error(f"cannot assign to read-only built-in variable 'Vars.{node.target.attr}' ('{token.token}')", node.target)
         else:
             self.error(
                 "augmented assignment target must be a simple variable name or array index (unpacking not supported)",

@@ -234,8 +234,9 @@ class TestPhase1F(unittest.TestCase):
     # 15. @counter
     def test_15_counter(self):
         source = (
+            "from mlog import Vars\n"
             "set(\"@counter\", 0)\n"
-            "at_counter = 10\n"
+            "Vars.counter = 10\n"
             "counter = 5"
         )
         mlog = self.check_compile_and_validate(source)
@@ -249,8 +250,9 @@ class TestPhase1F(unittest.TestCase):
     # 16. mlog built-in constants
     def test_16_builtin_constants(self):
         source = (
-            "u = at_unit\n"
-            "t = at_this\n"
+            "from mlog import Vars\n"
+            "u = Vars.unit\n"
+            "t = Vars.this\n"
             "hp = sensor(\"block1\", \"@health\")\n"
             "ubind(\"@mega\")"
         )

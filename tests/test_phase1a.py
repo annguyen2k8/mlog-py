@@ -36,7 +36,7 @@ class TestPhase1A(unittest.TestCase):
         self.assertEqual(mlog.strip(), expected)
 
     def test_assignment_counter(self):
-        source = "at_counter = 5\ncounter = 0"
+        source = "from mlog import Vars\nVars.counter = 5\ncounter = 0"
         ir = compile_source_to_ir(source, "test.py")
         mlog, _ = Emitter(ir).emit()
         expected = "set @counter 5\nset @counter 0"

@@ -16,6 +16,7 @@ from typing import Dict, List, Optional
 from .errors import CompileError, SourceLocation
 from .mlog_registry_data import (
     BUILTIN_CONSTANTS,
+    BUILTIN_VARS_SPEC,
     CONDITION_OPERATIONS,
     CONTROL_PROPERTIES,
     GRAPHICS_TYPES,
@@ -384,3 +385,98 @@ ENUM_CLASS_TO_REGISTRY = {
     "LookupType": REG_LOOKUP_TYPES,
 }
 
+
+# ---------------------------------------------------------------------------
+# Mindustry Built-in Variables & Registers Namespace (Vars API)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class BuiltinVarToken:
+    """Mindustry Logic built-in variable token representation."""
+
+    name: str
+    token: str
+    readonly: bool = True
+    category: str = ""
+    type: str = "Any"
+    doc: str = ""
+
+    def __repr__(self) -> str:
+        return f"<BuiltinVar {self.token}>"
+
+    def __str__(self) -> str:
+        return self.token
+
+    def __hash__(self) -> int:
+        return hash(self.token)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, BuiltinVarToken):
+            return self.token == other.token
+        if isinstance(other, str):
+            return self.token == other
+        return False
+
+
+class _VarsMeta(type):
+    """Metaclass for Vars providing attribute access and read-only enforcement."""
+
+    def __setattr__(cls, name: str, value: object):
+        if getattr(cls, "_initialized", False):
+            tokens = getattr(cls, "_tokens", {})
+            token = tokens.get(name)
+            if token is not None and token.readonly:
+                raise AttributeError(
+                    f"Cannot assign to read-only Mindustry built-in variable 'Vars.{name}' ({token.token})"
+                )
+        super().__setattr__(name, value)
+
+    def __getattr__(cls, name: str):
+        tokens = getattr(cls, "_tokens", {})
+        token = tokens.get(name)
+        if token is None:
+            raise AttributeError(f"Unknown Mindustry built-in variable 'Vars.{name}'")
+        return token
+
+    def __iter__(cls):
+        tokens = getattr(cls, "_tokens", {})
+        return iter(tokens.values())
+
+    def __contains__(cls, item: object) -> bool:
+        tokens = getattr(cls, "_tokens", {})
+        if isinstance(item, str):
+            return item in tokens or ("@" + item) in BUILTIN_CONSTANTS
+        if isinstance(item, BuiltinVarToken):
+            return item.name in tokens
+        return False
+
+
+class Vars(metaclass=_VarsMeta):
+    """Mindustry Logic built-in variables namespace.
+
+    Provides direct access to native Mindustry built-in variables and hardware registers
+    using their canonical names (e.g. Vars.tick, Vars.waveNumber, Vars.clientName, Vars.blockCount).
+    """
+
+    _tokens: Dict[str, BuiltinVarToken] = {}
+    _initialized: bool = False
+
+
+BUILTIN_VARIABLES_DATA: Dict[str, BuiltinVarToken] = {}
+BUILTIN_TOKEN_TO_VAR: Dict[str, BuiltinVarToken] = {}
+
+for spec in BUILTIN_VARS_SPEC:
+    token_obj = BuiltinVarToken(
+        name=str(spec["name"]),
+        token=str(spec["token"]),
+        readonly=bool(spec.get("readonly", True)),
+        category=str(spec.get("category", "")),
+        type=str(spec.get("type", "Any")),
+        doc=str(spec.get("doc", "")),
+    )
+    Vars._tokens[token_obj.name] = token_obj
+    setattr(Vars, token_obj.name, token_obj)
+    BUILTIN_VARIABLES_DATA[token_obj.name] = token_obj
+    BUILTIN_TOKEN_TO_VAR[token_obj.token] = token_obj
+
+Vars._initialized = True
