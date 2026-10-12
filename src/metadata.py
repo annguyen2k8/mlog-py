@@ -71,8 +71,170 @@ def _rt_jump(target: Any, cond: Any = "always", a: Any = 0, b: Any = 0) -> None:
 def _rt_set(to: Any, from_: Any) -> Any:
     return from_
 
-def _rt_op(op_name: Any, *args: Any) -> Any:
-    return 0
+class _OpCallable:
+    """Callable namespace object for Mindustry logic operations.
+
+    Supports both legacy function-call syntax:
+        op("add", dest, a, b)
+        result = op("add", a, b)
+    and modern namespace method syntax:
+        result = op.add(a, b)
+        op.add(dest, a, b)
+        result = op.sin(deg)
+        op.sin(dest, deg)
+    """
+
+    def __call__(self, op_name: Any, *args: Any) -> Any:
+        return 0
+
+    # Unary operations (16)
+    def abs(self, *args: Any) -> Any:
+        return 0
+
+    def sign(self, *args: Any) -> Any:
+        return 0
+
+    def log(self, *args: Any) -> Any:
+        return 0
+
+    def log10(self, *args: Any) -> Any:
+        return 0
+
+    log_10 = log10
+
+    def floor(self, *args: Any) -> Any:
+        return 0
+
+    def ceil(self, *args: Any) -> Any:
+        return 0
+
+    def round(self, *args: Any) -> Any:
+        return 0
+
+    def sqrt(self, *args: Any) -> Any:
+        return 0
+
+    def rand(self, *args: Any) -> Any:
+        return 0
+
+    def sin(self, *args: Any) -> Any:
+        return 0
+
+    def cos(self, *args: Any) -> Any:
+        return 0
+
+    def tan(self, *args: Any) -> Any:
+        return 0
+
+    def asin(self, *args: Any) -> Any:
+        return 0
+
+    def acos(self, *args: Any) -> Any:
+        return 0
+
+    def atan(self, *args: Any) -> Any:
+        return 0
+
+    # Binary operations (27)
+    def add(self, *args: Any) -> Any:
+        return 0
+
+    def sub(self, *args: Any) -> Any:
+        return 0
+
+    def mul(self, *args: Any) -> Any:
+        return 0
+
+    def div(self, *args: Any) -> Any:
+        return 0
+
+    def idiv(self, *args: Any) -> Any:
+        return 0
+
+    def mod(self, *args: Any) -> Any:
+        return 0
+
+    def emod(self, *args: Any) -> Any:
+        return 0
+
+    def pow(self, *args: Any) -> Any:
+        return 0
+
+    def equal(self, *args: Any) -> Any:
+        return 0
+
+    def not_equal(self, *args: Any) -> Any:
+        return 0
+
+    notEqual = not_equal
+
+    def land(self, *args: Any) -> Any:
+        return 0
+
+    def less_than(self, *args: Any) -> Any:
+        return 0
+
+    lessThan = less_than
+
+    def less_than_eq(self, *args: Any) -> Any:
+        return 0
+
+    lessThanEq = less_than_eq
+
+    def greater_than(self, *args: Any) -> Any:
+        return 0
+
+    greaterThan = greater_than
+
+    def greater_than_eq(self, *args: Any) -> Any:
+        return 0
+
+    greaterThanEq = greater_than_eq
+
+    def strict_equal(self, *args: Any) -> Any:
+        return 0
+
+    strictEqual = strict_equal
+
+    def shl(self, *args: Any) -> Any:
+        return 0
+
+    def shr(self, *args: Any) -> Any:
+        return 0
+
+    def ushr(self, *args: Any) -> Any:
+        return 0
+
+    def xor(self, *args: Any) -> Any:
+        return 0
+
+    def max(self, *args: Any) -> Any:
+        return 0
+
+    def min(self, *args: Any) -> Any:
+        return 0
+
+    def angle(self, *args: Any) -> Any:
+        return 0
+
+    def angle_diff(self, *args: Any) -> Any:
+        return 0
+
+    angleDiff = angle_diff
+
+    def len(self, *args: Any) -> Any:
+        return 0
+
+    length = len
+
+    def noise(self, *args: Any) -> Any:
+        return 0
+
+    def logn(self, *args: Any) -> Any:
+        return 0
+
+
+_rt_op = _OpCallable()
 
 def _rt_min(a: Any, b: Any) -> Any:
     return min(a, b)
@@ -86,11 +248,179 @@ def _rt_sensor(*args: Any) -> Any:
 def _rt_control(type_: Any, target: Any, *params: Any) -> None:
     return None
 
-def _rt_ucontrol(action: Any, *params: Any) -> None:
-    return None
+class _UnitControlCallable:
+    """Callable namespace object for Mindustry unit control operations.
 
-def _rt_draw(type_: Any, *params: Any) -> None:
-    return None
+    Supports both legacy function-call syntax:
+        ucontrol("move", x, y)
+        ucontrol(UnitControl.MOVE, x, y)
+    and modern namespace method syntax:
+        ucontrol.move(x, y)
+        ucontrol.approach(x, y, radius)
+        ucontrol.mine(x, y)
+        ucontrol.boost(True)
+        ucontrol.idle()
+    """
+
+    def __call__(self, action: Any, *params: Any) -> None:
+        return None
+
+    def idle(self) -> None:
+        return None
+
+    def stop(self) -> None:
+        return None
+
+    def move(self, x: Any, y: Any) -> None:
+        return None
+
+    def approach(self, x: Any, y: Any, radius: Any) -> None:
+        return None
+
+    def pathfind(self, x: Any, y: Any) -> None:
+        return None
+
+    def auto_pathfind(self) -> None:
+        return None
+
+    autoPathfind = auto_pathfind
+
+    def boost(self, enable: Any) -> None:
+        return None
+
+    def target(self, x: Any, y: Any, shoot: Any) -> None:
+        return None
+
+    def targetp(self, unit: Any, shoot: Any) -> None:
+        return None
+
+    def item_drop(self, to: Any, amount: Any) -> None:
+        return None
+
+    itemDrop = item_drop
+
+    def item_take(self, from_: Any, item: Any, amount: Any) -> None:
+        return None
+
+    itemTake = item_take
+
+    def pay_drop(self) -> None:
+        return None
+
+    payDrop = pay_drop
+
+    def pay_take(self, take_units: Any) -> None:
+        return None
+
+    payTake = pay_take
+
+    def pay_enter(self) -> None:
+        return None
+
+    payEnter = pay_enter
+
+    def mine(self, x: Any, y: Any) -> None:
+        return None
+
+    def flag(self, value: Any) -> None:
+        return None
+
+    def build(self, x: Any, y: Any, block: Any, rotation: Any, config: Any) -> None:
+        return None
+
+    def deconstruct(self, x: Any, y: Any) -> None:
+        return None
+
+    def get_block(self, x: Any, y: Any, out_type: Any, out_building: Any, out_floor: Any) -> None:
+        return None
+
+    getBlock = get_block
+
+    def within(self, x: Any, y: Any, radius: Any, out_result: Any) -> None:
+        return None
+
+    def unbind(self) -> None:
+        return None
+
+
+_rt_ucontrol = _UnitControlCallable()
+unitControl = _rt_ucontrol
+unit_control = _rt_ucontrol
+
+class _DrawCallable:
+    """Callable namespace object for Mindustry draw operations.
+
+    Supports both legacy function-call syntax:
+        draw("line", x1, y1, x2, y2)
+        draw(DrawType.LINE, x1, y1, x2, y2)
+    and modern namespace method syntax:
+        draw.line(x1, y1, x2, y2)
+        draw.clear(r, g, b)
+        draw.color(r, g, b, a=255)
+        draw.rect(x, y, width, height)
+        draw.reset()
+    """
+
+    def __call__(self, type_: Any, *params: Any) -> None:
+        return None
+
+    def clear(self, r: Any, g: Any, b: Any) -> None:
+        return None
+
+    def color(self, r: Any, g: Any, b: Any, a: Any = 255) -> None:
+        return None
+
+    def col(self, color: Any) -> None:
+        return None
+
+    def stroke(self, width: Any) -> None:
+        return None
+
+    def line(self, x1: Any, y1: Any, x2: Any, y2: Any) -> None:
+        return None
+
+    def rect(self, x: Any, y: Any, width: Any, height: Any) -> None:
+        return None
+
+    def line_rect(self, x: Any, y: Any, width: Any, height: Any) -> None:
+        return None
+
+    lineRect = line_rect
+
+    def poly(self, x: Any, y: Any, sides: Any, radius: Any, rotation: Any = 0) -> None:
+        return None
+
+    def line_poly(self, x: Any, y: Any, sides: Any, radius: Any, rotation: Any = 0) -> None:
+        return None
+
+    linePoly = line_poly
+
+    def triangle(self, x1: Any, y1: Any, x2: Any, y2: Any, x3: Any, y3: Any) -> None:
+        return None
+
+    def image(self, x: Any, y: Any, image: Any, size: Any = 32, rotation: Any = 0) -> None:
+        return None
+
+    def print(self, x: Any, y: Any, align: Any = 0) -> None:
+        return None
+
+    def translate(self, x: Any, y: Any) -> None:
+        return None
+
+    def scale(self, x: Any, y: Any) -> None:
+        return None
+
+    def rotate(self, degrees: Any) -> None:
+        return None
+
+    def reset(self) -> None:
+        return None
+
+    def flush(self, display: Any) -> None:
+        return None
+
+
+_rt_draw = _DrawCallable()
 
 def _rt_drawflush(display: Any) -> None:
     return None
@@ -307,8 +637,37 @@ def _rt_radar(*args: Any) -> Any:
 def _rt_uradar(*args: Any) -> Any:
     return 0
 
-def _rt_ulocate(*args: Any) -> None:
-    return None
+class _UnitLocateCallable:
+    """Callable namespace object for Mindustry unit locate operations.
+
+    Supports both legacy function-call syntax:
+        ulocate("ore", "core", "true", "@copper", outX, outY, found, building)
+    and modern namespace method syntax:
+        ulocate.ore("@copper", outX, outY, found)
+        ulocate.building("core", True, outX, outY, found, building)
+        ulocate.spawn(outX, outY, found, building)
+        ulocate.damaged(outX, outY, found, building)
+    """
+
+    def __call__(self, locate: Any, *params: Any) -> None:
+        return None
+
+    def ore(self, ore: Any, out_x: Any, out_y: Any, out_found: Any, out_build: Any = "building") -> None:
+        return None
+
+    def building(self, group: Any, enemy: Any, out_x: Any, out_y: Any, out_found: Any, out_building: Any) -> None:
+        return None
+
+    def spawn(self, out_x: Any, out_y: Any, out_found: Any, out_build: Any = "building") -> None:
+        return None
+
+    def damaged(self, out_x: Any, out_y: Any, out_found: Any, out_building: Any) -> None:
+        return None
+
+
+_rt_ulocate = _UnitLocateCallable()
+unitLocate = _rt_ulocate
+unit_locate = _rt_ulocate
 
 def _rt_lookup(*args: Any) -> Any:
     return 0
@@ -1422,6 +1781,14 @@ MLOG_EXPORTS: Set[str] = (
         "raw",
         "Vars",
         "__version__",
+        "_DrawCallable",
+        "_OpCallable",
+        "_UnitControlCallable",
+        "_UnitLocateCallable",
+        "unitControl",
+        "unit_control",
+        "unitLocate",
+        "unit_locate",
     }
 )
 
@@ -1527,6 +1894,161 @@ def generate_pyi() -> str:
     lines.append("")
 
     for name in sorted(INTRINSICS.keys()):
+        if name == "draw":
+            lines.append("class _DrawCallable:")
+            lines.append('    """Callable namespace object for Mindustry draw operations.')
+            lines.append("")
+            lines.append("    Supports both legacy function-call syntax:")
+            lines.append('        draw("line", x1, y1, x2, y2)')
+            lines.append("        draw(DrawType.LINE, x1, y1, x2, y2)")
+            lines.append("    and modern namespace method syntax:")
+            lines.append("        draw.line(x1, y1, x2, y2)")
+            lines.append("        draw.clear(r, g, b)")
+            lines.append("        draw.color(r, g, b, a=255)")
+            lines.append('    """')
+            lines.append("    def __call__(self, type: Union[DrawType, str], x: Any = 0, y: Any = 0, p1: Any = 0, p2: Any = 0, p3: Any = 0, p4: Any = 0) -> None: ...")
+            lines.append("    def clear(self, r: Any, g: Any, b: Any) -> None: ...")
+            lines.append("    def color(self, r: Any, g: Any, b: Any, a: Any = 255) -> None: ...")
+            lines.append("    def col(self, color: Any) -> None: ...")
+            lines.append("    def stroke(self, width: Any) -> None: ...")
+            lines.append("    def line(self, x1: Any, y1: Any, x2: Any, y2: Any) -> None: ...")
+            lines.append("    def rect(self, x: Any, y: Any, width: Any, height: Any) -> None: ...")
+            lines.append("    def line_rect(self, x: Any, y: Any, width: Any, height: Any) -> None: ...")
+            lines.append("    def lineRect(self, x: Any, y: Any, width: Any, height: Any) -> None: ...")
+            lines.append("    def poly(self, x: Any, y: Any, sides: Any, radius: Any, rotation: Any = 0) -> None: ...")
+            lines.append("    def line_poly(self, x: Any, y: Any, sides: Any, radius: Any, rotation: Any = 0) -> None: ...")
+            lines.append("    def linePoly(self, x: Any, y: Any, sides: Any, radius: Any, rotation: Any = 0) -> None: ...")
+            lines.append("    def triangle(self, x1: Any, y1: Any, x2: Any, y2: Any, x3: Any, y3: Any) -> None: ...")
+            lines.append("    def image(self, x: Any, y: Any, image: Any, size: Any = 32, rotation: Any = 0) -> None: ...")
+            lines.append("    def print(self, x: Any, y: Any, align: Any = 0) -> None: ...")
+            lines.append("    def translate(self, x: Any, y: Any) -> None: ...")
+            lines.append("    def scale(self, x: Any, y: Any) -> None: ...")
+            lines.append("    def rotate(self, degrees: Any) -> None: ...")
+            lines.append("    def reset(self) -> None: ...")
+            lines.append("    def flush(self, display: Any) -> None: ...")
+            lines.append("")
+            lines.append("draw: _DrawCallable")
+            lines.append("")
+            continue
+        if name == "ucontrol":
+            lines.append("class _UnitControlCallable:")
+            lines.append('    """Callable namespace object for Mindustry unit control operations.')
+            lines.append("")
+            lines.append("    Supports both legacy function-call syntax:")
+            lines.append('        ucontrol("move", x, y)')
+            lines.append("        ucontrol(UnitControl.MOVE, x, y)")
+            lines.append("    and modern namespace method syntax:")
+            lines.append("        ucontrol.move(x, y)")
+            lines.append("        ucontrol.approach(x, y, radius)")
+            lines.append("        ucontrol.mine(x, y)")
+            lines.append("        ucontrol.boost(True)")
+            lines.append("        ucontrol.idle()")
+            lines.append('    """')
+            lines.append("    def __call__(self, action: Union[UnitControl, str], p1: Any = 0, p2: Any = 0, p3: Any = 0, p4: Any = 0, p5: Any = 0) -> None: ...")
+            lines.append("    def idle(self) -> None: ...")
+            lines.append("    def stop(self) -> None: ...")
+            lines.append("    def move(self, x: Any, y: Any) -> None: ...")
+            lines.append("    def approach(self, x: Any, y: Any, radius: Any) -> None: ...")
+            lines.append("    def pathfind(self, x: Any, y: Any) -> None: ...")
+            lines.append("    def auto_pathfind(self) -> None: ...")
+            lines.append("    def autoPathfind(self) -> None: ...")
+            lines.append("    def boost(self, enable: Any) -> None: ...")
+            lines.append("    def target(self, x: Any, y: Any, shoot: Any) -> None: ...")
+            lines.append("    def targetp(self, unit: Any, shoot: Any) -> None: ...")
+            lines.append("    def item_drop(self, to: Any, amount: Any) -> None: ...")
+            lines.append("    def itemDrop(self, to: Any, amount: Any) -> None: ...")
+            lines.append("    def item_take(self, from_: Any, item: Any, amount: Any) -> None: ...")
+            lines.append("    def itemTake(self, from_: Any, item: Any, amount: Any) -> None: ...")
+            lines.append("    def pay_drop(self) -> None: ...")
+            lines.append("    def payDrop(self) -> None: ...")
+            lines.append("    def pay_take(self, take_units: Any) -> None: ...")
+            lines.append("    def payTake(self, take_units: Any) -> None: ...")
+            lines.append("    def pay_enter(self) -> None: ...")
+            lines.append("    def payEnter(self) -> None: ...")
+            lines.append("    def mine(self, x: Any, y: Any) -> None: ...")
+            lines.append("    def flag(self, value: Any) -> None: ...")
+            lines.append("    def build(self, x: Any, y: Any, block: Any, rotation: Any, config: Any) -> None: ...")
+            lines.append("    def deconstruct(self, x: Any, y: Any) -> None: ...")
+            lines.append("    def get_block(self, x: Any, y: Any, out_type: Any, out_building: Any, out_floor: Any) -> None: ...")
+            lines.append("    def getBlock(self, x: Any, y: Any, out_type: Any, out_building: Any, out_floor: Any) -> None: ...")
+            lines.append("    def within(self, x: Any, y: Any, radius: Any, out_result: Any) -> None: ...")
+            lines.append("    def unbind(self) -> None: ...")
+            lines.append("")
+            lines.append("ucontrol: _UnitControlCallable")
+            lines.append("unitControl: _UnitControlCallable")
+            lines.append("unit_control: _UnitControlCallable")
+            lines.append("")
+            continue
+        if name == "ulocate":
+            lines.append("class _UnitLocateCallable:")
+            lines.append('    """Callable namespace object for Mindustry unit locate operations.')
+            lines.append("")
+            lines.append("    Supports both legacy function-call syntax:")
+            lines.append('        ulocate("ore", "core", "true", "@copper", outX, outY, found, building)')
+            lines.append("    and modern namespace method syntax:")
+            lines.append('        ulocate.ore("@copper", outX, outY, found)')
+            lines.append('        ulocate.building("core", True, outX, outY, found, building)')
+            lines.append("        ulocate.spawn(outX, outY, found, building)")
+            lines.append("        ulocate.damaged(outX, outY, found, building)")
+            lines.append('    """')
+            lines.append("    def __call__(self, locate: Any, flag: Any, enemy: Any, ore: Any, out_x: Any, out_y: Any, out_found: Any, out_build: Any) -> None: ...")
+            lines.append("    def ore(self, ore: Any, out_x: Any, out_y: Any, out_found: Any, out_build: Any = 'building') -> None: ...")
+            lines.append("    def building(self, group: Any, enemy: Any, out_x: Any, out_y: Any, out_found: Any, out_building: Any) -> None: ...")
+            lines.append("    def spawn(self, out_x: Any, out_y: Any, out_found: Any, out_build: Any = 'building') -> None: ...")
+            lines.append("    def damaged(self, out_x: Any, out_y: Any, out_found: Any, out_building: Any) -> None: ...")
+            lines.append("")
+            lines.append("ulocate: _UnitLocateCallable")
+            lines.append("unitLocate: _UnitLocateCallable")
+            lines.append("unit_locate: _UnitLocateCallable")
+            lines.append("")
+            continue
+        if name == "op":
+            lines.append("class _OpCallable:")
+            lines.append('    """Callable namespace object for Mindustry logic operations.')
+            lines.append("")
+            lines.append("    Supports both legacy function-call syntax:")
+            lines.append('        op("add", dest, a, b)')
+            lines.append('        result = op("add", a, b)')
+            lines.append("    and modern namespace method syntax:")
+            lines.append("        result = op.add(a, b)")
+            lines.append("        op.add(dest, a, b)")
+            lines.append("        result = op.sin(deg)")
+            lines.append("        op.sin(dest, deg)")
+            lines.append('    """')
+            lines.append("    @overload")
+            lines.append("    def __call__(self, op_name: Union[LogicOp, str], dest: Any, a: Any, b: Any = 0) -> Any: ...")
+            lines.append("    @overload")
+            lines.append("    def __call__(self, op_name: Union[LogicOp, str], a: Any, b: Any = 0) -> Any: ...")
+            lines.append("    def __call__(self, op_name: Any, *args: Any) -> Any: ...")
+            lines.append("")
+            lines.append("    # Unary operations (15)")
+            for u in ("abs", "sign", "log", "log10", "floor", "ceil", "round", "sqrt", "rand", "sin", "cos", "tan", "asin", "acos", "atan"):
+                lines.append("    @overload")
+                lines.append(f"    def {u}(self, a: Any) -> Any: ...")
+                lines.append("    @overload")
+                lines.append(f"    def {u}(self, dest: Any, a: Any) -> Any: ...")
+                lines.append(f"    def {u}(self, *args: Any) -> Any: ...")
+            lines.append("    log_10 = log10")
+            lines.append("")
+            lines.append("    # Binary operations (27)")
+            for b in (
+                "add", "sub", "mul", "div", "idiv", "mod", "emod", "pow",
+                "equal", "not_equal", "notEqual", "land", "less_than", "lessThan",
+                "less_than_eq", "lessThanEq", "greater_than", "greaterThan",
+                "greater_than_eq", "greaterThanEq", "strict_equal", "strictEqual",
+                "shl", "shr", "ushr", "xor",
+                "max", "min", "angle", "angle_diff", "angleDiff", "len", "length",
+                "noise", "logn",
+            ):
+                lines.append("    @overload")
+                lines.append(f"    def {b}(self, a: Any, b: Any) -> Any: ...")
+                lines.append("    @overload")
+                lines.append(f"    def {b}(self, dest: Any, a: Any, b: Any) -> Any: ...")
+                lines.append(f"    def {b}(self, *args: Any) -> Any: ...")
+            lines.append("")
+            lines.append("op: _OpCallable")
+            lines.append("")
+            continue
         idef = INTRINSICS[name]
         if len(idef.signatures) > 1:
             for sig in idef.signatures:

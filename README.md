@@ -210,7 +210,7 @@ The project maintains a comprehensive automated test suite verifying both compil
 python3 -m unittest discover -s tests -p "test_*.py"
 ```
 
-- **729 Automated Tests**: 100% passing baseline across compiler, decompiler, registry, CFG, structuring, dataflow, function recovery, bitwise operators, min/max, for loops, memory arrays (int, float, bool), augmented assignment, constant folding, system clipboard, built-in variables (Vars API), Mindustry v8 modulo semantics, color packing/unpacking, printchar, format & f-strings, setrate, select & ternary expressions, comprehensive is/is not semantics (including JVM verification for 0 is not None, nested and/or, not, while, and elif chains), and source mapping.
+- **813 Automated Tests**: 100% passing baseline across compiler, decompiler, registry, CFG, structuring, dataflow, function recovery, bitwise operators, min/max, for loops, memory arrays (int, float, bool), Memory Bank Header Protocol (inter-processor communication layout), Callable Namespace Objects (`draw.<method>`, `ucontrol.<method>`, `ulocate.<method>`, `op.<method>` with both expression and statement forms), augmented assignment, constant folding, system clipboard, built-in variables (Vars API), Mindustry v8 modulo semantics, color packing/unpacking, printchar, format & f-strings, setrate, select & ternary expressions, comprehensive is/is not semantics (including JVM verification for 0 is not None, nested and/or, not, while, and elif chains), and source mapping.
 - **Real-World Test Corpus**: 32 representative programs across handwritten scripts, compiler-generated programs, control flow patterns, and pathological edge cases.
 - **Round-Trip Verification**: Guarantees that MLog → Decompiler → Compiler produces valid, identical instructions.
 

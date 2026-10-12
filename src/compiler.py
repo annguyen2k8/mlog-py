@@ -126,6 +126,61 @@ CMP_OP_INVERSE_MAP = {
     ast.IsNot: "strictEqual",
 }
 
+OP_METHOD_NAME_MAP = {
+    "abs": "abs",
+    "sign": "sign",
+    "log": "log",
+    "log10": "log10",
+    "log_10": "log10",
+    "floor": "floor",
+    "ceil": "ceil",
+    "round": "round",
+    "sqrt": "sqrt",
+    "rand": "rand",
+    "sin": "sin",
+    "cos": "cos",
+    "tan": "tan",
+    "asin": "asin",
+    "acos": "acos",
+    "atan": "atan",
+    "add": "add",
+    "sub": "sub",
+    "mul": "mul",
+    "div": "div",
+    "idiv": "idiv",
+    "mod": "mod",
+    "emod": "emod",
+    "pow": "pow",
+    "equal": "equal",
+    "not_equal": "notEqual",
+    "notEqual": "notEqual",
+    "land": "land",
+    "less_than": "lessThan",
+    "lessThan": "lessThan",
+    "less_than_eq": "lessThanEq",
+    "lessThanEq": "lessThanEq",
+    "greater_than": "greaterThan",
+    "greaterThan": "greaterThan",
+    "greater_than_eq": "greaterThanEq",
+    "greaterThanEq": "greaterThanEq",
+    "strict_equal": "strictEqual",
+    "strictEqual": "strictEqual",
+    "shl": "shl",
+    "shr": "shr",
+    "ushr": "ushr",
+    "xor": "xor",
+    "max": "max",
+    "min": "min",
+    "angle": "angle",
+    "angle_diff": "angleDiff",
+    "angleDiff": "angleDiff",
+    "len": "len",
+    "length": "len",
+    "noise": "noise",
+    "logn": "logn",
+}
+
+
 
 def _is_pure_expression(node: ast.AST) -> bool:
     """Return True if node is guaranteed to be pure (no side effects, no potential runtime errors like division by zero)."""
@@ -929,7 +984,25 @@ class Compiler:
     ) -> str:
         """Compile a compiler intrinsic function call."""
         loc = self.loc(call)
-        assert isinstance(call.func, ast.Name)
+        if isinstance(call.func, ast.Attribute):
+            if isinstance(call.func.value, ast.Name):
+                ns = call.func.value.id
+                if ns == "draw":
+                    return self.compile_draw_method(call, target_dest=target_dest, is_statement=is_statement)
+                elif ns in ("ucontrol", "unitControl", "unit_control"):
+                    return self.compile_ucontrol_method(call, target_dest=target_dest, is_statement=is_statement)
+                elif ns in ("ulocate", "unitLocate", "unit_locate"):
+                    return self.compile_ulocate_method(call, target_dest=target_dest, is_statement=is_statement)
+                elif ns == "op":
+                    return self.compile_op_method(call, target_dest=target_dest, is_statement=is_statement)
+            self.error(
+                f"unsupported method call on '{call.func.value.id if isinstance(call.func.value, ast.Name) else 'object'}'",
+                call,
+            )
+
+        if not isinstance(call.func, ast.Name):
+            self.error("unsupported function call expression", call)
+
         func_name = call.func.id
         args = call.args
 
@@ -1531,6 +1604,658 @@ class Compiler:
 
         else:
             self.error(f"unknown compiler intrinsic: '{func_name}'", call)
+
+    def compile_draw_method(
+        self,
+        call: ast.Call,
+        target_dest: Optional[str] = None,
+        is_statement: bool = False,
+    ) -> str:
+        """Compile draw.<method>(...) call into Mindustry 'draw' or 'drawflush' instruction."""
+        loc = self.loc(call)
+        assert isinstance(call.func, ast.Attribute)
+        method_name = call.func.attr
+        args = call.args
+
+        # Mindustry v160.7 Draw sub-commands mapping
+        if method_name == "clear":
+            if len(args) != 3 or call.keywords:
+                self.error("invalid arguments for draw.clear: expected draw.clear(r, g, b)", call)
+            r = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            g = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            b = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="draw", args=["clear", r, g, b, "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "color":
+            # color(r, g, b, a=255)
+            a_arg = None
+            pos_args = list(args)
+            for kw in call.keywords:
+                if kw.arg == "a":
+                    a_arg = kw.value
+                else:
+                    self.error(f"unexpected keyword argument '{kw.arg}' in draw.color", kw)
+            if len(pos_args) == 4 and a_arg is None:
+                a_arg = pos_args[3]
+                pos_args = pos_args[:3]
+            elif len(pos_args) == 3:
+                pass
+            else:
+                self.error("invalid arguments for draw.color: expected draw.color(r, g, b, [a=255])", call)
+            r = str(self.format_intrinsic_arg(pos_args[0], is_ident=False))
+            g = str(self.format_intrinsic_arg(pos_args[1], is_ident=False))
+            b = str(self.format_intrinsic_arg(pos_args[2], is_ident=False))
+            a = str(self.format_intrinsic_arg(a_arg, is_ident=False)) if a_arg is not None else "255"
+            self.instructions.append(
+                IRRaw(opcode="draw", args=["color", r, g, b, a, "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "col":
+            if len(args) != 1 or call.keywords:
+                self.error("invalid arguments for draw.col: expected draw.col(color)", call)
+            color = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="draw", args=["col", color, "0", "0", "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "stroke":
+            if len(args) != 1 or call.keywords:
+                self.error("invalid arguments for draw.stroke: expected draw.stroke(width)", call)
+            width = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="draw", args=["stroke", width, "0", "0", "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "line":
+            if len(args) != 4 or call.keywords:
+                self.error("invalid arguments for draw.line: expected draw.line(x1, y1, x2, y2)", call)
+            x1 = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            y1 = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            x2 = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            y2 = str(self.format_intrinsic_arg(args[3], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="draw", args=["line", x1, y1, x2, y2, "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "rect":
+            if len(args) != 4 or call.keywords:
+                self.error("invalid arguments for draw.rect: expected draw.rect(x, y, width, height)", call)
+            x = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            w = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            h = str(self.format_intrinsic_arg(args[3], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="draw", args=["rect", x, y, w, h, "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name in ("line_rect", "lineRect"):
+            if len(args) != 4 or call.keywords:
+                self.error(f"invalid arguments for draw.{method_name}: expected draw.{method_name}(x, y, width, height)", call)
+            x = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            w = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            h = str(self.format_intrinsic_arg(args[3], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="draw", args=["lineRect", x, y, w, h, "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "poly":
+            rot_arg = None
+            pos_args = list(args)
+            for kw in call.keywords:
+                if kw.arg == "rotation":
+                    rot_arg = kw.value
+                else:
+                    self.error(f"unexpected keyword argument '{kw.arg}' in draw.poly", kw)
+            if len(pos_args) == 5 and rot_arg is None:
+                rot_arg = pos_args[4]
+                pos_args = pos_args[:4]
+            elif len(pos_args) == 4:
+                pass
+            else:
+                self.error("invalid arguments for draw.poly: expected draw.poly(x, y, sides, radius, [rotation=0])", call)
+            x = str(self.format_intrinsic_arg(pos_args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(pos_args[1], is_ident=False))
+            sides = str(self.format_intrinsic_arg(pos_args[2], is_ident=False))
+            radius = str(self.format_intrinsic_arg(pos_args[3], is_ident=False))
+            rot = str(self.format_intrinsic_arg(rot_arg, is_ident=False)) if rot_arg is not None else "0"
+            self.instructions.append(
+                IRRaw(opcode="draw", args=["poly", x, y, sides, radius, rot, "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name in ("line_poly", "linePoly"):
+            rot_arg = None
+            pos_args = list(args)
+            for kw in call.keywords:
+                if kw.arg == "rotation":
+                    rot_arg = kw.value
+                else:
+                    self.error(f"unexpected keyword argument '{kw.arg}' in draw.{method_name}", kw)
+            if len(pos_args) == 5 and rot_arg is None:
+                rot_arg = pos_args[4]
+                pos_args = pos_args[:4]
+            elif len(pos_args) == 4:
+                pass
+            else:
+                self.error(f"invalid arguments for draw.{method_name}: expected draw.{method_name}(x, y, sides, radius, [rotation=0])", call)
+            x = str(self.format_intrinsic_arg(pos_args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(pos_args[1], is_ident=False))
+            sides = str(self.format_intrinsic_arg(pos_args[2], is_ident=False))
+            radius = str(self.format_intrinsic_arg(pos_args[3], is_ident=False))
+            rot = str(self.format_intrinsic_arg(rot_arg, is_ident=False)) if rot_arg is not None else "0"
+            self.instructions.append(
+                IRRaw(opcode="draw", args=["linePoly", x, y, sides, radius, rot, "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "triangle":
+            if len(args) != 6 or call.keywords:
+                self.error("invalid arguments for draw.triangle: expected draw.triangle(x1, y1, x2, y2, x3, y3)", call)
+            x1 = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            y1 = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            x2 = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            y2 = str(self.format_intrinsic_arg(args[3], is_ident=False))
+            x3 = str(self.format_intrinsic_arg(args[4], is_ident=False))
+            y3 = str(self.format_intrinsic_arg(args[5], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="draw", args=["triangle", x1, y1, x2, y2, x3, y3], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "image":
+            size_arg = None
+            rot_arg = None
+            pos_args = list(args)
+            for kw in call.keywords:
+                if kw.arg == "size":
+                    size_arg = kw.value
+                elif kw.arg == "rotation":
+                    rot_arg = kw.value
+                else:
+                    self.error(f"unexpected keyword argument '{kw.arg}' in draw.image", kw)
+            if len(pos_args) == 5 and size_arg is None and rot_arg is None:
+                size_arg = pos_args[3]
+                rot_arg = pos_args[4]
+                pos_args = pos_args[:3]
+            elif len(pos_args) == 4 and size_arg is None:
+                size_arg = pos_args[3]
+                pos_args = pos_args[:3]
+            elif len(pos_args) == 3:
+                pass
+            else:
+                self.error("invalid arguments for draw.image: expected draw.image(x, y, image, [size=32], [rotation=0])", call)
+            x = str(self.format_intrinsic_arg(pos_args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(pos_args[1], is_ident=False))
+            img = str(self.format_intrinsic_arg(pos_args[2], is_ident=True))
+            size = str(self.format_intrinsic_arg(size_arg, is_ident=False)) if size_arg is not None else "32"
+            rot = str(self.format_intrinsic_arg(rot_arg, is_ident=False)) if rot_arg is not None else "0"
+            self.instructions.append(
+                IRRaw(opcode="draw", args=["image", x, y, img, size, rot, "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "print":
+            align_arg = None
+            pos_args = list(args)
+            for kw in call.keywords:
+                if kw.arg == "align":
+                    align_arg = kw.value
+                else:
+                    self.error(f"unexpected keyword argument '{kw.arg}' in draw.print", kw)
+            if len(pos_args) == 3 and align_arg is None:
+                align_arg = pos_args[2]
+                pos_args = pos_args[:2]
+            elif len(pos_args) == 2:
+                pass
+            else:
+                self.error("invalid arguments for draw.print: expected draw.print(x, y, [align=0])", call)
+            x = str(self.format_intrinsic_arg(pos_args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(pos_args[1], is_ident=False))
+            align = str(self.format_intrinsic_arg(align_arg, is_ident=False)) if align_arg is not None else "0"
+            self.instructions.append(
+                IRRaw(opcode="draw", args=["print", x, y, align, "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "translate":
+            if len(args) != 2 or call.keywords:
+                self.error("invalid arguments for draw.translate: expected draw.translate(x, y)", call)
+            x = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="draw", args=["translate", x, y, "0", "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "scale":
+            if len(args) != 2 or call.keywords:
+                self.error("invalid arguments for draw.scale: expected draw.scale(x, y)", call)
+            x = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="draw", args=["scale", x, y, "0", "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "rotate":
+            if len(args) != 1 or call.keywords:
+                self.error("invalid arguments for draw.rotate: expected draw.rotate(degrees)", call)
+            deg = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="draw", args=["rotate", "0", "0", deg, "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "reset":
+            if len(args) != 0 or call.keywords:
+                self.error("invalid arguments for draw.reset: expected draw.reset()", call)
+            self.instructions.append(
+                IRRaw(opcode="draw", args=["reset", "0", "0", "0", "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "flush":
+            if len(args) != 1 or call.keywords:
+                self.error("invalid arguments for draw.flush: expected draw.flush(display)", call)
+            target = str(self.format_intrinsic_arg(args[0], is_ident=True))
+            self.instructions.append(
+                IRRaw(opcode="drawflush", args=[target], loc=loc)
+            )
+            return "0"
+
+        else:
+            self.error(f"unknown draw method: 'draw.{method_name}'", call)
+
+    def compile_ucontrol_method(
+        self,
+        call: ast.Call,
+        target_dest: Optional[str] = None,
+        is_statement: bool = False,
+    ) -> str:
+        """Compile ucontrol.<method>(...) call into Mindustry 'ucontrol' instruction."""
+        loc = self.loc(call)
+        assert isinstance(call.func, ast.Attribute)
+        method_name = call.func.attr
+        args = call.args
+        ns = call.func.value.id if isinstance(call.func.value, ast.Name) else "ucontrol"
+
+        # Mindustry v160.7 UnitControl mapping
+        if method_name in ("idle", "stop"):
+            if len(args) != 0 or call.keywords:
+                self.error(f"invalid arguments for {ns}.{method_name}: expected {ns}.{method_name}()", call)
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=[method_name, "0", "0", "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "move":
+            if len(args) != 2 or call.keywords:
+                self.error(f"invalid arguments for {ns}.move: expected {ns}.move(x, y)", call)
+            x = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["move", x, y, "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "approach":
+            if len(args) != 3 or call.keywords:
+                self.error(f"invalid arguments for {ns}.approach: expected {ns}.approach(x, y, radius)", call)
+            x = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            r = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["approach", x, y, r, "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "pathfind":
+            if len(args) != 2 or call.keywords:
+                self.error(f"invalid arguments for {ns}.pathfind: expected {ns}.pathfind(x, y)", call)
+            x = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["pathfind", x, y, "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name in ("auto_pathfind", "autoPathfind"):
+            if len(args) != 0 or call.keywords:
+                self.error(f"invalid arguments for {ns}.{method_name}: expected {ns}.{method_name}()", call)
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["autoPathfind", "0", "0", "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "boost":
+            if len(args) != 1 or call.keywords:
+                self.error(f"invalid arguments for {ns}.boost: expected {ns}.boost(enable)", call)
+            enable = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["boost", enable, "0", "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "target":
+            if len(args) != 3 or call.keywords:
+                self.error(f"invalid arguments for {ns}.target: expected {ns}.target(x, y, shoot)", call)
+            x = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            shoot = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["target", x, y, shoot, "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "targetp":
+            if len(args) != 2 or call.keywords:
+                self.error(f"invalid arguments for {ns}.targetp: expected {ns}.targetp(unit, shoot)", call)
+            unit = str(self.format_intrinsic_arg(args[0], is_ident=True))
+            shoot = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["targetp", unit, shoot, "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name in ("item_drop", "itemDrop"):
+            if len(args) != 2 or call.keywords:
+                self.error(f"invalid arguments for {ns}.{method_name}: expected {ns}.{method_name}(to, amount)", call)
+            to = str(self.format_intrinsic_arg(args[0], is_ident=True))
+            amount = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["itemDrop", to, amount, "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name in ("item_take", "itemTake"):
+            if len(args) != 3 or call.keywords:
+                self.error(f"invalid arguments for {ns}.{method_name}: expected {ns}.{method_name}(from_, item, amount)", call)
+            from_ = str(self.format_intrinsic_arg(args[0], is_ident=True))
+            item = str(self.format_intrinsic_arg(args[1], is_ident=True))
+            amount = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["itemTake", from_, item, amount, "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name in ("pay_drop", "payDrop"):
+            if len(args) != 0 or call.keywords:
+                self.error(f"invalid arguments for {ns}.{method_name}: expected {ns}.{method_name}()", call)
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["payDrop", "0", "0", "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name in ("pay_take", "payTake"):
+            if len(args) != 1 or call.keywords:
+                self.error(f"invalid arguments for {ns}.{method_name}: expected {ns}.{method_name}(take_units)", call)
+            take_units = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["payTake", take_units, "0", "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name in ("pay_enter", "payEnter"):
+            if len(args) != 0 or call.keywords:
+                self.error(f"invalid arguments for {ns}.{method_name}: expected {ns}.{method_name}()", call)
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["payEnter", "0", "0", "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "mine":
+            if len(args) != 2 or call.keywords:
+                self.error(f"invalid arguments for {ns}.mine: expected {ns}.mine(x, y)", call)
+            x = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["mine", x, y, "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "flag":
+            if len(args) != 1 or call.keywords:
+                self.error(f"invalid arguments for {ns}.flag: expected {ns}.flag(value)", call)
+            val = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["flag", val, "0", "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "build":
+            if len(args) != 5 or call.keywords:
+                self.error(f"invalid arguments for {ns}.build: expected {ns}.build(x, y, block, rotation, config)", call)
+            x = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            block = str(self.format_intrinsic_arg(args[2], is_ident=True))
+            rot = str(self.format_intrinsic_arg(args[3], is_ident=False))
+            config = str(self.format_intrinsic_arg(args[4], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["build", x, y, block, rot, config], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "deconstruct":
+            if len(args) != 2 or call.keywords:
+                self.error(f"invalid arguments for {ns}.deconstruct: expected {ns}.deconstruct(x, y)", call)
+            x = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["deconstruct", x, y, "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name in ("get_block", "getBlock"):
+            if len(args) != 5 or call.keywords:
+                self.error(f"invalid arguments for {ns}.{method_name}: expected {ns}.{method_name}(x, y, out_type, out_building, out_floor)", call)
+            x = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            out_t = str(self.format_intrinsic_arg(args[2], is_ident=True))
+            out_b = str(self.format_intrinsic_arg(args[3], is_ident=True))
+            out_f = str(self.format_intrinsic_arg(args[4], is_ident=True))
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["getBlock", x, y, out_t, out_b, out_f], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "within":
+            if len(args) != 4 or call.keywords:
+                self.error(f"invalid arguments for {ns}.within: expected {ns}.within(x, y, radius, out_result)", call)
+            x = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            r = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            out_res = str(self.format_intrinsic_arg(args[3], is_ident=True))
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["within", x, y, r, out_res, "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "unbind":
+            if len(args) != 0 or call.keywords:
+                self.error(f"invalid arguments for {ns}.unbind: expected {ns}.unbind()", call)
+            self.instructions.append(
+                IRRaw(opcode="ucontrol", args=["unbind", "0", "0", "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        else:
+            self.error(f"unknown ucontrol method: '{ns}.{method_name}'", call)
+
+    def compile_ulocate_method(
+        self,
+        call: ast.Call,
+        target_dest: Optional[str] = None,
+        is_statement: bool = False,
+    ) -> str:
+        """Compile ulocate.<method>(...) call into Mindustry 'ulocate' instruction."""
+        loc = self.loc(call)
+        assert isinstance(call.func, ast.Attribute)
+        method_name = call.func.attr
+        args = call.args
+        ns = call.func.value.id if isinstance(call.func.value, ast.Name) else "ulocate"
+
+        # Mindustry v160.7 UnitLocate mapping
+        if method_name == "ore":
+            if len(args) == 4 and not call.keywords:
+                ore = str(self.format_intrinsic_arg(args[0], is_ident=True))
+                out_x = str(self.format_intrinsic_arg(args[1], is_ident=True))
+                out_y = str(self.format_intrinsic_arg(args[2], is_ident=True))
+                out_found = str(self.format_intrinsic_arg(args[3], is_ident=True))
+                out_build = "building"
+            elif len(args) == 5 and not call.keywords:
+                ore = str(self.format_intrinsic_arg(args[0], is_ident=True))
+                out_x = str(self.format_intrinsic_arg(args[1], is_ident=True))
+                out_y = str(self.format_intrinsic_arg(args[2], is_ident=True))
+                out_found = str(self.format_intrinsic_arg(args[3], is_ident=True))
+                out_build = str(self.format_intrinsic_arg(args[4], is_ident=True))
+            else:
+                self.error(f"invalid arguments for {ns}.ore: expected {ns}.ore(ore, out_x, out_y, out_found, [out_build])", call)
+            self.instructions.append(
+                IRRaw(opcode="ulocate", args=["ore", "core", "true", ore, out_x, out_y, out_found, out_build], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "building":
+            if len(args) != 6 or call.keywords:
+                self.error(f"invalid arguments for {ns}.building: expected {ns}.building(group, enemy, out_x, out_y, out_found, out_building)", call)
+            group = str(self.format_intrinsic_arg(args[0], is_ident=True))
+            enemy = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            out_x = str(self.format_intrinsic_arg(args[2], is_ident=True))
+            out_y = str(self.format_intrinsic_arg(args[3], is_ident=True))
+            out_found = str(self.format_intrinsic_arg(args[4], is_ident=True))
+            out_build = str(self.format_intrinsic_arg(args[5], is_ident=True))
+            self.instructions.append(
+                IRRaw(opcode="ulocate", args=["building", group, enemy, "@copper", out_x, out_y, out_found, out_build], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "spawn":
+            if len(args) == 3 and not call.keywords:
+                out_x = str(self.format_intrinsic_arg(args[0], is_ident=True))
+                out_y = str(self.format_intrinsic_arg(args[1], is_ident=True))
+                out_found = str(self.format_intrinsic_arg(args[2], is_ident=True))
+                out_build = "building"
+            elif len(args) == 4 and not call.keywords:
+                out_x = str(self.format_intrinsic_arg(args[0], is_ident=True))
+                out_y = str(self.format_intrinsic_arg(args[1], is_ident=True))
+                out_found = str(self.format_intrinsic_arg(args[2], is_ident=True))
+                out_build = str(self.format_intrinsic_arg(args[3], is_ident=True))
+            else:
+                self.error(f"invalid arguments for {ns}.spawn: expected {ns}.spawn(out_x, out_y, out_found, [out_build])", call)
+            self.instructions.append(
+                IRRaw(opcode="ulocate", args=["spawn", "core", "true", "@copper", out_x, out_y, out_found, out_build], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "damaged":
+            if len(args) != 4 or call.keywords:
+                self.error(f"invalid arguments for {ns}.damaged: expected {ns}.damaged(out_x, out_y, out_found, out_building)", call)
+            out_x = str(self.format_intrinsic_arg(args[0], is_ident=True))
+            out_y = str(self.format_intrinsic_arg(args[1], is_ident=True))
+            out_found = str(self.format_intrinsic_arg(args[2], is_ident=True))
+            out_build = str(self.format_intrinsic_arg(args[3], is_ident=True))
+            self.instructions.append(
+                IRRaw(opcode="ulocate", args=["damaged", "core", "true", "@copper", out_x, out_y, out_found, out_build], loc=loc)
+            )
+            return "0"
+
+        else:
+            self.error(f"unknown ulocate method: '{ns}.{method_name}'", call)
+
+    def compile_op_method(
+        self,
+        call: ast.Call,
+        target_dest: Optional[str] = None,
+        is_statement: bool = False,
+    ) -> str:
+        """Compile op.<method>(...) call into Mindustry 'op' instruction."""
+        loc = self.loc(call)
+        assert isinstance(call.func, ast.Attribute)
+        method_name = call.func.attr
+        args = call.args
+
+        if call.keywords:
+            self.error(f"keyword arguments are not supported in op.{method_name}()", call)
+
+        op_name = OP_METHOD_NAME_MAP.get(method_name)
+        if op_name is None:
+            self.error(f"unknown op method: 'op.{method_name}'", call)
+
+        is_unary = REG_LOGIC_OPS.is_unary(op_name)
+
+        if is_unary:
+            if len(args) == 2:
+                # Statement form: op.<method>(dest, a)
+                dest = str(self.format_intrinsic_arg(args[0], is_ident=True))
+                a = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                self.instructions.append(
+                    IROp(op=op_name, dest=dest, a=a, b="0", loc=loc)
+                )
+                if target_dest is not None and target_dest != dest:
+                    self.instructions.append(IRSet(to=target_dest, from_=dest, loc=loc))
+                    return target_dest
+                return dest
+            elif len(args) == 1:
+                # Expression form: dest = op.<method>(a)
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                a = str(self.format_intrinsic_arg(args[0], is_ident=False))
+                self.instructions.append(
+                    IROp(op=op_name, dest=dest, a=a, b="0", loc=loc)
+                )
+                return dest
+            elif len(args) == 0:
+                self.error(
+                    f"unary operation 'op.{method_name}' requires 1 operand (expression form: op.{method_name}(a)) or 2 arguments (statement form: op.{method_name}(dest, a)), got 0",
+                    call,
+                )
+            else:
+                self.error(
+                    f"unary operation 'op.{method_name}' takes at most 2 arguments (dest, a), got {len(args)}",
+                    call,
+                )
+        else:
+            # Binary operation
+            if len(args) == 3:
+                # Statement form: op.<method>(dest, a, b)
+                dest = str(self.format_intrinsic_arg(args[0], is_ident=True))
+                a = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                b = str(self.format_intrinsic_arg(args[2], is_ident=False))
+                self.instructions.append(
+                    IROp(op=op_name, dest=dest, a=a, b=b, loc=loc)
+                )
+                if target_dest is not None and target_dest != dest:
+                    self.instructions.append(IRSet(to=target_dest, from_=dest, loc=loc))
+                    return target_dest
+                return dest
+            elif len(args) == 2:
+                # Expression form: dest = op.<method>(a, b)
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                a = str(self.format_intrinsic_arg(args[0], is_ident=False))
+                b = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                self.instructions.append(
+                    IROp(op=op_name, dest=dest, a=a, b=b, loc=loc)
+                )
+                return dest
+            elif len(args) < 2:
+                self.error(
+                    f"binary operation 'op.{method_name}' requires 2 operands (expression form: op.{method_name}(a, b)) or 3 arguments (statement form: op.{method_name}(dest, a, b)), got {len(args)}",
+                    call,
+                )
+            else:
+                self.error(
+                    f"binary operation 'op.{method_name}' takes at most 3 arguments (dest, a, b), got {len(args)}",
+                    call,
+                )
 
     def compile_fstring_print(self, node: ast.JoinedStr, loc: SourceLocation) -> str:
         """Compile a print(f"...") f-string call into MLog print and format opcodes."""

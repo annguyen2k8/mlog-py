@@ -85,6 +85,79 @@ arr_bool[0] = True
   - When `base_offset == 0`, dynamic index reads/writes directly reference the index operand without an extra addition instruction.
   - When `base_offset > 0`, the compiler emits `op add __tmp index base_offset` before `read`/`write`.
 
+#### Shared Memory Protocol & Header Pattern (Inter-Processor Communication)
+
+To safely store metadata/scalar variables alongside contiguous data on a shared Memory Bank (512 slots) or Memory Cell (64 slots), follow the **Header Protocol** pattern.
+
+##### 1. Layout Convention
+- **Header Slots `0..2`**: Reserved for 3 scalar variables (e.g. status flag, record count, timestamp/checksum).
+- **Data Slots `3..511`**: Allocated contiguously for the main data array (up to 509 elements on a Memory Bank, or 61 elements on a Memory Cell).
+
+```text
+Memory Bank Slot Layout:
+[0]         [1]        [2]         │ [3]      [4]     ...    [N+2]   │ [N+3 ... 511]
+┌───────────┬──────────┬───────────┼──────────┬───────┬──────┬───────┼───────────────┐
+│ scalar_0  │ scalar_1 │ scalar_2  │ data[0]  │data[1]│ ...  │data[N]│   Available   │
+└───────────┴──────────┴───────────┴──────────┴───────┴──────┴───────┴───────────────┘
+▲                                  ▲
+└── Base Offset = 0                └── Base Offset = 3 (Data Array)
+```
+
+##### 2. Idiomatic Implementation in `mlog-py`
+
+```python
+from mlog import Array
+
+# Header Block (Slots 0..2): 3 scalar variables
+header = Array("bank1", size=3, dtype="float")
+
+# Data Block (Slots 3..511): Data array (max 509 elements)
+data = Array("bank1", size=509, dtype="float")
+
+# Writing / reading scalars
+header[0] = 1.0     # Status flag (0 = writing, 1 = ready)
+header[1] = 100.0   # Payload item count
+header[2] = 999.0   # Checksum / heartbeat
+
+# Writing / reading data array
+data[0] = 42.0      # Compiles to: write 42.0 bank1 3
+data[i] = val       # Compiles to: op add __tmp i 3 -> write val bank1 __tmp
+```
+
+Alternatively, 3 separate 1-element arrays can be declared:
+```python
+status = Array("bank1", size=1, dtype="float")  # Slot 0
+count  = Array("bank1", size=1, dtype="float")  # Slot 1
+seq    = Array("bank1", size=1, dtype="float")  # Slot 2
+data   = Array("bank1", size=509, dtype="float") # Slots 3..511
+```
+
+##### 3. Capacity Enforcement & Overflow Prevention
+- Memory Bank capacity is strictly 512 slots (`0..511`).
+- The static allocator tracks the cumulative offset: `3 (header) + 509 (data) = 512` slots.
+- Requesting `size > 509` (e.g. `Array("bank1", size=510)`) triggers a compile-time error:
+  `CompileError: out of memory on block 'bank1': requested 510 slots (starting at offset 3), but capacity is 512 (available: 509)`.
+- Multiple arrays allocated after the header are packed contiguously without overlapping (`header` at offset 0, `arr1` at offset 3, `arr2` at offset $3 + \text{size}_1$, etc.).
+
+##### 4. Inter-Processor Protocol (Reading from External Processors)
+When another Mindustry logic processor reads from the shared `bank1`:
+```mlog
+# 1. Read header scalars from slots 0, 1, 2
+read ready_flag bank1 0
+read data_count bank1 1
+read heartbeat  bank1 2
+
+# 2. Read element i of data array (offset 3)
+op add addr i 3
+read item bank1 addr
+```
+
+> [!WARNING]
+> **Low-Level `read` / `write` vs Allocator Protection**:
+> The low-level intrinsics `write(val, block, addr)` and `read(dest, block, addr)` emit raw Mindustry memory instructions and **bypass `MemoryBlockAllocator` entirely**.
+> - Calling `write(x, "bank1", 0)` without declaring a header `Array` will silently collide with any `Array` that starts at offset 0.
+> - The allocator only tracks and protects memory regions declared via `Array(...)`. Always declare memory regions with `Array` to ensure compile-time collision prevention and capacity bounds checking.
+
 ### Augmented Assignment & Single-Evaluation Semantics
 
 The compiler fully supports in-place augmented assignments on scalar variables and array elements:
@@ -313,6 +386,134 @@ draw("color", packcolor(1, 0, 0, 1))
 
 # Unpack a packed double color into 4 destination variables
 unpackcolor(r, g, b, a, col)                  # Emits: unpackcolor r g b a col
+```
+
+### Draw API & Callable Namespace Object (`draw.<method>`)
+
+The compiler implements a **Callable Namespace Object** pattern for logic display rendering. The `draw` symbol is both directly callable (backward compatible) and an object with typed sub-command methods:
+
+```python
+from mlog import draw
+
+# 1. Modern method syntax with IDE autocomplete
+draw.clear(0, 0, 0)                          # Emits: draw clear 0 0 0 0 0 0
+draw.color(255, 128, 0)                      # Emits: draw color 255 128 0 255 0 0 (default alpha=255)
+draw.color(255, 128, 0, a=128)               # Emits: draw color 255 128 0 128 0 0
+draw.stroke(2)                               # Emits: draw stroke 2 0 0 0 0
+draw.line(0, 0, 80, 80)                      # Emits: draw line 0 0 80 80 0 0
+draw.rect(10, 10, 40, 40)                    # Emits: draw rect 10 10 40 40 0 0
+draw.line_rect(10, 10, 40, 40)               # Emits: draw lineRect 10 10 40 40 0 0 (alias: lineRect)
+draw.poly(40, 40, 6, 15)                     # Emits: draw poly 40 40 6 15 0 0 (default rotation=0)
+draw.poly(40, 40, 6, 15, rotation=45)        # Emits: draw poly 40 40 6 15 45 0
+draw.triangle(0, 0, 20, 40, 40, 0)           # Emits: draw triangle 0 0 20 40 40 0
+draw.image(50, 50, "@copper", size=32)       # Emits: draw image 50 50 @copper 32 0 0
+draw.print(10, 20, align=0)                  # Emits: draw print 10 20 0 0 0 0
+draw.translate(5, 10)                        # Emits: draw translate 5 10 0 0 0 0
+draw.scale(2, 2)                             # Emits: draw scale 2 2 0 0 0 0
+draw.rotate(45)                              # Emits: draw rotate 0 0 45 0 0 0 (Mindustry v160.7 p1 mapping)
+draw.reset()                                 # Emits: draw reset 0 0 0 0 0 0
+draw.flush("display1")                       # Emits: drawflush display1 (convenience method)
+
+# 2. Legacy function-call syntax (100% backward compatible)
+draw("clear", 0, 0, 0)
+draw("line", 0, 0, 80, 80)
+```
+
+#### Mindustry v160.7 Draw Command Mapping Reference
+
+| Method | Parameters & Defaults | Emitted MLog Opcode | Notes |
+| :--- | :--- | :--- | :--- |
+| `draw.clear(r, g, b)` | `r, g, b` | `draw clear r g b 0 0 0` | Clears canvas |
+| `draw.color(r, g, b, a=255)` | `r, g, b, [a=255]` | `draw color r g b a 0 0` | RGBA color (0..255) |
+| `draw.col(color)` | `color` | `draw col color 0 0 0 0` | Packed color number |
+| `draw.stroke(width)` | `width` | `draw stroke width 0 0 0 0` | Stroke line width |
+| `draw.line(x1, y1, x2, y2)` | `x1, y1, x2, y2` | `draw line x1 y1 x2 y2 0 0` | Line segment |
+| `draw.rect(x, y, w, h)` | `x, y, width, height` | `draw rect x y w h 0 0` | Filled rectangle |
+| `draw.line_rect(...)` / `lineRect(...)` | `x, y, width, height` | `draw lineRect x y w h 0 0` | Outlined rectangle |
+| `draw.poly(x, y, sides, r, rot=0)` | `x, y, sides, radius, [rot=0]` | `draw poly x y sides r rot 0` | Regular polygon |
+| `draw.line_poly(...)` / `linePoly(...)` | `x, y, sides, radius, [rot=0]` | `draw linePoly x y sides r rot 0` | Outlined polygon |
+| `draw.triangle(x1, y1, x2, y2, x3, y3)` | 6 vertex coords | `draw triangle x1 y1 x2 y2 x3 y3` | Filled triangle |
+| `draw.image(x, y, img, size=32, rot=0)` | `x, y, image, [size=32], [rot=0]` | `draw image x y img size rot 0` | Content icon |
+| `draw.print(x, y, align=0)` | `x, y, [align=0]` | `draw print x y align 0 0 0` | Draw print buffer text |
+| `draw.translate(x, y)` | `x, y` | `draw translate x y 0 0 0 0` | Transform translate |
+| `draw.scale(x, y)` | `x, y` | `draw scale x y 0 0 0 0` | Transform scale |
+| `draw.rotate(degrees)` | `degrees` | `draw rotate 0 0 deg 0 0 0` | **Angle mapped to `p1`**, `x=0, y=0` |
+| `draw.reset()` | (no args) | `draw reset 0 0 0 0 0 0` | Reset transforms |
+| `draw.flush(display)` | `display` | `drawflush display` | Convenience alias for `drawflush` |
+
+### Unit Control & Unit Locate Callable Namespace Objects (`ucontrol`, `ulocate`)
+
+Similar to the Draw API, `ucontrol` and `ulocate` provide **Callable Namespace Objects** that maintain 100% backward compatibility with legacy positional calls while offering fully typed, autocompleted methods with automatic dummy argument injection:
+
+```python
+from mlog import ucontrol, ulocate
+
+# 1. Unit Control (ucontrol / unitControl / unit_control)
+ucontrol.move(10, 20)                        # Emits: ucontrol move 10 20 0 0 0
+ucontrol.approach(15, 25, 4)                 # Emits: ucontrol approach 15 25 4 0 0
+ucontrol.pathfind(30, 40)                    # Emits: ucontrol pathfind 30 40 0 0 0
+ucontrol.auto_pathfind()                     # Emits: ucontrol autoPathfind 0 0 0 0 0 (alias: autoPathfind)
+ucontrol.boost(True)                         # Emits: ucontrol boost true 0 0 0 0
+ucontrol.target(50, 60, 1)                   # Emits: ucontrol target 50 60 1 0 0
+ucontrol.targetp(enemy, 1)                   # Emits: ucontrol targetp enemy 1 0 0 0
+ucontrol.item_drop(core, 50)                 # Emits: ucontrol itemDrop core 50 0 0 0 (alias: itemDrop)
+ucontrol.item_take(core, "@copper", 30)      # Emits: ucontrol itemTake core @copper 30 0 0 (alias: itemTake)
+ucontrol.pay_drop()                          # Emits: ucontrol payDrop 0 0 0 0 0 (alias: payDrop)
+ucontrol.pay_take(1)                         # Emits: ucontrol payTake 1 0 0 0 0 (alias: payTake)
+ucontrol.pay_enter()                         # Emits: ucontrol payEnter 0 0 0 0 0 (alias: payEnter)
+ucontrol.mine(12, 34)                        # Emits: ucontrol mine 12 34 0 0 0
+ucontrol.flag(999)                           # Emits: ucontrol flag 999 0 0 0 0
+ucontrol.build(10, 20, "@router", 0, 0)      # Emits: ucontrol build 10 20 @router 0 0
+ucontrol.deconstruct(10, 20)                 # Emits: ucontrol deconstruct 10 20 0 0 0
+ucontrol.get_block(10, 20, t, b, f)          # Emits: ucontrol getBlock 10 20 t b f (alias: getBlock)
+ucontrol.within(10, 20, 5, res)              # Emits: ucontrol within 10 20 5 res 0
+ucontrol.idle()                              # Emits: ucontrol idle 0 0 0 0 0
+ucontrol.stop()                              # Emits: ucontrol stop 0 0 0 0 0
+ucontrol.unbind()                            # Emits: ucontrol unbind 0 0 0 0 0
+
+# 2. Unit Locate (ulocate / unitLocate / unit_locate)
+# Injects Mindustry dummy operands automatically (e.g. 'core', 'true', '@copper', 'building')
+ulocate.ore("@copper", outX, outY, found)    # Emits: ulocate ore core true @copper outX outY found building
+ulocate.building("core", True, outX, outY, found, b) # Emits: ulocate building core true @copper outX outY found b
+ulocate.spawn(outX, outY, found)             # Emits: ulocate spawn core true @copper outX outY found building
+ulocate.damaged(outX, outY, found, b)        # Emits: ulocate damaged core true @copper outX outY found b
+```
+
+### Operation Callable Namespace Object (`op.<method>`)
+
+The compiler implements a **Callable Namespace Object** pattern for Mindustry operations (`op`). The `op` symbol is both callable as a legacy function (supporting all 45 Mindustry v160.7 logic operations) and equipped with methods corresponding to 42 operations (excluding Python keywords `not`, `and`, `or` which remain fully supported via legacy `op(...)` and Python infix operators):
+
+```python
+from mlog import op
+
+# 1. Binary Operations - Expression & Statement Forms
+sum_val = op.add(a, b)                       # Emits: op add sum_val a b
+op.add(dest_var, a, b)                       # Emits: op add dest_var a b
+rem = op.mod(a, b)                           # Emits: op mod rem a b (C/Java truncated)
+erem = op.emod(a, b)                         # Emits: op emod erem a b (Euclidean modulo)
+
+# 2. Unary Operations - Expression & Statement Forms
+s = op.sin(deg)                              # Emits: op sin s deg 0
+op.sin(dest_sin, deg)                        # Emits: op sin dest_sin deg 0
+r = op.rand(100)                             # Emits: op rand r 100 0
+fl = op.floor(val)                           # Emits: op floor fl val 0
+
+# 3. Naming Aliases (snake_case and camelCase)
+diff = op.angle_diff(a1, a2)                 # Emits: op angleDiff diff a1 a2 (alias: angleDiff)
+hypot = op.len(dx, dy)                       # Emits: op len hypot dx dy (alias: length)
+l10 = op.log_10(val)                         # Emits: op log10 l10 val 0 (alias: log10)
+neq = op.not_equal(a, b)                     # Emits: op notEqual neq a b (alias: notEqual)
+lte = op.less_than_eq(a, b)                  # Emits: op lessThanEq lte a b (alias: lessThanEq)
+
+# 4. Seamless Interplay with Infix Expressions
+res = op.add(a, b) * 2 + op.sin(deg)         # Automatically allocates temps for subexpressions
+
+# 5. Legacy Function-Call Backward Compatibility (100% Preserved, All 45 Ops)
+legacy1 = op("add", a, b)                    # Emits: op add legacy1 a b
+op("sin", out_sin, deg)                      # Emits: op sin out_sin deg 0
+op("not", out_not, flag)                     # Emits: op not out_not flag 0
+res_and = op("and", a, b)                    # Emits: op and res_and a b
+res_or = op("or", a, b)                      # Emits: op or res_or a b
 ```
 
 ### Character Output, Formatting & f-Strings (`printchar`, `format`, f-strings)

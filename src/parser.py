@@ -186,10 +186,49 @@ class ASTValidator(ast.NodeVisitor):
                 if node.attr not in BUILTIN_VARIABLES_DATA:
                     self.error(f"unknown Mindustry built-in variable: 'Vars.{node.attr}'", node)
                 return
+            if node.value.id == "draw":
+                DRAW_METHODS = {
+                    "clear", "color", "col", "stroke", "line", "rect",
+                    "line_rect", "lineRect", "poly", "line_poly", "linePoly",
+                    "triangle", "image", "print", "translate", "scale", "rotate", "reset", "flush",
+                }
+                if node.attr not in DRAW_METHODS:
+                    self.error(f"unknown draw method: 'draw.{node.attr}'", node)
+                return
+            if node.value.id in ("ucontrol", "unitControl", "unit_control"):
+                UCONTROL_METHODS = {
+                    "idle", "stop", "move", "approach", "pathfind", "auto_pathfind", "autoPathfind",
+                    "boost", "target", "targetp", "item_drop", "itemDrop", "item_take", "itemTake",
+                    "pay_drop", "payDrop", "pay_take", "payTake", "pay_enter", "payEnter",
+                    "mine", "flag", "build", "deconstruct", "get_block", "getBlock", "within", "unbind",
+                }
+                if node.attr not in UCONTROL_METHODS:
+                    self.error(f"unknown ucontrol method: '{node.value.id}.{node.attr}'", node)
+                return
+            if node.value.id in ("ulocate", "unitLocate", "unit_locate"):
+                ULOCATE_METHODS = {"ore", "building", "spawn", "damaged"}
+                if node.attr not in ULOCATE_METHODS:
+                    self.error(f"unknown ulocate method: '{node.value.id}.{node.attr}'", node)
+                return
+            if node.value.id == "op":
+                OP_METHODS = {
+                    "abs", "sign", "log", "log10", "log_10", "floor", "ceil",
+                    "round", "sqrt", "rand", "sin", "cos", "tan", "asin", "acos", "atan",
+                    "add", "sub", "mul", "div", "idiv", "mod", "emod", "pow",
+                    "equal", "not_equal", "notEqual", "land", "less_than", "lessThan",
+                    "less_than_eq", "lessThanEq", "greater_than", "greaterThan",
+                    "greater_than_eq", "greaterThanEq", "strict_equal", "strictEqual",
+                    "shl", "shr", "ushr", "xor",
+                    "max", "min", "angle", "angle_diff", "angleDiff", "len", "length",
+                    "noise", "logn",
+                }
+                if node.attr not in OP_METHODS:
+                    self.error(f"unknown op method: 'op.{node.attr}'", node)
+                return
             if node.value.id in ENUM_CLASS_TO_REGISTRY:
                 return
         self.error(
-            f"attribute access is only supported on DSL enum types ({', '.join(sorted(ENUM_CLASS_TO_REGISTRY.keys()))}) and 'Vars'",
+            f"attribute access is only supported on DSL enum types ({', '.join(sorted(ENUM_CLASS_TO_REGISTRY.keys()))}), 'Vars', 'draw', 'ucontrol', 'ulocate', and 'op'",
             node,
         )
 
@@ -266,6 +305,22 @@ class ASTValidator(ast.NodeVisitor):
             self.visit(stmt)
 
     def visit_Call(self, node: ast.Call):
+        if (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id in ("draw", "ucontrol", "unitControl", "unit_control", "ulocate", "unitLocate", "unit_locate", "op")
+        ):
+            self.visit(node.func)
+            for arg in node.args:
+                if isinstance(arg, ast.JoinedStr):
+                    self.error(f"f-strings are not supported in '{node.func.value.id}.{node.func.attr}()'; use print(f\"...\") instead", arg)
+                self.visit(arg)
+            for kw in node.keywords:
+                if isinstance(kw.value, ast.JoinedStr):
+                    self.error(f"f-strings are not supported in '{node.func.value.id}.{node.func.attr}()'; use print(f\"...\") instead", kw.value)
+                self.visit(kw.value)
+            return
+
         if not isinstance(node.func, ast.Name):
             self.error("only compiler intrinsic calls are supported", node)
         func_name = node.func.id
