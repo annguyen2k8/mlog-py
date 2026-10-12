@@ -69,7 +69,7 @@ def _extract_const_val(node: ast.AST) -> Tuple[bool, object]:
     """Extract constant literal value from an AST node if it is a pure constant literal.
     Supports ast.Constant, as well as literal signed numbers (ast.UnaryOp with USub/UAdd).
     """
-    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float, str, bool)):
+    if isinstance(node, ast.Constant) and (isinstance(node.value, (int, float, str, bool)) or node.value is None):
         return True, node.value
     if isinstance(node, ast.UnaryOp):
         if isinstance(node.op, ast.USub) and isinstance(node.operand, ast.Constant):
@@ -125,6 +125,40 @@ CMP_OP_INVERSE_MAP = {
     ast.Is: "notEqual",
     ast.IsNot: "strictEqual",
 }
+
+
+def _is_pure_expression(node: ast.AST) -> bool:
+    """Return True if node is guaranteed to be pure (no side effects, no potential runtime errors like division by zero)."""
+    if isinstance(node, ast.Constant):
+        return True
+    if isinstance(node, ast.Name):
+        return True
+    if isinstance(node, ast.UnaryOp):
+        if isinstance(node.op, (ast.UAdd, ast.USub, ast.Not, ast.Invert)):
+            return _is_pure_expression(node.operand)
+        return False
+    if isinstance(node, ast.BinOp):
+        if isinstance(node.op, (ast.Div, ast.FloorDiv, ast.Mod)):
+            if isinstance(node.right, ast.Constant) and isinstance(node.right.value, (int, float)) and node.right.value != 0:
+                return _is_pure_expression(node.left)
+            return False
+        return _is_pure_expression(node.left) and _is_pure_expression(node.right)
+    if isinstance(node, ast.Compare):
+        if len(node.ops) == 1 and len(node.comparators) == 1:
+            return _is_pure_expression(node.left) and _is_pure_expression(node.comparators[0])
+        return False
+    if isinstance(node, ast.IfExp):
+        return _is_pure_expression(node.test) and _is_pure_expression(node.body) and _is_pure_expression(node.orelse)
+    return False
+
+
+def _can_use_select(node: ast.IfExp) -> bool:
+    """Check if Python ternary can safely lower to Mindustry select opcode preserving semantics."""
+    return (
+        _is_pure_expression(node.test)
+        and _is_pure_expression(node.body)
+        and _is_pure_expression(node.orelse)
+    )
 
 
 class RawValue:
@@ -363,6 +397,7 @@ class ConstantFolder(ast.NodeTransformer):
                     (isinstance(v1, (int, float)) and isinstance(v2, (int, float)))
                     or (isinstance(v1, str) and isinstance(v2, str))
                     or (isinstance(v1, bool) and isinstance(v2, bool))
+                    or ((v1 is None or v2 is None) and isinstance(op, (ast.Is, ast.IsNot)))
                 )
                 if types_ok:
                     if isinstance(op, ast.Eq): res = (v1 == v2)
@@ -400,6 +435,16 @@ class ConstantFolder(ast.NodeTransformer):
                         break
                     res = v
                 return ast.copy_location(ast.Constant(value=res), node)
+        return node
+
+    def visit_IfExp(self, node: ast.IfExp):
+        self.generic_visit(node)
+        ok, test_val = _extract_const_val(node.test)
+        if ok and (isinstance(test_val, (int, float, bool)) or test_val is None):
+            if test_val:
+                return ast.copy_location(node.body, node)
+            else:
+                return ast.copy_location(node.orelse, node)
         return node
 
 
@@ -476,12 +521,22 @@ class Compiler:
         elif isinstance(val, float):
             return str(val)
         elif isinstance(val, str):
-            escaped = val.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+            escaped = (
+                val.replace("\r\n", "\n")
+                .replace("\r", "\n")
+                .replace("\\", "\\\\")
+                .replace('"', '\\"')
+                .replace("\n", "\\n")
+            )
             return f'"{escaped}"'
+        elif val is None:
+            return "null"
         else:
             raise CompileError(f"unsupported constant value: {val!r}", loc)
 
-    def compile_expr(self, expr: ast.expr, target_dest: Optional[str] = None) -> str:
+    def compile_expr(
+        self, expr: ast.expr, target_dest: Optional[str] = None, is_statement: bool = False
+    ) -> str:
         """Compile an expression, optionally writing result directly to target_dest.
         Returns the variable name or literal string holding the result.
         """
@@ -586,14 +641,28 @@ class Compiler:
             if len(expr.ops) != 1 or len(expr.comparators) != 1:
                 self.error("chained comparisons are not supported", expr)
             cmp_cls = type(expr.ops[0])
+            dest = target_dest if target_dest is not None else self.new_temp(loc)
+            left_val = self.compile_expr(expr.left)
+            right_val = self.compile_expr(expr.comparators[0])
+
+            if cmp_cls is ast.IsNot:
+                # Mindustry lacks op strictNotEqual. Emitting op notEqual causes engine bugs when
+                # comparing number with null (e.g. 0 not null -> 0 in JVM).
+                # To guarantee 100% sound semantics: op strictEqual temp left right followed by op equal dest temp 0.
+                tmp = self.new_temp(loc)
+                self.instructions.append(
+                    IROp(op="strictEqual", dest=tmp, a=left_val, b=right_val, loc=loc)
+                )
+                self.instructions.append(
+                    IROp(op="equal", dest=dest, a=tmp, b="0", loc=loc)
+                )
+                return dest
+
             if cmp_cls not in CMP_OP_MAP:
                 self.error(
                     f"unsupported comparison operator: {cmp_cls.__name__}", expr
                 )
             op_name = CMP_OP_MAP[cmp_cls]
-            left_val = self.compile_expr(expr.left)
-            right_val = self.compile_expr(expr.comparators[0])
-            dest = target_dest if target_dest is not None else self.new_temp(loc)
             self.instructions.append(
                 IROp(op=op_name, dest=dest, a=left_val, b=right_val, loc=loc)
             )
@@ -632,7 +701,9 @@ class Compiler:
                     return size_str
                 else:
                     self.error("len() is only supported on Array objects", expr)
-            return self.compile_call(expr, target_dest=target_dest)
+            return self.compile_call(
+                expr, target_dest=target_dest, is_statement=is_statement
+            )
 
         elif isinstance(expr, ast.Subscript):
             if not isinstance(expr.value, ast.Name):
@@ -684,7 +755,87 @@ class Compiler:
                 return target_dest
             return val_str
 
+        elif isinstance(expr, ast.IfExp):
+            return self.compile_if_exp(expr, target_dest=target_dest)
+
+        elif isinstance(expr, ast.JoinedStr):
+            self.error("f-strings cannot be assigned to variables (Mindustry Logic only supports string formatting via the print buffer)", expr)
+
         self.error(f"unsupported expression type: {type(expr).__name__}", expr)
+
+    def compile_if_exp(self, node: ast.IfExp, target_dest: Optional[str] = None) -> str:
+        """Compile a Python ternary expression (a if cond else b).
+
+        If condition and both branches are pure expressions without side effects,
+        lower directly to Mindustry 'select' opcode (select dest op comp0 comp1 a b).
+        If any expression may have side effects or runtime risks (calls, variable division, subscripts),
+        lower using branching jumps with strict short-circuiting.
+        """
+        loc = self.loc(node)
+        dest = target_dest if target_dest is not None else self.new_temp(loc)
+
+        if _can_use_select(node):
+            if isinstance(node.test, ast.Compare) and len(node.test.ops) == 1 and len(node.test.comparators) == 1:
+                cmp_cls = type(node.test.ops[0])
+                if cmp_cls is ast.IsNot:
+                    comp0 = self.compile_expr(node.test.left)
+                    comp1 = self.compile_expr(node.test.comparators[0])
+                    a_val = self.compile_expr(node.body)
+                    b_val = self.compile_expr(node.orelse)
+                    # Mindustry lacks strictNotEqual opcode. Inverting strictEqual (comp0 === comp1 ? b : a)
+                    # perfectly models 'comp0 is not comp1' without falling into Mindustry's '0 not null' bug.
+                    self.instructions.append(
+                        IRRaw(opcode="select", args=[dest, "strictEqual", comp0, comp1, b_val, a_val], loc=loc)
+                    )
+                    return dest
+                elif cmp_cls in CMP_OP_MAP:
+                    cond_op = CMP_OP_MAP[cmp_cls]
+                    comp0 = self.compile_expr(node.test.left)
+                    comp1 = self.compile_expr(node.test.comparators[0])
+                    a_val = self.compile_expr(node.body)
+                    b_val = self.compile_expr(node.orelse)
+                    self.instructions.append(
+                        IRRaw(opcode="select", args=[dest, cond_op, comp0, comp1, a_val, b_val], loc=loc)
+                    )
+                    return dest
+
+            if isinstance(node.test, ast.UnaryOp) and isinstance(node.test.op, ast.Not):
+                comp0 = self.compile_expr(node.test.operand)
+                a_val = self.compile_expr(node.body)
+                b_val = self.compile_expr(node.orelse)
+                self.instructions.append(
+                    IRRaw(opcode="select", args=[dest, "equal", comp0, "0", a_val, b_val], loc=loc)
+                )
+                return dest
+
+            cond_val = self.compile_expr(node.test)
+            a_val = self.compile_expr(node.body)
+            b_val = self.compile_expr(node.orelse)
+            self.instructions.append(
+                IRRaw(opcode="select", args=[dest, "notEqual", cond_val, "0", a_val, b_val], loc=loc)
+            )
+            return dest
+
+        # Branching ternary with strict short-circuiting
+        else_lbl = self.new_label("tern_else")
+        end_lbl = self.new_label("tern_end")
+
+        self.compile_condition(node.test, true_label=None, false_label=else_lbl)
+
+        body_val = self.compile_expr(node.body, target_dest=dest)
+        if body_val != dest:
+            self.instructions.append(IRSet(to=dest, from_=body_val, loc=loc))
+        self.instructions.append(
+            IRJump(target=end_lbl, cond="always", a="0", b="0", loc=loc)
+        )
+
+        self.instructions.append(IRLabel(name=else_lbl, loc=loc))
+        orelse_val = self.compile_expr(node.orelse, target_dest=dest)
+        if orelse_val != dest:
+            self.instructions.append(IRSet(to=dest, from_=orelse_val, loc=loc))
+        self.instructions.append(IRLabel(name=end_lbl, loc=loc))
+
+        return dest
 
     def compile_attribute(self, node: ast.Attribute) -> str:
         """Compile a DSL Enum or Vars attribute access, e.g. SensorProperty.HEALTH or Vars.tick."""
@@ -742,7 +893,9 @@ class Compiler:
             if isinstance(val, str):
                 if is_string_literal:
                     escaped = (
-                        val.replace("\\", "\\\\")
+                        val.replace("\r\n", "\n")
+                        .replace("\r", "\n")
+                        .replace("\\", "\\\\")
                         .replace('"', '\\"')
                         .replace("\n", "\\n")
                     )
@@ -750,7 +903,9 @@ class Compiler:
                 if is_ident:
                     return val
                 escaped = (
-                    val.replace("\\", "\\\\")
+                    val.replace("\r\n", "\n")
+                    .replace("\r", "\n")
+                    .replace("\\", "\\\\")
                     .replace('"', '\\"')
                     .replace("\n", "\\n")
                 )
@@ -767,7 +922,10 @@ class Compiler:
             return self.compile_expr(arg)
 
     def compile_call(
-        self, call: ast.Call, target_dest: Optional[str] = None
+        self,
+        call: ast.Call,
+        target_dest: Optional[str] = None,
+        is_statement: bool = False,
     ) -> str:
         """Compile a compiler intrinsic function call."""
         loc = self.loc(call)
@@ -914,13 +1072,14 @@ class Compiler:
                     IRRaw(opcode="read", args=[dest, cell, addr], loc=loc)
                 )
                 return dest
-            elif len(args) == 2 and target_dest is not None:
+            elif len(args) == 2 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
                 cell = str(self.format_intrinsic_arg(args[0], is_ident=True))
                 addr = str(self.format_intrinsic_arg(args[1], is_ident=False))
                 self.instructions.append(
-                    IRRaw(opcode="read", args=[target_dest, cell, addr], loc=loc)
+                    IRRaw(opcode="read", args=[dest, cell, addr], loc=loc)
                 )
-                return target_dest
+                return dest
             else:
                 self.error(
                     "invalid arguments for read: expected read(dest, cell, address) or dest = read(cell, address)",
@@ -971,11 +1130,38 @@ class Compiler:
         elif func_name == "print":
             if len(args) != 1:
                 self.error("invalid arguments for print: expected print(value)", call)
+            arg0 = args[0]
+            if isinstance(arg0, ast.JoinedStr):
+                return self.compile_fstring_print(arg0, loc)
+            val = str(self.format_intrinsic_arg(
+                arg0, is_ident=False, is_string_literal=True
+            ))
+            self.instructions.append(
+                IRRaw(opcode="print", args=[val], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "printchar":
+            if len(args) != 1:
+                self.error("invalid arguments for printchar: expected printchar(value)", call)
+            arg0 = args[0]
+            if isinstance(arg0, ast.Constant) and isinstance(arg0.value, str) and arg0.value.startswith("@"):
+                val = arg0.value
+            else:
+                val = str(self.format_intrinsic_arg(arg0, is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="printchar", args=[val], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "format":
+            if len(args) != 1:
+                self.error("invalid arguments for format: expected format(value)", call)
             val = str(self.format_intrinsic_arg(
                 args[0], is_ident=False, is_string_literal=True
             ))
             self.instructions.append(
-                IRRaw(opcode="print", args=[val], loc=loc)
+                IRRaw(opcode="format", args=[val], loc=loc)
             )
             return "0"
 
@@ -998,14 +1184,15 @@ class Compiler:
                     IRRaw(opcode="sensor", args=[dest, block, prop], loc=loc)
                 )
                 return dest
-            elif len(args) == 2 and target_dest is not None:
+            elif len(args) == 2 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
                 block = str(self.format_intrinsic_arg(args[0], is_ident=True))
                 prop_arg = self.format_intrinsic_arg(args[1], is_ident=True)
                 prop = self.validate_arg(prop_arg, REG_SENSOR_PROPERTIES, self.loc(args[1]))
                 self.instructions.append(
-                    IRRaw(opcode="sensor", args=[target_dest, block, prop], loc=loc)
+                    IRRaw(opcode="sensor", args=[dest, block, prop], loc=loc)
                 )
-                return target_dest
+                return dest
             else:
                 self.error(
                     "invalid arguments for sensor: expected sensor(dest, block, prop) or dest = sensor(block, prop)",
@@ -1066,7 +1253,8 @@ class Compiler:
             return "0"
 
         elif func_name == "radar":
-            if len(args) == 6 and target_dest is not None:
+            if len(args) == 6 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
                 t1 = self.validate_arg(self.format_intrinsic_arg(args[0], is_ident=True), REG_RADAR_TARGETS, self.loc(args[0]))
                 t2 = self.validate_arg(self.format_intrinsic_arg(args[1], is_ident=True), REG_RADAR_TARGETS, self.loc(args[1]))
                 t3 = self.validate_arg(self.format_intrinsic_arg(args[2], is_ident=True), REG_RADAR_TARGETS, self.loc(args[2]))
@@ -1076,11 +1264,11 @@ class Compiler:
                 self.instructions.append(
                     IRRaw(
                         opcode="radar",
-                        args=[t1, t2, t3, sort, turret, sort_order, target_dest],
+                        args=[t1, t2, t3, sort, turret, sort_order, dest],
                         loc=loc,
                     )
                 )
-                return target_dest
+                return dest
             elif len(args) == 7:
                 t1 = self.validate_arg(self.format_intrinsic_arg(args[0], is_ident=True), REG_RADAR_TARGETS, self.loc(args[0]))
                 t2 = self.validate_arg(self.format_intrinsic_arg(args[1], is_ident=True), REG_RADAR_TARGETS, self.loc(args[1]))
@@ -1104,7 +1292,8 @@ class Compiler:
                 )
 
         elif func_name == "uradar":
-            if len(args) == 5 and target_dest is not None:
+            if len(args) == 5 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
                 t1 = self.validate_arg(self.format_intrinsic_arg(args[0], is_ident=True), REG_RADAR_TARGETS, self.loc(args[0]))
                 t2 = self.validate_arg(self.format_intrinsic_arg(args[1], is_ident=True), REG_RADAR_TARGETS, self.loc(args[1]))
                 t3 = self.validate_arg(self.format_intrinsic_arg(args[2], is_ident=True), REG_RADAR_TARGETS, self.loc(args[2]))
@@ -1113,11 +1302,11 @@ class Compiler:
                 self.instructions.append(
                     IRRaw(
                         opcode="uradar",
-                        args=[t1, t2, t3, sort, "0", sort_order, target_dest],
+                        args=[t1, t2, t3, sort, "0", sort_order, dest],
                         loc=loc,
                     )
                 )
-                return target_dest
+                return dest
             elif len(args) == 6:
                 t1 = self.validate_arg(self.format_intrinsic_arg(args[0], is_ident=True), REG_RADAR_TARGETS, self.loc(args[0]))
                 t2 = self.validate_arg(self.format_intrinsic_arg(args[1], is_ident=True), REG_RADAR_TARGETS, self.loc(args[1]))
@@ -1164,14 +1353,15 @@ class Compiler:
                     IRRaw(opcode="lookup", args=[type_str, dest, idx], loc=loc)
                 )
                 return dest
-            elif len(args) == 2 and target_dest is not None:
+            elif len(args) == 2 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
                 type_arg = self.format_intrinsic_arg(args[0], is_ident=True)
                 type_str = self.validate_arg(type_arg, REG_LOOKUP_TYPES, self.loc(args[0]))
                 idx = str(self.format_intrinsic_arg(args[1], is_ident=False))
                 self.instructions.append(
-                    IRRaw(opcode="lookup", args=[type_str, target_dest, idx], loc=loc)
+                    IRRaw(opcode="lookup", args=[type_str, dest, idx], loc=loc)
                 )
-                return target_dest
+                return dest
             else:
                 self.error(
                     "invalid arguments for lookup: expected lookup(type, dest, index) or dest = lookup(type, index)",
@@ -1189,20 +1379,37 @@ class Compiler:
                     IRRaw(opcode="packcolor", args=[dest, r, g, b, a], loc=loc)
                 )
                 return dest
-            elif len(args) == 4 and target_dest is not None:
+            elif len(args) == 4 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
                 r = str(self.format_intrinsic_arg(args[0], is_ident=False))
                 g = str(self.format_intrinsic_arg(args[1], is_ident=False))
                 b = str(self.format_intrinsic_arg(args[2], is_ident=False))
                 a = str(self.format_intrinsic_arg(args[3], is_ident=False))
                 self.instructions.append(
-                    IRRaw(opcode="packcolor", args=[target_dest, r, g, b, a], loc=loc)
+                    IRRaw(opcode="packcolor", args=[dest, r, g, b, a], loc=loc)
                 )
-                return target_dest
+                return dest
             else:
                 self.error(
                     "invalid arguments for packcolor: expected packcolor(dest, r, g, b, a) or dest = packcolor(r, g, b, a)",
                     call,
                 )
+
+        elif func_name == "unpackcolor":
+            if len(args) != 5:
+                self.error(
+                    "invalid arguments for unpackcolor: expected unpackcolor(r, g, b, a, value)",
+                    call,
+                )
+            r = str(self.format_intrinsic_arg(args[0], is_ident=True))
+            g = str(self.format_intrinsic_arg(args[1], is_ident=True))
+            b = str(self.format_intrinsic_arg(args[2], is_ident=True))
+            a = str(self.format_intrinsic_arg(args[3], is_ident=True))
+            val = str(self.format_intrinsic_arg(args[4], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="unpackcolor", args=[r, g, b, a, val], loc=loc)
+            )
+            return "0"
 
         elif func_name == "getlink":
             if len(args) == 2:
@@ -1212,15 +1419,65 @@ class Compiler:
                     IRRaw(opcode="getlink", args=[dest, idx], loc=loc)
                 )
                 return dest
-            elif len(args) == 1 and target_dest is not None:
+            elif len(args) == 1 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
                 idx = str(self.format_intrinsic_arg(args[0], is_ident=False))
                 self.instructions.append(
-                    IRRaw(opcode="getlink", args=[target_dest, idx], loc=loc)
+                    IRRaw(opcode="getlink", args=[dest, idx], loc=loc)
                 )
-                return target_dest
+                return dest
             else:
                 self.error(
                     "invalid arguments for getlink: expected getlink(dest, index) or dest = getlink(index)",
+                    call,
+                )
+
+        elif func_name == "select":
+            if len(args) == 6:
+                dest = str(self.format_intrinsic_arg(args[0], is_ident=True))
+                cond_arg = self.format_intrinsic_arg(args[1], is_ident=True)
+                cond = self.validate_arg(cond_arg, REG_CONDITIONS, self.loc(args[1]))
+                comp0 = str(self.format_intrinsic_arg(args[2], is_ident=False))
+                comp1 = str(self.format_intrinsic_arg(args[3], is_ident=False))
+                a = str(self.format_intrinsic_arg(args[4], is_ident=False))
+                b = str(self.format_intrinsic_arg(args[5], is_ident=False))
+                self.instructions.append(
+                    IRRaw(opcode="select", args=[dest, cond, comp0, comp1, a, b], loc=loc)
+                )
+                return dest
+            elif len(args) == 5 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                cond_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+                cond = self.validate_arg(cond_arg, REG_CONDITIONS, self.loc(args[0]))
+                comp0 = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                comp1 = str(self.format_intrinsic_arg(args[2], is_ident=False))
+                a = str(self.format_intrinsic_arg(args[3], is_ident=False))
+                b = str(self.format_intrinsic_arg(args[4], is_ident=False))
+                self.instructions.append(
+                    IRRaw(opcode="select", args=[dest, cond, comp0, comp1, a, b], loc=loc)
+                )
+                return dest
+            elif len(args) == 4:
+                dest = str(self.format_intrinsic_arg(args[0], is_ident=True))
+                cond = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                a = str(self.format_intrinsic_arg(args[2], is_ident=False))
+                b = str(self.format_intrinsic_arg(args[3], is_ident=False))
+                self.instructions.append(
+                    IRRaw(opcode="select", args=[dest, "notEqual", cond, "0", a, b], loc=loc)
+                )
+                return dest
+            elif len(args) == 3 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                cond = str(self.format_intrinsic_arg(args[0], is_ident=False))
+                a = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                b = str(self.format_intrinsic_arg(args[2], is_ident=False))
+                self.instructions.append(
+                    IRRaw(opcode="select", args=[dest, "notEqual", cond, "0", a, b], loc=loc)
+                )
+                return dest
+            else:
+                self.error(
+                    "invalid arguments for select: expected select([dest], [cond_op, comp0, comp1], a, b)",
                     call,
                 )
 
@@ -1251,6 +1508,15 @@ class Compiler:
             )
             return "0"
 
+        elif func_name == "setrate":
+            if len(args) != 1:
+                self.error("invalid arguments for setrate: expected setrate(ipt)", call)
+            ipt = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="setrate", args=[ipt], loc=loc)
+            )
+            return "0"
+
         elif func_name == "stop":
             if len(args) != 0:
                 self.error("invalid arguments for stop: expected stop()", call)
@@ -1265,6 +1531,60 @@ class Compiler:
 
         else:
             self.error(f"unknown compiler intrinsic: '{func_name}'", call)
+
+    def compile_fstring_print(self, node: ast.JoinedStr, loc: SourceLocation) -> str:
+        """Compile a print(f"...") f-string call into MLog print and format opcodes."""
+        formatted_values = [v for v in node.values if isinstance(v, ast.FormattedValue)]
+        if len(formatted_values) > 10:
+            self.error(
+                "f-string supports at most 10 expressions (Mindustry format opcode supports placeholders {0} through {9})",
+                node,
+            )
+
+        # 1. Left-to-right evaluation order of formatted expressions
+        def _may_have_side_effects(expr_node: ast.AST) -> bool:
+            for child in ast.walk(expr_node):
+                if isinstance(child, ast.Call):
+                    return True
+            return False
+
+        evaluated_args = []
+        for idx, fv in enumerate(formatted_values):
+            val = self.compile_expr(fv.value)
+            val_loc = self.loc(fv.value)
+            has_later_side_effects = any(
+                _may_have_side_effects(later_fv.value)
+                for later_fv in formatted_values[idx + 1:]
+            )
+            if has_later_side_effects and not isinstance(fv.value, ast.Constant):
+                dest = self.new_temp(val_loc)
+                self.instructions.append(IRSet(to=dest, from_=val, loc=val_loc))
+                val = dest
+            evaluated_args.append((val, val_loc))
+
+        # 2. Build template string
+        template_parts = []
+        placeholder_idx = 0
+        for part in node.values:
+            if isinstance(part, ast.Constant):
+                template_parts.append(str(part.value))
+            elif isinstance(part, ast.FormattedValue):
+                template_parts.append(f"{{{placeholder_idx}}}")
+                placeholder_idx += 1
+            else:
+                self.error(f"unsupported f-string component: {type(part).__name__}", part)
+
+        template_str = "".join(template_parts)
+        template_mlog = self.format_constant(template_str, loc)
+
+        # 3. Emit print "template"
+        self.instructions.append(IRRaw(opcode="print", args=[template_mlog], loc=loc))
+
+        # 4. Emit format for each evaluated argument in order
+        for val, val_loc in evaluated_args:
+            self.instructions.append(IRRaw(opcode="format", args=[val], loc=val_loc))
+
+        return "0"
 
     def compile_assignment(self, node: ast.Assign):
         """Compile an assignment statement: target = value"""
@@ -1623,6 +1943,121 @@ class Compiler:
             left_val = self.compile_expr(test.left)
             right_val = self.compile_expr(test.comparators[0])
 
+            if cmp_cls is ast.IsNot:
+                # 'left is not right' is TRUE when left !== right, and FALSE when left === right.
+                if false_label is not None and true_label is None:
+                    # Jump to false_label when condition is FALSE (i.e. left === right).
+                    self.instructions.append(
+                        IRJump(
+                            target=false_label,
+                            cond="strictEqual",
+                            a=left_val,
+                            b=right_val,
+                            loc=loc,
+                        )
+                    )
+                elif true_label is not None and false_label is None:
+                    # Jump to true_label when condition is TRUE (i.e. left !== right).
+                    # Mindustry lacks strictNotEqual condition. Invert via skip jump.
+                    skip_lbl = self.new_label("is_not_skip")
+                    self.instructions.append(
+                        IRJump(
+                            target=skip_lbl,
+                            cond="strictEqual",
+                            a=left_val,
+                            b=right_val,
+                            loc=loc,
+                        )
+                    )
+                    self.instructions.append(
+                        IRJump(
+                            target=true_label,
+                            cond="always",
+                            a="0",
+                            b="0",
+                            loc=loc,
+                        )
+                    )
+                    self.instructions.append(IRLabel(name=skip_lbl, loc=loc))
+                elif true_label is not None and false_label is not None:
+                    self.instructions.append(
+                        IRJump(
+                            target=false_label,
+                            cond="strictEqual",
+                            a=left_val,
+                            b=right_val,
+                            loc=loc,
+                        )
+                    )
+                    self.instructions.append(
+                        IRJump(
+                            target=true_label,
+                            cond="always",
+                            a="0",
+                            b="0",
+                            loc=loc,
+                        )
+                    )
+                return
+
+            if cmp_cls is ast.Is:
+                # 'left is right' is TRUE when left === right, and FALSE when left !== right.
+                if true_label is not None and false_label is None:
+                    # Jump to true_label when condition is TRUE (i.e. left === right).
+                    self.instructions.append(
+                        IRJump(
+                            target=true_label,
+                            cond="strictEqual",
+                            a=left_val,
+                            b=right_val,
+                            loc=loc,
+                        )
+                    )
+                elif false_label is not None and true_label is None:
+                    # Jump to false_label when condition is FALSE (i.e. left !== right).
+                    # Mindustry lacks strictNotEqual condition. Invert via skip jump:
+                    # If left === right, skip the jump to false_label!
+                    skip_lbl = self.new_label("is_skip")
+                    self.instructions.append(
+                        IRJump(
+                            target=skip_lbl,
+                            cond="strictEqual",
+                            a=left_val,
+                            b=right_val,
+                            loc=loc,
+                        )
+                    )
+                    self.instructions.append(
+                        IRJump(
+                            target=false_label,
+                            cond="always",
+                            a="0",
+                            b="0",
+                            loc=loc,
+                        )
+                    )
+                    self.instructions.append(IRLabel(name=skip_lbl, loc=loc))
+                elif true_label is not None and false_label is not None:
+                    self.instructions.append(
+                        IRJump(
+                            target=true_label,
+                            cond="strictEqual",
+                            a=left_val,
+                            b=right_val,
+                            loc=loc,
+                        )
+                    )
+                    self.instructions.append(
+                        IRJump(
+                            target=false_label,
+                            cond="always",
+                            a="0",
+                            b="0",
+                            loc=loc,
+                        )
+                    )
+                return
+
             if false_label is not None and true_label is None:
                 # Jump to false_label if condition is FALSE (using inverse operator)
                 self.instructions.append(
@@ -1932,7 +2367,7 @@ class Compiler:
         elif isinstance(stmt, ast.Expr):
             if isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Name) and stmt.value.func.id == "Array":
                 self.error("Array declaration must be assigned to a variable, e.g. 'a = Array(...)'", stmt)
-            self.compile_expr(stmt.value)
+            self.compile_expr(stmt.value, is_statement=True)
         elif isinstance(stmt, ast.Pass):
             pass
         elif isinstance(stmt, (ast.Import, ast.ImportFrom)):

@@ -151,10 +151,14 @@ Explore our comprehensive, paired examples in [`examples/`](examples/README.md):
 - **Structured Control Flow**: `for` loops with `range(...)`, `while`, `break`, `continue`, `if`, `elif`, and `else` with automatic label and instruction address resolution.
 - **Arithmetic, Bitwise & Math**: Full expression support (`+`, `-`, `*`, `/`, `//`, `%`, bitwise `&`, `|`, `^`, `~`, `<<`, `>>`, built-in `min` and `max`) lowered with deterministic temporary variable management and strict 64-bit integer hardening.
 - **Compile-Time Constant Folding**: Recursively folds pure constant expressions (`+`, `-`, `*`, `/`, `//`, `%`, `**`, `&`, `|`, `^`, `<<`, `>>`, comparisons, boolean logic, and string concatenation) at compile time while preserving Mindustry IEEE-754 runtime semantics, eliminating runtime temporaries, and statically resolving `Array` allocation sizes and subscript bounds checks.
+- **Conditional Selection & Python Ternary**: Pure ternary expressions (`a if cond else b`) lower directly to the Mindustry `select dest op comp0 comp1 a b` opcode (zero jumps). Expressions with side effects, division, or memory access safely fall back to short-circuiting jump ladders. Full intrinsic `select()` supports 3, 4, 5, and 6-argument conventions.
+- **Color Operations (`packcolor`, `unpackcolor`)**: Pack 4 RGBA channels in `[0, 1]` into a 64-bit double color (`packcolor(r, g, b, a)` with full expression nesting), and unpack double colors into 4 destination variables (`unpackcolor(r, g, b, a, color)`).
+- **Character Output, Print Formatting & f-Strings**: Low-level character/emoji output via `printchar(val)`, print buffer placeholder substitution via `format(val)`, and native Python f-strings (`f"..."`) automatically compiled into optimized template print and format sequences with strict evaluation order preservation.
+- **Processor Execution Rate (`setrate`)**: Direct configuration of processor instructions per tick (IPT) via `setrate(ipt)`.
 - **Memory Arrays & Static Allocation**: High-level `Array("cell1", size=10, dtype=...)` abstraction supporting `int`, `float`, and `bool` dtypes with compile-time contiguous layout tracking, capacity validation (64 for cells, 512 for banks), base offset calculations, and static index bounds checking.
 - **Augmented Assignment**: In-place assignment operators (`+=`, `-=`, `*=`, `/=`, `//=`, `%=`, `**=`, `&=`, `|=`, `^=`, `<<=`, `>>=`) for both scalar variables and memory arrays (`arr[i] += val`), featuring atomic single-offset address evaluation without redundant reads.
 - **Short-Circuit Boolean Logic**: Full support for `and`, `or`, and `not` with standard Python short-circuit evaluation.
-- **Mindustry Compiler Intrinsics**: Direct access to Mindustry instructions (`sensor`, `control`, `ucontrol`, `draw`, `read`, `write`, `print`, `ubind`, `lookup`, etc.).
+- **Mindustry Compiler Intrinsics**: Direct access to Mindustry instructions (`sensor`, `control`, `ucontrol`, `draw`, `read`, `write`, `print`, `ubind`, `lookup`, `packcolor`, `unpackcolor`, `printchar`, `format`, `setrate`, `select`, etc.).
 - **Verified Registry & Enums**: Enums (`SensorProperty`, `ControlProperty`, `UnitControl`, `DrawType`, `LogicOp`, `Condition`, `Units`, etc.) verified against vanilla Mindustry source.
 - **Source Mapping**: Bi-directional provenance tracking between Python statements and mlog instruction addresses.
 - **Semantic Argument Recovery**: Disambiguates named hardware links (quoted strings like `"reactor1"`) from program variables during decompilation.
@@ -206,7 +210,7 @@ The project maintains a comprehensive automated test suite verifying both compil
 python3 -m unittest discover -s tests -p "test_*.py"
 ```
 
-- **520 Automated Tests**: 100% passing baseline across compiler, registry, CFG, structuring, dataflow, function recovery, bitwise operators, min/max, for loops, memory arrays (int, float, bool), augmented assignment, constant folding, and source mapping.
+- **729 Automated Tests**: 100% passing baseline across compiler, decompiler, registry, CFG, structuring, dataflow, function recovery, bitwise operators, min/max, for loops, memory arrays (int, float, bool), augmented assignment, constant folding, system clipboard, built-in variables (Vars API), Mindustry v8 modulo semantics, color packing/unpacking, printchar, format & f-strings, setrate, select & ternary expressions, comprehensive is/is not semantics (including JVM verification for 0 is not None, nested and/or, not, while, and elif chains), and source mapping.
 - **Real-World Test Corpus**: 32 representative programs across handwritten scripts, compiler-generated programs, control flow patterns, and pathological edge cases.
 - **Round-Trip Verification**: Guarantees that MLog → Decompiler → Compiler produces valid, identical instructions.
 
@@ -214,6 +218,7 @@ python3 -m unittest discover -s tests -p "test_*.py"
 
 ## Limitations
 
+- **Identity Semantics (`is` vs `strictEqual`)**: Python `is` maps to Mindustry `strictEqual` (`===`), which checks object vs double category and exact numeric equality without epsilon. `is not` is implemented across assignment (`op strictEqual` + `op equal dest 0`), ternary (`select` with inverted operands), `if`, and `while` via `strictEqual` to avoid Mindustry's engine quirk where `notEqual 0 null` evaluates to false. Note that because Mindustry booleans are numeric `1.0`/`0.0`, `true is 1` evaluates to true in Mindustry, whereas Python treats `True` and `1` as distinct types; Mindustry does not maintain Python heap object identities.
 - **Irreducible Control Flow**: Non-natural loops and indirect jumps (`set @counter ...`) are preserved as fallback comments and raw jumps instead of synthetic loops.
 - **Flat Memory Model**: Mindustry Logic has no heap or object system; object-oriented constructs, classes, and Python collections (`list`, `dict`) are not reconstructed.
 - **Multi-Use Temporaries**: Temporaries read multiple times or modified across basic blocks are preserved as explicit assignments to ensure semantic correctness.

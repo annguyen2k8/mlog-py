@@ -743,8 +743,7 @@ class FunctionAnalyzer:
         )
 
         transformer = DataflowTransformer()
-        converted = transformer._convert_instructions_in_list(raw_nodes)
-        optimized = transformer._optimize_scope(converted)
+        optimized = transformer.transform_scope(raw_nodes)
 
         params = [Parameter(name=p) for p in cand.parameters]
 
@@ -793,7 +792,4 @@ class FunctionAnalyzer:
         )
 
         transformer = DataflowTransformer()
-        converted = transformer._convert_instructions_in_list(raw_nodes)
-        optimized = transformer._optimize_scope(converted)
-
-        return optimized
+        return transformer.transform_scope(raw_nodes)

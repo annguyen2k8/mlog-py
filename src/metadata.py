@@ -206,6 +206,46 @@ def _rt_print(value: Any = "") -> None:
     return None
 
 
+def _rt_printchar(value: Any = 0) -> None:
+    """Append a character to the processor print buffer matching LExecutor.PrintCharI."""
+    current_text = "".join(_rt_print_buffer)
+    if _utf16_len(current_text) >= MAX_TEXT_BUFFER:
+        return None
+    if hasattr(value, "emojiChar") and callable(getattr(value, "emojiChar")):
+        char = chr(value.emojiChar())
+    elif isinstance(value, (int, float)):
+        if math.isnan(value) or math.isinf(value):
+            char = "\0"
+        else:
+            try:
+                char = chr(int(math.floor(float(value))))
+            except (ValueError, OverflowError):
+                char = "\0"
+    else:
+        char = "\0"
+    _rt_print_buffer.append(char)
+    return None
+
+
+def _rt_format(value: Any = "") -> None:
+    """Replace the first placeholder {0}..{9} in the print buffer matching LExecutor.FormatI."""
+    buf = "".join(_rt_print_buffer)
+    min_loc = -1
+    min_idx = -1
+    for i in range(10):
+        placeholder = f"{{{i}}}"
+        idx = buf.find(placeholder)
+        if idx != -1 and (min_loc == -1 or idx < min_loc):
+            min_loc = idx
+            min_idx = i
+    if min_loc != -1:
+        rep = _rt_format_print_value(value)
+        new_buf = buf[:min_loc] + rep + buf[min_loc + 3:]
+        _rt_print_buffer.clear()
+        _rt_print_buffer.append(new_buf[:MAX_TEXT_BUFFER])
+    return None
+
+
 def _rt_printflush(message: Any = None) -> None:
     """Flush the print buffer to a message block and clear the buffer.
 
@@ -276,8 +316,82 @@ def _rt_lookup(*args: Any) -> Any:
 def _rt_packcolor(*args: Any) -> Any:
     return 0
 
+def _rt_unpackcolor(*args: Any) -> None:
+    pass
+
+def _rt_select(*args: Any) -> Any:
+    """Runtime stub for Mindustry Logic select opcode."""
+    if len(args) == 3:
+        cond, a, b = args
+        return a if (cond not in (0, False, None, "0", "false", "null")) else b
+    elif len(args) == 4:
+        dest, cond, a, b = args
+        return a if (cond not in (0, False, None, "0", "false", "null")) else b
+    elif len(args) == 5:
+        cond_op, comp0, comp1, a, b = args
+        return a if _eval_condition_op(cond_op, comp0, comp1) else b
+    elif len(args) == 6:
+        dest, cond_op, comp0, comp1, a, b = args
+        return a if _eval_condition_op(cond_op, comp0, comp1) else b
+    return 0
+
+def _parse_mindustry_val(val: Any) -> Tuple[bool, float, Any]:
+    """Parse an operand into (is_num, numval, objval) matching Mindustry LVar/LAssembler."""
+    if isinstance(val, bool):
+        return True, 1.0 if val else 0.0, val
+    if isinstance(val, (int, float)):
+        return True, float(val), val
+    if val is None or val == "null":
+        return False, 0.0, None
+    if isinstance(val, str):
+        # Quoted strings are explicitly objects
+        if val.startswith('"') and val.endswith('"'):
+            return False, 0.0, val[1:-1]
+        # Mindustry LAssembler parses unquoted numbers as numeric doubles
+        try:
+            d = float(val)
+            return True, d, val
+        except (ValueError, TypeError):
+            pass
+        return False, 0.0, val
+    return False, 0.0, val
+
+
+def _eval_condition_op(op: Any, a: Any, b: Any) -> bool:
+    op_str = getattr(op, "name", str(op))
+    if op_str == "always":
+        return True
+
+    is_num_a, na, oa = _parse_mindustry_val(a)
+    is_num_b, nb, ob = _parse_mindustry_val(b)
+
+    if op_str == "strictEqual":
+        if is_num_a != is_num_b:
+            return False
+        if is_num_a:
+            return na == nb
+        return (type(oa) is type(ob)) and (oa == ob)
+
+    both_obj = (not is_num_a) and (not is_num_b)
+    if op_str == "equal":
+        return (oa == ob) if both_obj else (abs(na - nb) < 0.000001)
+    elif op_str == "notEqual":
+        return (oa != ob) if both_obj else (abs(na - nb) >= 0.000001)
+    elif op_str == "lessThan":
+        return na < nb
+    elif op_str == "lessThanEq":
+        return na <= nb
+    elif op_str == "greaterThan":
+        return na > nb
+    elif op_str == "greaterThanEq":
+        return na >= nb
+    return False
+
 def _rt_getlink(*args: Any) -> Any:
     return 0
+
+def _rt_setrate(ipt: Any = 60) -> None:
+    return None
 
 def _rt_raw(value: Any) -> str:
     return str(value)
@@ -340,6 +454,26 @@ INTRINSIC_DEFINITIONS: List[IntrinsicDef] = [
         ],
         runtime_fn=_rt_set,
         has_assignment_form=True,
+    ),
+    IntrinsicDef(
+        name="setrate",
+        summary="Set processor execution speed in instructions per tick (IPT)",
+        docstring=(
+            "Set processor execution speed in instructions per tick (IPT).\n\n"
+            "Args:\n"
+            "    ipt: Target instructions per tick rate (capped by processor max rate, e.g. 1000)."
+        ),
+        min_args=1,
+        max_args=1,
+        valid_arg_counts=(1,),
+        signatures=[
+            IntrinsicSignature(
+                params=[IntrinsicParam("ipt", "Any")],
+                return_type="None",
+                docstring="Set processor execution rate to ipt instructions per tick.",
+            ),
+        ],
+        runtime_fn=_rt_setrate,
     ),
     IntrinsicDef(
         name="op",
@@ -555,6 +689,48 @@ INTRINSIC_DEFINITIONS: List[IntrinsicDef] = [
             ),
         ],
         runtime_fn=_rt_print,
+    ),
+    IntrinsicDef(
+        name="printchar",
+        summary="Append character to the processor print buffer by code or emoji code",
+        docstring=(
+            "Append a character to the processor print buffer matching LExecutor.PrintCharI.\n\n"
+            "If value is an unlockable content with emoji, appends its emoji character.\n"
+            "Otherwise, appends chr(floor(value)).\n\n"
+            "Args:\n"
+            "    value: Character code (numeric) or content with emoji."
+        ),
+        min_args=1,
+        max_args=1,
+        valid_arg_counts=(1,),
+        signatures=[
+            IntrinsicSignature(
+                params=[IntrinsicParam("value", "Any")],
+                return_type="None",
+                docstring="Append character to print buffer.",
+            ),
+        ],
+        runtime_fn=_rt_printchar,
+    ),
+    IntrinsicDef(
+        name="format",
+        summary="Replace first placeholder {0}..{9} in print buffer with value",
+        docstring=(
+            "Replace the first placeholder {0}..{9} in the print buffer matching LExecutor.FormatI.\n\n"
+            "Args:\n"
+            "    value: Value to replace the placeholder with."
+        ),
+        min_args=1,
+        max_args=1,
+        valid_arg_counts=(1,),
+        signatures=[
+            IntrinsicSignature(
+                params=[IntrinsicParam("value", "Any")],
+                return_type="None",
+                docstring="Replace first placeholder {0}..{9} in print buffer with value.",
+            ),
+        ],
+        runtime_fn=_rt_format,
     ),
     IntrinsicDef(
         name="printflush",
@@ -936,6 +1112,36 @@ INTRINSIC_DEFINITIONS: List[IntrinsicDef] = [
         has_assignment_form=True,
     ),
     IntrinsicDef(
+        name="unpackcolor",
+        summary="Unpack double-precision color into r, g, b, a components in [0, 1]",
+        docstring=(
+            "Unpack a 64-bit double color into 4 target variables r, g, b, a.\n\n"
+            "Args:\n"
+            "    r: Target variable for red channel.\n"
+            "    g: Target variable for green channel.\n"
+            "    b: Target variable for blue channel.\n"
+            "    a: Target variable for alpha channel.\n"
+            "    value: 64-bit packed double color operand."
+        ),
+        min_args=5,
+        max_args=5,
+        valid_arg_counts=(5,),
+        signatures=[
+            IntrinsicSignature(
+                params=[
+                    IntrinsicParam("r", "Any"),
+                    IntrinsicParam("g", "Any"),
+                    IntrinsicParam("b", "Any"),
+                    IntrinsicParam("a", "Any"),
+                    IntrinsicParam("value", "Any"),
+                ],
+                return_type="None",
+                docstring="Unpack packed color value into r, g, b, a variables.",
+            ),
+        ],
+        runtime_fn=_rt_unpackcolor,
+    ),
+    IntrinsicDef(
         name="getlink",
         summary="Get linked building reference by link index",
         docstring=(
@@ -1036,6 +1242,74 @@ INTRINSIC_DEFINITIONS: List[IntrinsicDef] = [
             ),
         ],
         runtime_fn=_rt_max,
+        has_assignment_form=True,
+    ),
+    IntrinsicDef(
+        name="select",
+        summary="Conditional selection opcode (select result condition comp0 comp1 a b)",
+        docstring=(
+            "Conditionally select between two values based on a condition comparison.\n\n"
+            "Supported call conventions:\n"
+            "    1. Expression form (full):       result = select(cond_op, comp0, comp1, a, b)\n"
+            "    2. Statement form (full):        select(dest, cond_op, comp0, comp1, a, b)\n"
+            "    3. Expression form (simplified): result = select(cond, a, b)\n"
+            "    4. Statement form (simplified):  select(dest, cond, a, b)\n\n"
+            "Args:\n"
+            "    dest: Target variable (in statement form).\n"
+            "    cond_op: Condition operator ('equal', 'notEqual', 'lessThan', etc.).\n"
+            "    comp0: First operand of condition comparison.\n"
+            "    comp1: Second operand of condition comparison.\n"
+            "    a: Value selected when condition is true.\n"
+            "    b: Value selected when condition is false."
+        ),
+        min_args=3,
+        max_args=6,
+        valid_arg_counts=(3, 4, 5, 6),
+        signatures=[
+            IntrinsicSignature(
+                params=[
+                    IntrinsicParam("cond", "Any"),
+                    IntrinsicParam("a", "Any"),
+                    IntrinsicParam("b", "Any"),
+                ],
+                return_type="Any",
+                docstring="Select between a and b based on truthiness of cond.",
+            ),
+            IntrinsicSignature(
+                params=[
+                    IntrinsicParam("dest", "Any"),
+                    IntrinsicParam("cond", "Any"),
+                    IntrinsicParam("a", "Any"),
+                    IntrinsicParam("b", "Any"),
+                ],
+                return_type="None",
+                docstring="Select between a and b into dest based on truthiness of cond.",
+            ),
+            IntrinsicSignature(
+                params=[
+                    IntrinsicParam("cond_op", "Union[Condition, str]"),
+                    IntrinsicParam("comp0", "Any"),
+                    IntrinsicParam("comp1", "Any"),
+                    IntrinsicParam("a", "Any"),
+                    IntrinsicParam("b", "Any"),
+                ],
+                return_type="Any",
+                docstring="Select between a and b based on cond_op comparison between comp0 and comp1.",
+            ),
+            IntrinsicSignature(
+                params=[
+                    IntrinsicParam("dest", "Any"),
+                    IntrinsicParam("cond_op", "Union[Condition, str]"),
+                    IntrinsicParam("comp0", "Any"),
+                    IntrinsicParam("comp1", "Any"),
+                    IntrinsicParam("a", "Any"),
+                    IntrinsicParam("b", "Any"),
+                ],
+                return_type="None",
+                docstring="Select between a and b into dest based on cond_op comparison between comp0 and comp1.",
+            ),
+        ],
+        runtime_fn=_rt_select,
         has_assignment_form=True,
     ),
 ]
@@ -1147,6 +1421,7 @@ MLOG_EXPORTS: Set[str] = (
         "null",
         "raw",
         "Vars",
+        "__version__",
     }
 )
 
@@ -1170,6 +1445,9 @@ def generate_pyi() -> str:
     lines.append("")
     lines.append("from enum import Enum")
     lines.append("from typing import Any, Dict, List, Optional, Union, overload")
+    lines.append("")
+    lines.append("# Package version")
+    lines.append("__version__: str")
     lines.append("")
     lines.append("# Null constant representing null in Mindustry Logic")
     lines.append("null: Any = None")
@@ -1265,7 +1543,7 @@ def generate_pyi() -> str:
                 doc_lines = sig.docstring.strip().splitlines()
                 lines.append('    """' + doc_lines[0])
                 for dl in doc_lines[1:]:
-                    lines.append("    " + dl)
+                    lines.append(("    " + dl) if dl else "")
                 lines.append('    """')
                 lines.append("    ...")
                 lines.append("")
@@ -1282,7 +1560,7 @@ def generate_pyi() -> str:
             doc_lines = idef.docstring.strip().splitlines()
             lines.append('    """' + doc_lines[0])
             for dl in doc_lines[1:]:
-                lines.append("    " + dl)
+                lines.append(("    " + dl) if dl else "")
             lines.append('    """')
             lines.append("    ...")
             lines.append("")

@@ -20,7 +20,7 @@ CMP_TO_PY = {
     "lessThanEq": "<=",
     "greaterThan": ">",
     "greaterThanEq": ">=",
-    "strictEqual": "==",
+    "strictEqual": "is",
 }
 
 CMP_INVERSE_TO_PY = {
@@ -30,7 +30,7 @@ CMP_INVERSE_TO_PY = {
     "lessThanEq": ">",
     "greaterThan": "<=",
     "greaterThanEq": "<",
-    "strictEqual": "!=",
+    "strictEqual": "is not",
 }
 
 
@@ -166,6 +166,27 @@ def instruction_to_python(
                 params = [format_semantic_argument("uradar", i, args[i], defined_variables, args) for i in range(5)]
                 return f"{dest} = uradar({', '.join(params)})"
 
+
+    if op == "select" and len(args) == 6:
+        dest = args[0]
+        if dest.isidentifier() and not dest.startswith("@"):
+            cond = args[1]
+            c0 = format_semantic_argument("select", 2, args[2], defined_variables, args)
+            c1 = format_semantic_argument("select", 3, args[3], defined_variables, args)
+            a = format_semantic_argument("select", 4, args[4], defined_variables, args)
+            b = format_semantic_argument("select", 5, args[5], defined_variables, args)
+            if cond == "notEqual" and args[3] in ("0", "false"):
+                test = c0
+            elif cond == "equal" and args[3] in ("0", "false"):
+                test = f"not {c0}"
+            elif cond in CMP_TO_PY:
+                py_op = CMP_TO_PY[cond]
+                test = f"{c0} {py_op} {c1}"
+            elif cond == "always":
+                test = "True"
+            else:
+                test = f"{c0} {cond} {c1}"
+            return f"{dest} = {a} if {test} else {b}"
 
     if op == "stop":
         return "stop()"

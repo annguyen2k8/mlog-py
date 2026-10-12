@@ -37,6 +37,7 @@ from .metadata import (
     _rt_draw as draw,
     _rt_drawflush as drawflush,
     _rt_end as end,
+    _rt_format as format,
     _rt_getlink as getlink,
     _rt_jump as jump,
     _rt_lookup as lookup,
@@ -45,16 +46,20 @@ from .metadata import (
     _rt_op as op,
     _rt_packcolor as packcolor,
     _rt_print as print,
+    _rt_printchar as printchar,
     _rt_printflush as printflush,
     _rt_radar as radar,
     _rt_raw as raw,
     _rt_read as read,
+    _rt_select as select,
     _rt_sensor as sensor,
     _rt_set as set,
+    _rt_setrate as setrate,
     _rt_stop as stop,
     _rt_ubind as ubind,
     _rt_ucontrol as ucontrol,
     _rt_ulocate as ulocate,
+    _rt_unpackcolor as unpackcolor,
     _rt_uradar as uradar,
     _rt_wait as wait,
     _rt_write as write,
@@ -66,6 +71,33 @@ from .validator import MlogValidator, ValidationError
 # Null constant representing null in Mindustry Logic
 null = None
 
+
+def _get_version() -> str:
+    """Resolve package version from pyproject.toml or packaging metadata."""
+    try:
+        pyproject_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "pyproject.toml"))
+        if os.path.exists(pyproject_path):
+            with open(pyproject_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("version ="):
+                        return line.split("=", 1)[1].strip().strip('"').strip("'")
+    except Exception:
+        pass
+
+    try:
+        from importlib.metadata import version, PackageNotFoundError
+        try:
+            return version("mlog-py")
+        except PackageNotFoundError:
+            pass
+    except ImportError:
+        pass
+
+    return "0.5.0"
+
+
+__version__: str = _get_version()
 
 __all__ = sorted(list(MLOG_EXPORTS))
 
@@ -247,6 +279,12 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         prog="mlog-py",
         description="Compile a controlled Python subset into Mindustry Logic (mlog) or decompile mlog to Python DSL.",
     )
+    parser.add_argument(
+        "--version",
+        "-V",
+        action="version",
+        version=f"%(prog)s {__version__}",
+    )
     subparsers = parser.add_subparsers(
         dest="command",
         title="subcommands",
@@ -326,7 +364,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Backward compatibility:
     # If first argument is not a known subcommand ('compile', 'decompile', '-h', '--help', empty),
     # default to the 'compile' command (e.g. `mlog-py script.py -o script.mlog`).
-    if raw_args and raw_args[0] not in ("compile", "decompile", "-h", "--help"):
+    if raw_args and raw_args[0] not in ("compile", "decompile", "-h", "--help", "-V", "--version"):
         raw_args = ["compile"] + raw_args
 
     args = parser.parse_args(raw_args)

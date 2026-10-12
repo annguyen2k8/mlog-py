@@ -6,6 +6,9 @@ Do not edit directly; regenerated and verified via test suite.
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union, overload
 
+# Package version
+__version__: str
+
 # Null constant representing null in Mindustry Logic
 null: Any = None
 
@@ -532,7 +535,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 def control(type: Union[ControlProperty, str], target: Any, p1: Any = 0, p2: Any = 0, p3: Any = 0, p4: Any = 0) -> None:
     """Control a building property.
-    
+
     Args:
         type: ControlProperty enum or string (e.g. ControlProperty.ENABLED, 'shoot').
         target: Target building.
@@ -542,7 +545,7 @@ def control(type: Union[ControlProperty, str], target: Any, p1: Any = 0, p2: Any
 
 def draw(type: Union[DrawType, str], x: Any = 0, y: Any = 0, p1: Any = 0, p2: Any = 0, p3: Any = 0, p4: Any = 0) -> None:
     """Queue a drawing operation to display buffer.
-    
+
     Args:
         type: DrawType enum or string (e.g. DrawType.CLEAR, DrawType.LINE, DrawType.RECT, 'color').
         x, y, p1, p2, p3, p4: Drawing coordinates, dimensions, or color components (default 0).
@@ -551,7 +554,7 @@ def draw(type: Union[DrawType, str], x: Any = 0, y: Any = 0, p1: Any = 0, p2: An
 
 def drawflush(display: Any) -> None:
     """Flush queued draw operations to a logic display building.
-    
+
     Args:
         display: Target display block.
     """
@@ -559,6 +562,14 @@ def drawflush(display: Any) -> None:
 
 def end() -> None:
     """Jump processor execution back to instruction 0 (restart loop).
+    """
+    ...
+
+def format(value: Any) -> None:
+    """Replace the first placeholder {0}..{9} in the print buffer matching LExecutor.FormatI.
+
+    Args:
+        value: Value to replace the placeholder with.
     """
     ...
 
@@ -576,7 +587,7 @@ def getlink(index: Any) -> Any:
 
 def jump(target: Union[str, int], cond: Union[Condition, str] = "always", a: Any = 0, b: Any = 0) -> None:
     """Jump to a label or instruction address conditionally or unconditionally.
-    
+
     Args:
         target: Symbolic label name or numeric instruction address.
         cond: Jump condition (Condition enum or string, e.g. Condition.EQUAL, 'lessThan', default 'always').
@@ -599,11 +610,11 @@ def lookup(type: Union[LookupType, str], index: Any) -> Any:
 
 def max(a: Any, b: Any) -> Any:
     """Compute the maximum of two values without compile-time evaluation.
-    
+
     Args:
         a: First operand.
         b: Second operand.
-    
+
     Returns:
         The larger of a and b.
     """
@@ -611,11 +622,11 @@ def max(a: Any, b: Any) -> Any:
 
 def min(a: Any, b: Any) -> Any:
     """Compute the minimum of two values without compile-time evaluation.
-    
+
     Args:
         a: First operand.
         b: Second operand.
-    
+
     Returns:
         The smaller of a and b.
     """
@@ -647,27 +658,38 @@ def packcolor(r: Any, g: Any, b: Any, a: Any) -> Any:
 
 def print(value: Any) -> None:
     """Append text or a value to the processor print buffer.
-    
+
     Note: Mindustry Logic's print does NOT append a newline character.
     Multiple consecutive print() calls concatenate directly into a single string.
     To insert a newline, explicitly include '\n' in the text string (e.g. print('Line 1\n')).
-    
+
     The processor print buffer has a maximum capacity of 400 characters (maxTextBuffer = 400).
     If the buffer is already full (>= 400 characters), subsequent calls are ignored.
     If a string exceeds remaining capacity, it is truncated to fit.
     Numbers within 0.00001 of an integer format as integers; null/NaN/Inf format as 'null'.
-    
+
     Args:
         value: Text string literal or variable to print.
     """
     ...
 
+def printchar(value: Any) -> None:
+    """Append a character to the processor print buffer matching LExecutor.PrintCharI.
+
+    If value is an unlockable content with emoji, appends its emoji character.
+    Otherwise, appends chr(floor(value)).
+
+    Args:
+        value: Character code (numeric) or content with emoji.
+    """
+    ...
+
 def printflush(message: Any) -> None:
     """Flush the print buffer to a message block and clear the buffer.
-    
+
     If target is a valid printable block (e.g. message1), text is displayed on the block.
     The processor print buffer is always cleared unconditionally to length 0.
-    
+
     Args:
         message: Target message block.
     """
@@ -687,10 +709,10 @@ def radar(target1: Union[RadarTarget, str], target2: Union[RadarTarget, str], ta
 
 def raw(value: Any) -> str:
     """Explicit escape hatch to bypass registry validation in mlog code.
-    
+
     Args:
         value: Unverified property string or token (e.g. '@myCustomModProp').
-    
+
     Returns:
         Raw token string that compiles verbatim into output mlog.
     """
@@ -709,6 +731,30 @@ def read(cell: Any, address: Any) -> Any:
     ...
 
 @overload
+def select(cond: Any, a: Any, b: Any) -> Any:
+    """Select between a and b based on truthiness of cond.
+    """
+    ...
+
+@overload
+def select(dest: Any, cond: Any, a: Any, b: Any) -> None:
+    """Select between a and b into dest based on truthiness of cond.
+    """
+    ...
+
+@overload
+def select(cond_op: Union[Condition, str], comp0: Any, comp1: Any, a: Any, b: Any) -> Any:
+    """Select between a and b based on cond_op comparison between comp0 and comp1.
+    """
+    ...
+
+@overload
+def select(dest: Any, cond_op: Union[Condition, str], comp0: Any, comp1: Any, a: Any, b: Any) -> None:
+    """Select between a and b into dest based on cond_op comparison between comp0 and comp1.
+    """
+    ...
+
+@overload
 def sensor(dest: Any, block: Any, prop: Union[SensorProperty, str]) -> Any:
     """Read property from block into dest variable (statement form).
     """
@@ -722,10 +768,18 @@ def sensor(block: Any, prop: Union[SensorProperty, str]) -> Any:
 
 def set(to: Any, from_: Any) -> Any:
     """Set a variable to a value.
-    
+
     Args:
         to: Target variable.
         from_: Source value, variable, or literal.
+    """
+    ...
+
+def setrate(ipt: Any) -> None:
+    """Set processor execution speed in instructions per tick (IPT).
+
+    Args:
+        ipt: Target instructions per tick rate (capped by processor max rate, e.g. 1000).
     """
     ...
 
@@ -736,7 +790,7 @@ def stop() -> None:
 
 def ubind(unit_type: Union[Units, str]) -> None:
     """Bind a unit of the specified type to this processor.
-    
+
     Args:
         unit_type: Units enum or string (e.g. Units.FLARE, '@flare', 'mono').
     """
@@ -744,7 +798,7 @@ def ubind(unit_type: Union[Units, str]) -> None:
 
 def ucontrol(action: Union[UnitControl, str], p1: Any = 0, p2: Any = 0, p3: Any = 0, p4: Any = 0, p5: Any = 0) -> None:
     """Issue a command to the currently bound unit.
-    
+
     Args:
         action: UnitControl enum or string (e.g. UnitControl.MOVE, UnitControl.APPROACH, 'target').
         p1, p2, p3, p4, p5: Command parameters (default 0).
@@ -753,7 +807,7 @@ def ucontrol(action: Union[UnitControl, str], p1: Any = 0, p2: Any = 0, p3: Any 
 
 def ulocate(locate: Any, flag: Any, enemy: Any, ore: Any, outX: Any, outY: Any, outFound: Any, outBuild: Any) -> None:
     """Locate positions, buildings, or ores with the bound unit.
-    
+
     Args:
         locate: Finding type ('ore', 'building', 'spawn', 'damaged').
         flag: Finding flag / building type.
@@ -762,6 +816,18 @@ def ulocate(locate: Any, flag: Any, enemy: Any, ore: Any, outX: Any, outY: Any, 
         outX, outY: Output coordinates variables.
         outFound: Output boolean found variable.
         outBuild: Output building variable.
+    """
+    ...
+
+def unpackcolor(r: Any, g: Any, b: Any, a: Any, value: Any) -> None:
+    """Unpack a 64-bit double color into 4 target variables r, g, b, a.
+
+    Args:
+        r: Target variable for red channel.
+        g: Target variable for green channel.
+        b: Target variable for blue channel.
+        a: Target variable for alpha channel.
+        value: 64-bit packed double color operand.
     """
     ...
 
@@ -785,7 +851,7 @@ def uradar(target1: Union[RadarTarget, str], target2: Union[RadarTarget, str], t
 
 def wait(seconds: Any = 0.5) -> None:
     """Pause processor execution for a duration in seconds.
-    
+
     Args:
         seconds: Duration to wait in seconds (default 0.5).
     """
@@ -793,7 +859,7 @@ def wait(seconds: Any = 0.5) -> None:
 
 def write(input: Any, cell: Any, address: Any) -> None:
     """Write a value to a memory cell or memory bank at the specified index.
-    
+
     Args:
         input: Value to write.
         cell: Target memory cell or memory bank.
@@ -833,11 +899,13 @@ __all__ = [
     "UnitControl",
     "Units",
     "Vars",
+    "__version__",
     "compile_py",
     "control",
     "draw",
     "drawflush",
     "end",
+    "format",
     "getlink",
     "jump",
     "lookup",
@@ -848,16 +916,20 @@ __all__ = [
     "op",
     "packcolor",
     "print",
+    "printchar",
     "printflush",
     "radar",
     "raw",
     "read",
+    "select",
     "sensor",
     "set",
+    "setrate",
     "stop",
     "ubind",
     "ucontrol",
     "ulocate",
+    "unpackcolor",
     "uradar",
     "wait",
     "write",

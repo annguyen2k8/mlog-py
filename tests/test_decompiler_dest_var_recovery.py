@@ -255,6 +255,51 @@ ulocate building core 0 @copper kx ky kfound kblock
         defined = collect_program_defined_variables(instrs)
         self.assertEqual(defined, {"r", "g", "b", "a"})
 
+    def test_packcolor_nested_expression_and_arguments(self):
+        """packcolor must allocate temporary variables when nested in expressions."""
+        res1 = compile_py("col = packcolor(1, 0, 0, 1) + 1")
+        self.assertIn("packcolor __tmp0 1 0 0 1", res1.mlog)
+        self.assertIn("op add col __tmp0 1", res1.mlog)
+
+        res2 = compile_py('draw("color", packcolor(1, 0, 0, 1))')
+        self.assertIn("packcolor __tmp0 1 0 0 1", res2.mlog)
+        self.assertIn("draw color __tmp0 0 0 0 0 0", res2.mlog)
+
+    def test_unpackcolor_compile_and_roundtrip(self):
+        """unpackcolor intrinsic compiles and survives roundtrip."""
+        mlog = "unpackcolor r g b a col\n"
+        py = decompile(mlog)
+        self.assertIn("unpackcolor(r, g, b, a, col)", py)
+        recompiled = compile_py(py).mlog.strip()
+        self.assertEqual(recompiled, "unpackcolor r g b a col")
+
+    def test_unpackcolor_semantic_read_vars_recovery(self):
+        """unpackcolor must recognize r, g, b, a as definitions, and only value as read."""
+        from src.decompiler.parser import parse_mlog
+        from src.decompiler.semantics import get_instruction_dest_vars, get_instruction_read_vars
+        instr = parse_mlog("unpackcolor r g b a col\n")[0]
+        self.assertEqual(get_instruction_dest_vars(instr), ["r", "g", "b", "a"])
+        self.assertEqual(get_instruction_read_vars(instr), ["col"])
+
+    def test_packcolor_nested_arithmetic_decompiler_roundtrip(self):
+        """packcolor nested in binary expression decompiles without temporary leaks."""
+        source = "from mlog import packcolor\nres = packcolor(1, 0, 0, 1) + 2\n"
+        res = compile_py(source)
+        py = decompile(res.mlog)
+        self.assertIn("res = packcolor(1, 0, 0, 1) + 2", py)
+        self.assertNotIn("__tmp", py)
+        recompiled = compile_py(py).mlog.strip()
+        self.assertEqual(recompiled, res.mlog.strip())
+
+    def test_unpackcolor_and_packcolor_pipeline_roundtrip(self):
+        """Pipeline of unpackcolor followed by packcolor roundtrips cleanly."""
+        mlog = "unpackcolor r g b a col\npackcolor col2 r g b a\n"
+        py = decompile(mlog)
+        self.assertIn("unpackcolor(r, g, b, a, col)", py)
+        self.assertIn("col2 = packcolor(r, g, b, a)", py)
+        recompiled = compile_py(py).mlog.strip()
+        self.assertEqual(recompiled, mlog.strip())
+
 
 if __name__ == "__main__":
     unittest.main()

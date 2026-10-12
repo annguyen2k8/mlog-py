@@ -14,6 +14,8 @@ from .expression import (
     CallExpr,
     ConstantExpr,
     Expr,
+    FormattedStringExpr,
+    IfExpExpr,
     UnaryExpr,
     VariableExpr,
     parse_operand_to_expr,
@@ -69,7 +71,7 @@ def condition_to_expr(cond: str, a: str, b: str, invert: bool = False) -> Expr:
         "lessThanEq": ">" if invert else "<=",
         "greaterThan": "<=" if invert else ">",
         "greaterThanEq": "<" if invert else ">=",
-        "strictEqual": "!=" if invert else "==",
+        "strictEqual": "is not" if invert else "is",
     }
     py_op = cmp_map.get(cond, "==")
     return BinaryExpr(op=py_op, left=a_expr, right=b_expr)
@@ -91,6 +93,17 @@ def semantic_argument_to_expr(
         return ConstantExpr(value=None, raw_str=arg)
     if arg.startswith('"') and arg.endswith('"'):
         return ConstantExpr(value=arg[1:-1], raw_str=arg)
+    if opcode in ("printchar", "format") and arg_idx == 0:
+        from ..mlog_registry import to_snake, REG_ITEMS, REG_LIQUIDS, REG_UNIT_TYPES
+        if arg in REG_ITEMS.by_token:
+            entry = REG_ITEMS.by_token[arg]
+            return VariableExpr(name=f"Items.{to_snake(entry.source_name)}")
+        if arg in REG_LIQUIDS.by_token:
+            entry = REG_LIQUIDS.by_token[arg]
+            return VariableExpr(name=f"Liquids.{to_snake(entry.source_name)}")
+        if arg in REG_UNIT_TYPES.by_token:
+            entry = REG_UNIT_TYPES.by_token[arg]
+            return VariableExpr(name=f"Units.{to_snake(entry.source_name)}")
     if arg.startswith("@"):
         return ConstantExpr(value=arg, raw_str=arg)
     if arg.isdigit() or (arg.startswith("-") and arg[1:].isdigit()):
@@ -131,9 +144,12 @@ def substitute_variable(expr: Expr, var_name: str, replacement: Expr) -> Expr:
         return expr
 
     if isinstance(expr, UnaryExpr):
+        new_operand = substitute_variable(expr.operand, var_name, replacement)
+        if expr.op == "not" and isinstance(new_operand, BinaryExpr) and new_operand.op == "is":
+            return BinaryExpr(op="is not", left=new_operand.left, right=new_operand.right)
         return UnaryExpr(
             op=expr.op,
-            operand=substitute_variable(expr.operand, var_name, replacement),
+            operand=new_operand,
         )
 
     if isinstance(expr, BinaryExpr):
@@ -147,6 +163,21 @@ def substitute_variable(expr: Expr, var_name: str, replacement: Expr) -> Expr:
         return CallExpr(
             func=expr.func,
             args=[substitute_variable(a, var_name, replacement) for a in expr.args],
+        )
+
+    if isinstance(expr, FormattedStringExpr):
+        return FormattedStringExpr(
+            parts=[
+                substitute_variable(p, var_name, replacement) if isinstance(p, Expr) else p
+                for p in expr.parts
+            ]
+        )
+
+    if isinstance(expr, IfExpExpr):
+        return IfExpExpr(
+            test=substitute_variable(expr.test, var_name, replacement),
+            body=substitute_variable(expr.body, var_name, replacement),
+            orelse=substitute_variable(expr.orelse, var_name, replacement),
         )
 
     return expr
@@ -233,19 +264,28 @@ class DataflowTransformer:
         if not program.is_fully_structured:
             return program
 
-        # Pass 1: Convert raw linear InstructionNodes (set, op) into AssignNodes/ExprStmtNodes
+        # Pass 1: Convert raw linear InstructionNodes (set, op, print, format) into AssignNodes/ExprStmtNodes
         converted_body = self._convert_instructions_in_list(program.body)
 
         # Pass 2: Dataflow analysis & safe inlining across structured scopes
         optimized_body = self._optimize_scope(converted_body)
 
+        # Pass 3: Recover f-strings from consecutive print + format statements
+        final_body = self._recover_fstrings_in_scope(optimized_body)
+
         return StructuredProgram(
-            body=optimized_body,
+            body=final_body,
             is_fully_structured=program.is_fully_structured,
             unstructured_reasons=program.unstructured_reasons,
             instruction_by_address=getattr(program, "instruction_by_address", {}),
             defined_variables=getattr(program, "defined_variables", None),
         )
+
+    def transform_scope(self, nodes: List[StructuredNode]) -> List[StructuredNode]:
+        """Transform and optimize a structured scope of nodes including f-string recovery."""
+        converted = self._convert_instructions_in_list(nodes)
+        optimized = self._optimize_scope(converted)
+        return self._recover_fstrings_in_scope(optimized)
 
     # -----------------------------------------------------------------------
     # Step 1: Instruction -> Expression IR Conversion
@@ -381,6 +421,49 @@ class DataflowTransformer:
                             params = [semantic_argument_to_expr("uradar", i, args[i], defined_vars, args) for i in range(5)]
                             result.append(AssignNode(target=dest, value=CallExpr("uradar", params), source_addresses=[instr.address]))
                             continue
+
+                # Case J: format value -> format(value)
+                if op == "format" and len(args) == 1:
+                    val_expr = semantic_argument_to_expr("format", 0, args[0], defined_vars, args)
+                    result.append(
+                        ExprStmtNode(
+                            expr=CallExpr("format", [val_expr]),
+                            source_addresses=[instr.address],
+                        )
+                    )
+                    continue
+
+                # Case K: select dest cond comp0 comp1 a b -> dest = a if cond_expr else b
+                if op == "select" and len(args) == 6:
+                    dest = args[0]
+                    if dest.isidentifier() and not dest.startswith("@"):
+                        cond = args[1]
+                        comp0_expr = semantic_argument_to_expr("select", 2, args[2], defined_vars, args)
+                        comp1_expr = semantic_argument_to_expr("select", 3, args[3], defined_vars, args)
+                        a_expr = semantic_argument_to_expr("select", 4, args[4], defined_vars, args)
+                        b_expr = semantic_argument_to_expr("select", 5, args[5], defined_vars, args)
+
+                        # Reconstruct condition expression
+                        if cond == "notEqual" and args[3] in ("0", "false"):
+                            test_expr = comp0_expr
+                        elif cond == "equal" and args[3] in ("0", "false"):
+                            test_expr = UnaryExpr("not", comp0_expr)
+                        elif cond in MLOG_TO_PY_BINARY_OPS:
+                            py_op = MLOG_TO_PY_BINARY_OPS[cond]
+                            test_expr = BinaryExpr(py_op, comp0_expr, comp1_expr)
+                        elif cond == "always":
+                            test_expr = ConstantExpr(True)
+                        else:
+                            test_expr = BinaryExpr(cond, comp0_expr, comp1_expr)
+
+                        result.append(
+                            AssignNode(
+                                target=dest,
+                                value=IfExpExpr(test=test_expr, body=a_expr, orelse=b_expr),
+                                source_addresses=[instr.address],
+                            )
+                        )
+                        continue
 
                 # Fallback: keep InstructionNode untouched (Zero Guessing)
                 result.append(node)
@@ -554,3 +637,128 @@ class DataflowTransformer:
             walk(n)
 
         return counts
+
+    def _extract_print_template(self, node: StructuredNode) -> Optional[Tuple[str, List[int]]]:
+        """Extract template text and source addresses if node is a print of a string literal."""
+        if isinstance(node, ExprStmtNode) and isinstance(node.expr, CallExpr) and node.expr.func == "print":
+            if len(node.expr.args) == 1:
+                arg = node.expr.args[0]
+                if isinstance(arg, ConstantExpr) and isinstance(arg.value, str):
+                    return arg.value, list(node.source_addresses)
+        elif isinstance(node, InstructionNode):
+            instr = node.instruction
+            if instr.opcode == "print" and len(instr.args) == 1:
+                arg = instr.args[0]
+                if arg.startswith('"') and arg.endswith('"'):
+                    unquoted = (
+                        arg[1:-1]
+                        .replace('\\\\', '\x00')
+                        .replace('\\"', '"')
+                        .replace('\\n', '\n')
+                        .replace('\x00', '\\')
+                    )
+                    return unquoted, list(node.source_addresses)
+        return None
+
+    def _extract_format_arg(self, node: StructuredNode) -> Optional[Tuple[Expr, List[int]]]:
+        """Extract argument expression and source addresses if node is a format call."""
+        if isinstance(node, ExprStmtNode) and isinstance(node.expr, CallExpr) and node.expr.func == "format":
+            if len(node.expr.args) == 1:
+                return node.expr.args[0], list(node.source_addresses)
+        elif isinstance(node, InstructionNode):
+            instr = node.instruction
+            if instr.opcode == "format" and len(instr.args) == 1:
+                arg_expr = parse_operand_to_expr(instr.args[0])
+                return arg_expr, list(node.source_addresses)
+        return None
+
+    def _build_fstring_parts(self, template: str, format_args: List[Expr]) -> List[Any]:
+        """Split template string by {0}..{k-1} placeholders and insert format_args."""
+        parts: List[Any] = []
+        last_end = 0
+        import re
+        for match in re.finditer(r'\{(\d+)\}', template):
+            start, end = match.span()
+            if start > last_end:
+                parts.append(template[last_end:start])
+            idx = int(match.group(1))
+            if idx < len(format_args):
+                parts.append(format_args[idx])
+            else:
+                parts.append(match.group(0))
+            last_end = end
+        if last_end < len(template):
+            parts.append(template[last_end:])
+        return parts
+
+    def _recover_fstrings_in_scope(self, nodes: List[StructuredNode]) -> List[StructuredNode]:
+        """Convert consecutive print(template) and format(...) into print(f'...')."""
+        result: List[StructuredNode] = []
+        i = 0
+        n = len(nodes)
+        import re
+        has_dangling_placeholders = False
+        while i < n:
+            node = nodes[i]
+
+            if isinstance(node, IfNode):
+                node.then_body = self._recover_fstrings_in_scope(node.then_body)
+                node.else_body = self._recover_fstrings_in_scope(node.else_body)
+                result.append(node)
+                i += 1
+                has_dangling_placeholders = False
+                continue
+            elif isinstance(node, WhileNode):
+                node.body = self._recover_fstrings_in_scope(node.body)
+                result.append(node)
+                i += 1
+                has_dangling_placeholders = False
+                continue
+
+            # Check for buffer flush (resets any dangling placeholders)
+            is_flush = False
+            if isinstance(node, InstructionNode) and node.instruction.opcode == "printflush":
+                is_flush = True
+            elif isinstance(node, ExprStmtNode) and isinstance(node.expr, CallExpr) and node.expr.func == "printflush":
+                is_flush = True
+            if is_flush:
+                has_dangling_placeholders = False
+
+            template_info = self._extract_print_template(node)
+            if template_info is not None:
+                template_text, print_source_addrs = template_info
+                placeholders = re.findall(r'\{(\d+)\}', template_text)
+                if placeholders:
+                    int_placeholders = [int(p) for p in placeholders]
+                    k = len(int_placeholders)
+                    # Placeholders must be exactly 0, 1, ..., k-1 in sequence, k <= 10,
+                    # and there must be no preceding unformatted placeholders in buffer
+                    if (not has_dangling_placeholders) and (k <= 10) and (int_placeholders == list(range(k))) and (i + k < n):
+                        format_args = []
+                        all_format = True
+                        merged_addrs = list(print_source_addrs)
+                        for offset in range(1, k + 1):
+                            next_node = nodes[i + offset]
+                            fmt_arg_info = self._extract_format_arg(next_node)
+                            if fmt_arg_info is None:
+                                all_format = False
+                                break
+                            arg_expr, fmt_addrs = fmt_arg_info
+                            format_args.append(arg_expr)
+                            merged_addrs.extend(fmt_addrs)
+
+                        if all_format:
+                            parts = self._build_fstring_parts(template_text, format_args)
+                            fstring_expr = FormattedStringExpr(parts=parts)
+                            call_expr = CallExpr(func="print", args=[fstring_expr])
+                            result.append(ExprStmtNode(expr=call_expr, source_addresses=merged_addrs))
+                            i += k + 1
+                            continue
+
+                    # If print had placeholders but was not merged, buffer now has dangling placeholders
+                    has_dangling_placeholders = True
+
+            result.append(node)
+            i += 1
+
+        return result

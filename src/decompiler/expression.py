@@ -24,6 +24,7 @@ PREC_COMPARISON = 25    # ==, !=, <, <=, >, >=, is
 PREC_LOGICAL_NOT = 20   # not
 PREC_LOGICAL_AND = 15   # and
 PREC_LOGICAL_OR = 10    # or
+PREC_TERNARY = 5        # a if cond else b
 PREC_MIN = 0            # Unknown / lowest
 
 BINARY_OP_PRECEDENCE = {
@@ -46,6 +47,7 @@ BINARY_OP_PRECEDENCE = {
     ">": PREC_COMPARISON,
     ">=": PREC_COMPARISON,
     "is": PREC_COMPARISON,
+    "is not": PREC_COMPARISON,
     "and": PREC_LOGICAL_AND,
     "or": PREC_LOGICAL_OR,
 }
@@ -69,7 +71,7 @@ MLOG_TO_PY_BINARY_OPS = {
     "lessThanEq": "<=",
     "greaterThan": ">",
     "greaterThanEq": ">=",
-    "strictEqual": "==",
+    "strictEqual": "is",
     "land": "and",
 }
 
@@ -261,7 +263,7 @@ class CallExpr(Expr):
     @property
     def has_side_effects(self) -> bool:
         # Pure arithmetic calls have no side effects, other calls might
-        if self.func in ("min", "max"):
+        if self.func in ("min", "max", "packcolor"):
             return False
         if self.func == "op" and len(self.args) >= 1:
             first = self.args[0]
@@ -272,6 +274,91 @@ class CallExpr(Expr):
     def to_python(self) -> str:
         args_str = ", ".join(a.to_python() for a in self.args)
         return f"{self.func}({args_str})"
+
+
+@dataclass(frozen=True)
+class FormattedStringExpr(Expr):
+    """Represents a Python f-string literal expression, e.g. f'Count: {x}'."""
+    parts: List[Any]  # List of str (literal text) or Expr (formatted expression)
+
+    @property
+    def precedence(self) -> int:
+        return PREC_ATOMIC
+
+    @property
+    def is_constant(self) -> bool:
+        return False
+
+    @property
+    def variables_used(self) -> Set[str]:
+        vars_set: Set[str] = set()
+        for p in self.parts:
+            if isinstance(p, Expr):
+                vars_set.update(p.variables_used)
+        return vars_set
+
+    @property
+    def has_side_effects(self) -> bool:
+        for p in self.parts:
+            if isinstance(p, Expr) and p.has_side_effects:
+                return True
+        return False
+
+    def to_python(self) -> str:
+        inner_parts = []
+        for p in self.parts:
+            if isinstance(p, str):
+                escaped = p.replace("{", "{{").replace("}", "}}")
+                escaped = (
+                    escaped.replace("\\", "\\\\")
+                    .replace('"', '\\"')
+                    .replace("\n", "\\n")
+                )
+                inner_parts.append(escaped)
+            elif isinstance(p, Expr):
+                inner_parts.append(f"{{{p.to_python()}}}")
+            else:
+                inner_parts.append(str(p))
+        return f'f"{"".join(inner_parts)}"'
+
+
+@dataclass(frozen=True)
+class IfExpExpr(Expr):
+    """Represents a Python ternary expression: body if test else orelse."""
+    test: Expr
+    body: Expr
+    orelse: Expr
+
+    @property
+    def precedence(self) -> int:
+        return PREC_TERNARY
+
+    @property
+    def is_constant(self) -> bool:
+        return self.test.is_constant and self.body.is_constant and self.orelse.is_constant
+
+    @property
+    def variables_used(self) -> Set[str]:
+        return self.test.variables_used | self.body.variables_used | self.orelse.variables_used
+
+    @property
+    def has_side_effects(self) -> bool:
+        return self.test.has_side_effects or self.body.has_side_effects or self.orelse.has_side_effects
+
+    def to_python(self) -> str:
+        body_str = self.body.to_python()
+        if self.body.precedence <= self.precedence:
+            body_str = f"({body_str})"
+
+        test_str = self.test.to_python()
+        if self.test.precedence <= self.precedence:
+            test_str = f"({test_str})"
+
+        orelse_str = self.orelse.to_python()
+        if self.orelse.precedence < self.precedence:
+            orelse_str = f"({orelse_str})"
+
+        return f"{body_str} if {test_str} else {orelse_str}"
 
 
 @dataclass(frozen=True)

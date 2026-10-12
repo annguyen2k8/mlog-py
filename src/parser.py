@@ -134,11 +134,15 @@ class ASTValidator(ast.NodeVisitor):
             ast.Call,
             ast.Attribute,
             ast.Subscript,
+            ast.IfExp,
+            ast.JoinedStr,
+            ast.FormattedValue,
             # Operators
             ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod,
             ast.Pow, ast.LShift, ast.RShift, ast.BitOr, ast.BitAnd, ast.BitXor,
             ast.USub, ast.UAdd, ast.Invert, ast.Not,
             ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE,
+            ast.Is, ast.IsNot,
             ast.And, ast.Or,
             # Contexts
             ast.Load, ast.Store,
@@ -206,6 +210,8 @@ class ASTValidator(ast.NodeVisitor):
                 self.error(f"cannot assign to read-only built-in variable 'Vars.{target.attr}' ('{token.token}')", target)
         else:
             self.error("assignment target must be a simple variable name or array index (unpacking not supported)", target)
+        if isinstance(node.value, ast.JoinedStr):
+            self.error("f-strings cannot be assigned to variables (Mindustry Logic only supports string formatting via the print buffer)", node.value)
         self.visit(node.value)
 
     def visit_AugAssign(self, node: ast.AugAssign):
@@ -232,6 +238,8 @@ class ASTValidator(ast.NodeVisitor):
         ):
             op_name = "@=" if op_cls is ast.MatMult else f"{op_cls.__name__}="
             self.error(f"unsupported augmented assignment operator: '{op_name}'", node)
+        if isinstance(node.value, ast.JoinedStr):
+            self.error("f-strings cannot be assigned to variables (Mindustry Logic only supports string formatting via the print buffer)", node.value)
         self.visit(node.value)
 
     def visit_Subscript(self, node: ast.Subscript):
@@ -286,8 +294,64 @@ class ASTValidator(ast.NodeVisitor):
                 )
         if node.keywords:
             self.error("keyword arguments are not supported in intrinsics", node)
+        if func_name != "print":
+            for arg in node.args:
+                if isinstance(arg, ast.JoinedStr):
+                    self.error(f"f-strings are not supported in '{func_name}()'; use print(f\"...\") instead", arg)
         for arg in node.args:
             self.visit(arg)
+
+    def visit_Expr(self, node: ast.Expr):
+        if isinstance(node.value, ast.JoinedStr):
+            self.error("f-strings cannot be used as standalone statements; use print(f\"...\") instead", node.value)
+        self.generic_visit(node)
+
+    def visit_BinOp(self, node: ast.BinOp):
+        if isinstance(node.left, ast.JoinedStr) or isinstance(node.right, ast.JoinedStr):
+            self.error("f-strings do not support binary operations (Mindustry Logic only supports string formatting via the print buffer)", node)
+        self.generic_visit(node)
+
+    def visit_Compare(self, node: ast.Compare):
+        if isinstance(node.left, ast.JoinedStr) or any(isinstance(c, ast.JoinedStr) for c in node.comparators):
+            self.error("f-strings cannot be compared (Mindustry Logic only supports string formatting via the print buffer)", node)
+        self.generic_visit(node)
+
+    def visit_Return(self, node: ast.Return):
+        if node.value is not None and isinstance(node.value, ast.JoinedStr):
+            self.error("f-strings cannot be returned from functions (Mindustry Logic only supports string formatting via the print buffer)", node.value)
+        self.generic_visit(node)
+
+    def visit_JoinedStr(self, node: ast.JoinedStr):
+        import re
+        formatted_count = sum(1 for v in node.values if isinstance(v, ast.FormattedValue))
+        if formatted_count > 10:
+            self.error(
+                "f-string supports at most 10 expressions (Mindustry format opcode supports placeholders {0} through {9})",
+                node,
+            )
+        if formatted_count > 0:
+            for part in node.values:
+                if isinstance(part, ast.Constant) and isinstance(part.value, str):
+                    if re.search(r'\{[0-9]\}', part.value):
+                        self.error(
+                            "literal '{...}' matching placeholder syntax '{0}'-'{9}' is not supported inside f-strings in Mindustry Logic",
+                            part,
+                        )
+        for v in node.values:
+            self.visit(v)
+
+    def visit_FormattedValue(self, node: ast.FormattedValue):
+        if node.format_spec is not None:
+            self.error(
+                "f-string format specifiers (e.g. ':.2f') are not supported in Mindustry Logic",
+                node,
+            )
+        if node.conversion != -1:
+            self.error(
+                "f-string conversions (!s, !r, !a) are not supported in Mindustry Logic",
+                node,
+            )
+        self.visit(node.value)
 
 
 def parse_and_validate(

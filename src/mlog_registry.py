@@ -321,8 +321,8 @@ class OpcodeRegistry(BaseRegistry):
 
     def __init__(self):
         opcodes = [
-            "read", "write", "draw", "drawflush", "print", "printflush",
-            "getlink", "control", "radar", "sensor", "set", "op", "lookup",
+            "read", "write", "draw", "drawflush", "print", "printchar", "format", "printflush",
+            "getlink", "control", "radar", "sensor", "set", "setrate", "op", "lookup",
             "packcolor", "unpackcolor", "wait", "stop", "end", "jump",
             "ubind", "ucontrol", "uradar", "ulocate",
         ]

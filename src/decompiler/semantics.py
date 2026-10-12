@@ -66,6 +66,7 @@ _INTRINSIC_BY_NAME: Dict[str, IntrinsicDef] = {idef.name: idef for idef in INTRI
 _PARAM_ROLE_MAP: Dict[str, ArgumentSemanticRole] = {
     # Destination variables
     "dest": ArgumentSemanticRole.VARIABLE_DEF,
+    "result": ArgumentSemanticRole.VARIABLE_DEF,
     "output": ArgumentSemanticRole.VARIABLE_DEF,
     "to": ArgumentSemanticRole.VARIABLE_DEF,
     "outX": ArgumentSemanticRole.VARIABLE_DEF,
@@ -92,11 +93,18 @@ _PARAM_ROLE_MAP: Dict[str, ArgumentSemanticRole] = {
     "sort": ArgumentSemanticRole.KEYWORD_OR_ENUM,
     "unit_type": ArgumentSemanticRole.KEYWORD_OR_ENUM,
     "cond": ArgumentSemanticRole.KEYWORD_OR_ENUM,
+    "cond_op": ArgumentSemanticRole.KEYWORD_OR_ENUM,
     "prop": ArgumentSemanticRole.KEYWORD_OR_ENUM,
 }
 
 
-from src.mlog_registry import UNARY_LOGIC_OPS
+from src.mlog_registry import (
+    REG_ITEMS,
+    REG_LIQUIDS,
+    REG_UNIT_TYPES,
+    UNARY_LOGIC_OPS,
+    to_snake,
+)
 
 
 def get_argument_semantic_role(
@@ -121,6 +129,10 @@ def get_argument_semantic_role(
     # Unary op dummy second operand (b in 'op rand xM wB b')
     if opcode == "op" and args and len(args) > 0 and args[0] in UNARY_LOGIC_OPS and arg_idx >= 3:
         return ArgumentSemanticRole.KEYWORD_OR_ENUM
+
+    # unpackcolor writes to r, g, b, a (indices 0..3)
+    if opcode == "unpackcolor" and arg_idx < 4:
+        return ArgumentSemanticRole.VARIABLE_DEF
 
     # Lookup intrinsic definition from metadata
     idef = _INTRINSIC_BY_NAME.get(opcode)
@@ -163,7 +175,7 @@ def get_instruction_dest_vars(instr: MlogInstruction) -> List[str]:
         return [args[0]]
     if op == "op" and len(args) >= 2:
         return [args[1]]
-    if op in ("read", "sensor", "packcolor", "getlink") and len(args) >= 1:
+    if op in ("read", "sensor", "packcolor", "getlink", "select") and len(args) >= 1:
         return [args[0]]
     if op == "lookup" and len(args) >= 2:
         return [args[1]]
@@ -241,6 +253,18 @@ def format_semantic_argument(
     # 1. String literal already
     if is_string_literal(arg):
         return arg
+
+    # Special handling for printchar and format content symbols (Items, Liquids, Units)
+    if opcode in ("printchar", "format") and arg_idx == 0:
+        if arg in REG_ITEMS.by_token:
+            entry = REG_ITEMS.by_token[arg]
+            return f"Items.{to_snake(entry.source_name)}"
+        if arg in REG_LIQUIDS.by_token:
+            entry = REG_LIQUIDS.by_token[arg]
+            return f"Liquids.{to_snake(entry.source_name)}"
+        if arg in REG_UNIT_TYPES.by_token:
+            entry = REG_UNIT_TYPES.by_token[arg]
+            return f"Units.{to_snake(entry.source_name)}"
 
     # 2. Special constants (@unit, @counter, @health, @copper, @this, etc.)
     if is_special_constant(arg):

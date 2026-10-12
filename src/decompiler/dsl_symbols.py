@@ -45,6 +45,16 @@ def _collect_expr_symbols(expr: Any, symbols: Set[str]) -> None:
         if raw in MLOG_EXPORTS:
             symbols.add(raw)
 
+    elif cls_name == "FormattedStringExpr":
+        for part in getattr(expr, "parts", []):
+            if hasattr(part, "to_python"):
+                _collect_expr_symbols(part, symbols)
+
+    elif cls_name == "IfExpExpr":
+        _collect_expr_symbols(getattr(expr, "test", None), symbols)
+        _collect_expr_symbols(getattr(expr, "body", None), symbols)
+        _collect_expr_symbols(getattr(expr, "orelse", None), symbols)
+
 
 def _collect_node_symbols(node: Any, symbols: Set[str]) -> None:
     """Collect DSL symbols from a StructuredNode or FunctionDef."""

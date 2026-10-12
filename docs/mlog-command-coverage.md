@@ -41,14 +41,14 @@ Cần phân biệt rạch ròi giữa số lượng statement hiển thị trên
 ### 1.2. Thống kê Tỷ lệ Hỗ trợ (Coverage Metrics)
 
 - **Bộ vi xử lý thông thường (27 UI Statements)**:
-  - Đã hỗ trợ trong `mlog-py`: **22 statements** (**81.48%**)
-  - Chưa hỗ trợ: **5 statements** (`printchar`, `format`, `select`, `unpackcolor`, `setrate`)
+  - Đã hỗ trợ trong `mlog-py`: **27 statements** (**100.0%**)
+  - Chưa hỗ trợ: **0 statements**
 - **Bộ vi xử lý thế giới (24 World-only UI Statements)**:
   - Đã hỗ trợ trong `mlog-py`: **0 / 24 statements** (**0.0%**)
 - **Toàn bộ giao diện Logic Editor (51 UI Statements)**:
-  - Đã hỗ trợ trong `mlog-py`: **22 / 51 statements** (**43.14%**)
+  - Đã hỗ trợ trong `mlog-py`: **27 / 51 statements** (**52.94%**)
 - **Tổng số Opcode MLog có thể xuất hiện (52 opcodes hữu hiệu, trừ `noop`)**:
-  - Đã hỗ trợ trong `mlog-py`: **22 / 52 opcodes** (**42.31%**)
+  - Đã hỗ trợ trong `mlog-py`: **27 / 52 opcodes** (**51.92%**)
 
 ```mermaid
 flowchart TD
@@ -67,8 +67,8 @@ flowchart TD
 
     subgraph MlogPyCoverage["Tình trạng Hỗ trợ trong mlog-py"]
         direction TB
-        SUP_STD["22 Statements Tiêu chuẩn ĐÃ HỖ TRỢ (81.5%)\n(read, write, draw, print, drawflush, printflush,\ngetlink, control, radar, sensor, set, op, lookup,\npackcolor, wait, stop, end, jump, ubind, ucontrol,\nuradar, ulocate)"]
-        UNSUP_STD["5 Statements Tiêu chuẩn CHƯA HỖ TRỢ (18.5%)\n(printchar, format, select, unpackcolor, setrate)"]
+        SUP_STD["27 Statements Tiêu chuẩn ĐÃ HỖ TRỢ (100.0%)\n(read, write, draw, print, printchar, format,\ndrawflush, printflush, getlink, control, radar, sensor,\nset, op, select, lookup, packcolor, unpackcolor, wait,\nstop, end, jump, setrate, ubind, ucontrol, uradar, ulocate)"]
+        UNSUP_STD["0 Statements Tiêu chuẩn CHƯA HỖ TRỢ (0.0%)"]
         UNSUP_WORLD["24 Statements World Processor CHƯA HỖ TRỢ (0%)\n(query, getblock, setblock, spawn, bullet, status,\nweathersense, weatherset, spawnwave, setrule,\nmessage, cutscene, effect, explosion, fetch, sync,\ngetflag, setflag, setprop, playsound, playmusic,\nsetmarker, makemarker, localeprint)"]
     end
 
@@ -96,8 +96,8 @@ flowchart TD
 | **Write** | `write` | `write <input> <target> <address>` | **Đã hỗ trợ** | • **Pythonic**: Gán mảng `arr[i] = val`, `arr[i] += val`<br>• **Intrinsic**: `write(val, cell, addr)` | Mindustry: `LStatements.java:93`<br>mlog-py: `src/compiler.py:887` (intrinsic), `src/compiler.py:1232-1307` (subscript) | `tests/test_phase1e.py:59`<br>`tests/test_phase1f.py:284`<br>`tests/test_array.py:130`<br>`tests/test_aug_assign.py` |
 | **Draw** | `draw` | `draw <type> <x> <y> <p1> <p2> <p3> <p4>` | **Đã hỗ trợ** | • **Intrinsic**: `draw(type, x, y, p1, p2, p3, p4)` dùng `DrawType.<TYPE>` hoặc chuỗi literal | Mindustry: `LStatements.java:123`<br>mlog-py: `src/compiler.py:898`, `src/metadata.py:503` | `tests/test_phase1e.py:22`<br>`tests/test_phase1f.py:267` |
 | **Print** | `print` | `print <value>` | **Đã hỗ trợ** | • **Pythonic / Intrinsic**: `print(value)` (đẩy vào text buffer, tự động format số/chuỗi) | Mindustry: `LStatements.java:263`<br>mlog-py: `src/compiler.py:928`, `src/metadata.py:180` | `tests/test_phase1e.py:40`<br>`tests/test_print_buffer_semantics.py` |
-| **Print Char** | `printchar` | `printchar <value>` | **Chưa hỗ trợ** | *(Chưa có intrinsic hoặc hàm cú pháp tương ứng)* | Mindustry: `LStatements.java:284`<br>mlog-py: Chưa có trong `compiler.py` | *(Chưa có test)* |
-| **Format** | `format` | `format <value>` | **Chưa hỗ trợ** | *(Chưa có intrinsic / chưa hạ bậc f-string)* | Mindustry: `LStatements.java:324`<br>mlog-py: Chưa có trong `compiler.py` | *(Chưa có test)* |
+| **Print Char** | `printchar` | `printchar <value>` | **Đã hỗ trợ** | • **Intrinsic**: `printchar(value)` ghi 1 ký tự vào print buffer theo mã ASCII/Unicode hoặc item symbol | Mindustry: `LStatements.java:284`<br>mlog-py: `src/compiler.py:939`, `src/metadata.py:192` | `tests/test_print_buffer_semantics.py` |
+| **Format** | `format` | `format <value>` | **Đã hỗ trợ** | • **Pythonic**: f-string `f"val={x}"` tự động hạ bậc sang `print` + `format`<br>• **Intrinsic**: `format(value)` thay thế `{0}`..`{9}` trong buffer | Mindustry: `LStatements.java:324`<br>mlog-py: `src/compiler.py:946`, `src/compiler.py:724-780`, `src/metadata.py:204` | `tests/test_print_buffer_semantics.py`<br>`tests/test_fstring_formatting.py` |
 
 ---
 
@@ -120,10 +120,10 @@ flowchart TD
 | :--- | :--- | :--- | :---: | :--- | :--- | :--- |
 | **Set** | `set` | `set <to> <from>` | **Đã hỗ trợ** | • **Pythonic**: Gán biến `a = b`<br>• **Intrinsic**: `set(a, b)` | Mindustry: `LStatements.java:651`<br>mlog-py: `src/compiler.py:772`, `src/compiler.py:1226` | `tests/test_phase1a.py:10`<br>`tests/test_phase1f.py:22` |
 | **Operation** | `op` | `op <op> <dest> <a> <b>` | **Đã hỗ trợ** | • **Pythonic**: Toán tử số học, bitwise, so sánh gán biến, hàm `min()`, `max()`<br>• **Intrinsic**: `dest = op(name, a, b)` (hỗ trợ toàn bộ 45 LogicOp) | Mindustry: `LStatements.java:676`<br>mlog-py: `src/compiler.py:784`, `src/compiler.py:538-665` | `tests/test_phase1a.py:33`<br>`tests/test_phase1e.py:10`<br>`tests/test_bitwise_support.py`<br>`tests/test_min_max_support.py` |
-| **Select** | `select` | `select <result> <op> <comp0> <comp1> <a <b>` | **Chưa hỗ trợ** | *(Ternary Python `a if c else b` hiện biên dịch thành 2 jump rẽ nhánh thay vì opcode `select`)* | Mindustry: `LStatements.java:740`<br>mlog-py: Chưa có hạ bậc `select` trong `compiler.py` | *(Chưa có test cho opcode `select`)* |
+| **Select** | `select` | `select <result> <op> <comp0> <comp1> <a <b>` | **Đã hỗ trợ** | • **Pythonic**: Ternary `a if cond else b` hạ bậc sang `select` khi thuần túy không side-effect (jump khi có side-effect)<br>• **Intrinsic**: `dest = select(op, c0, c1, a, b)` | Mindustry: `LStatements.java:740`<br>mlog-py: `src/compiler.py:1150-1205`, `src/metadata.py:917` | `tests/test_select_and_ternary.py` |
 | **Lookup** | `lookup` | `lookup <type> <result> <id>` | **Đã hỗ trợ** | • **Intrinsic**: `dest = lookup(type, id)` dùng `LookupType.<TYPE>` | Mindustry: `LStatements.java:822`<br>mlog-py: `src/compiler.py:1114`, `src/metadata.py:890` | `tests/test_registry.py:148`<br>`tests/test_source_mapping.py:477` |
-| **Pack Color** | `packcolor` | `packcolor <result> <r> <g> <b> <a>` | **Đã hỗ trợ** | • **Intrinsic**: `dest = packcolor(r, g, b, a)` | Mindustry: `LStatements.java:856`<br>mlog-py: `src/compiler.py:1138`, `src/metadata.py:931` | `tests/test_registry.py:148`<br>`tests/test_decompiler_dest_var_recovery.py:98` |
-| **Unpack Color** | `unpackcolor` | `unpackcolor <r> <g> <b> <a> <color>` | **Chưa hỗ trợ** | *(Đã có trong `validator.py:36` & `decompiler`, nhưng thiếu intrinsic trong `compiler.py`)* | Mindustry: `LStatements.java:884`<br>mlog-py: `validator.py:36` | `tests/test_decompiler_dest_var_recovery.py:250` (chỉ decompiler) |
+| **Pack Color** | `packcolor` | `packcolor <result> <r> <g> <b> <a>` | **Đã hỗ trợ** | • **Intrinsic**: `dest = packcolor(r, g, b, a)` (hỗ trợ cả lồng biểu thức / tham số hàm) | Mindustry: `LStatements.java:856`<br>mlog-py: `src/compiler.py:1138`, `src/metadata.py:931` | `tests/test_registry.py:148`<br>`tests/test_decompiler_dest_var_recovery.py:98`<br>`tests/test_print_buffer_semantics.py` |
+| **Unpack Color** | `unpackcolor` | `unpackcolor <r> <g> <b> <a> <color>` | **Đã hỗ trợ** | • **Intrinsic**: `unpackcolor(r, g, b, a, color)` giải nén RGBA sang 4 biến đích normalized [0.0..1.0] | Mindustry: `LStatements.java:884`<br>mlog-py: `src/compiler.py:1260`, `src/metadata.py:982` | `tests/test_decompiler_dest_var_recovery.py`<br>`tests/test_print_buffer_semantics.py` |
 
 ---
 
@@ -135,7 +135,7 @@ flowchart TD
 | **Stop** | `stop` | `stop` | **Đã hỗ trợ** | • **Pythonic / Intrinsic**: Lệnh trần `stop` hoặc gọi hàm `stop()` | Mindustry: `LStatements.java:804`<br>mlog-py: `src/compiler.py:1211`, `src/metadata.py:675` | `tests/test_phase1e.py:101` |
 | **End** | `end` | `end` | **Đã hỗ trợ** | • **Pythonic / Intrinsic**: Lệnh trần `end` hoặc gọi hàm `end()` | Mindustry: `LStatements.java:912`<br>mlog-py: `src/compiler.py:1217`, `src/metadata.py:691` | `tests/test_phase1e.py:101` |
 | **Jump** | `jump` | `jump <target> <cond> <a> <b>` | **Đã hỗ trợ** | • **Pythonic**: `if`, `elif`, `else`, `while`, `for ... in range()`, `break`, `continue`<br>• **Intrinsic**: `jump(target, cond, a, b)` | Mindustry: `LStatements.java:930`<br>mlog-py: `src/compiler.py:841`, `src/compiler.py:1495-1804` | `tests/test_phase1c.py:10`<br>`tests/test_phase1d.py:11`<br>`tests/test_phase1f.py:75, 119`<br>`tests/test_for_loop.py` |
-| **Set Rate** | `setrate` | `setrate <amount>` | **Chưa hỗ trợ** | *(Chưa có intrinsic / hàm cú pháp)* | Mindustry: `LStatements.java:1891`<br>mlog-py: Chưa có trong `compiler.py` | *(Chưa có test)* |
+| **Set Rate** | `setrate` | `setrate <amount>` | **Đã hỗ trợ** | • **Intrinsic**: `setrate(ipt)` điều chỉnh tốc độ thực thi instructions per tick (tối đa 1000 IPT) | Mindustry: `LStatements.java:1891`<br>mlog-py: `src/compiler.py:1280`, `src/metadata.py:688` | `tests/test_print_buffer_semantics.py` |
 
 ---
 
@@ -305,13 +305,18 @@ Trong quá trình đối chiếu mã nguồn, một số khía cạnh kỹ thu�
 1. **Ngữ nghĩa modulo: `op mod` vs `op emod` (Đã giải quyết theo ADR-001)**:
    - Theo quyết định trong ADR-001 (`docs/adr/0001-modulo-semantics.md`) dành cho Mindustry v8 (`v160.7`), toán tử Python `%` và `%=` được ánh xạ chuẩn sang `op emod` để bảo đảm 100% ngữ nghĩa floored modulo của Python.
    - Opcode `op mod` được bảo toàn nguyên vẹn cho lập trình viên qua intrinsic cấp thấp `op("mod", d, a, b)` và decompiler tự động bảo toàn `op mod` thành lời gọi `op("mod", ...)`.
-2. **Hạ bậc biểu thức ba ngôi (Ternary Expression) sang Opcode `select`**:
-   - Mindustry v7 cung cấp lệnh `select <result> <op> <comp0> <comp1> <a <b>`.
-   - Cú pháp Python `result = a if cond else b` có thể tối ưu thành 1 lệnh `select` duy nhất thay vì 2 lệnh `jump`.
-   - *Rào cản ngữ nghĩa*: Python ternary tuân thủ cơ chế đoản mạch (short-circuit: chỉ tính toán nhánh được chọn). Lệnh `select` của MLog đánh giá trước cả hai biến `a` và `b`. Nếu `a` hoặc `b` chứa side-effects (như `read` hoặc lời gọi hàm), việc thay thế bằng `select` sẽ phá vỡ ngữ nghĩa chuẩn của Python.
-3. **Cú pháp DSL cho `unpackcolor`**:
-   - Opcode `unpackcolor` nhận 1 biến màu đầu vào và giải nén ra 4 biến `r`, `g`, `b`, `a`.
-   - Do Python hỗ trợ tuple unpacking (`r, g, b, a = unpackcolor(col)`), đây là ứng viên tự nhiên cho việc bổ sung vào compiler. Tuy nhiên, hiện tại compiler chưa có cơ chế đa biến gán tuple cho hàm intrinsic.
-4. **Hạ bậc f-string sang `format` vs chuỗi lệnh `print`**:
-   - Mindustry cung cấp lệnh `format <val>` để thay thế placeholder `{0}` trong chuỗi.
-   - Khi người dùng viết `f"Score: {score}"`, compiler có thể phát sinh chuỗi `print "Score: " ; print score`, hoặc phát sinh `print "Score: {0}" ; format score`. Cả hai đều đạt kết quả hiển thị tương đương. Cần đánh giá hiệu năng về số byte và giới hạn buffer để chọn giải pháp tối ưu.
+2. **Hạ bậc biểu thức ba ngôi (Ternary Expression) sang Opcode `select` (Đã giải quyết ở v0.5.0 - P3)**:
+   - Mindustry v7+ cung cấp lệnh `select <result> <op> <comp0> <comp1> <a <b>`.
+   - `mlog-py` áp dụng phân tích tinh vi:
+     - **Biểu thức thuần túy (Pure expressions)**: Không chứa side-effect, không gọi hàm, không chia biến rủi ro chia cho 0, không truy cập mảng $\to$ hạ bậc sang 1 opcode `select` hiệu năng cao (không jump).
+     - **Biểu thức không thuần túy (Impure expressions)**: Chứa side-effect, gọi hàm, truy xuất ô nhớ, hoặc điều kiện phức hợp `and`/`or` $\to$ hạ bậc sang branching jump để bảo đảm 100% ngữ nghĩa short-circuiting của Python.
+     - **Toán tử `is not`**: Do Mindustry thiếu `strictNotEqual`, compiler hạ bậc `a if x is not y else b` sang `select dest strictEqual x y b a` (đảo vị trí hai nhánh), ngăn ngừa lỗi JVM engine.
+3. **Cú pháp DSL cho `unpackcolor` (Đã giải quyết ở v0.5.0 - P0)**:
+   - Triển khai intrinsic `unpackcolor(r, g, b, a, color)` theo đúng quy chuẩn 5 toán hạng của Mindustry bytecode: 4 biến đích `r, g, b, a` và 1 biến màu đầu vào.
+   - Decompiler và Compiler đồng bộ 100% round-trip với `get_instruction_dest_vars`.
+4. **Hạ bậc f-string sang `format` vs chuỗi lệnh `print` (Đã giải quyết ở v0.5.0 - P1 & P2)**:
+   - f-string Python (`ast.JoinedStr`) được hạ bậc sang cơ chế lai chuẩn của Mindustry v160.7:
+     - Chuỗi văn bản và placeholders `{0}`..`{9}` được phát sinh qua `print` + `format`.
+     - Thoát ngoặc `{{` và `}}` thành `{` và `}`.
+     - Bảo toàn tuyệt đối thứ tự đánh giá biểu thức (evaluation order) khi chứa side-effects (đánh giá trước vào biến tạm, sau đó mới `format`).
+     - Giới hạn compile-time an toàn tối đa 10 placeholders ({0}..{9}) theo chuẩn opcode `format` của Mindustry; ném `CompileError` nếu vượt quá để ngăn ngừa sinh mã sai lệch runtime.

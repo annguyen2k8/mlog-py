@@ -24,12 +24,16 @@ OPCODE_ARG_COUNTS = {
     "draw": 7,
     "drawflush": 1,
     "print": 1,
+    "printchar": 1,
+    "format": 1,
     "printflush": 1,
     "getlink": 2,
     "control": 6,
     "radar": 7,
     "sensor": 3,
     "set": 2,
+    "setrate": 1,
+    "select": 6,
     "op": 4,
     "lookup": 3,
     "packcolor": 5,
@@ -75,14 +79,18 @@ def tokenize_mlog_line(line: str) -> List[str]:
         if line[i] == '"':
             start = i
             i += 1
+            closed = False
             while i < n:
                 if line[i] == "\\":
                     i += 2  # skip escape
                     continue
                 if line[i] == '"':
                     i += 1
+                    closed = True
                     break
                 i += 1
+            if not closed:
+                raise ValidationError("Unterminated string literal", 0, line)
             tokens.append(line[start:i])
         else:
             start = i
@@ -168,6 +176,16 @@ class MlogValidator:
                 if cond not in VALID_CONDITION_OPS:
                     raise ValidationError(
                         f"Invalid jump condition '{cond}'. Expected one of {sorted(VALID_CONDITION_OPS)}",
+                        line_idx,
+                        raw_line,
+                    )
+
+            # Specific validation for select instructions
+            if opcode == "select":
+                cond = args[1]
+                if cond not in VALID_CONDITION_OPS:
+                    raise ValidationError(
+                        f"Invalid select condition '{cond}'. Expected one of {sorted(VALID_CONDITION_OPS)}",
                         line_idx,
                         raw_line,
                     )

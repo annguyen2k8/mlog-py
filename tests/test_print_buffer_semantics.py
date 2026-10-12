@@ -358,6 +358,228 @@ printflush("message1")
         _rt_printflush(None)
         self.assertEqual(get_print_buffer(), "")
 
+    def test_print_newline_character_output_and_mindustry_execution(self):
+        """print('\\n') outputs a newline character in MLog, moving text buffer to a new line."""
+        from src.mindustry_validator import is_mindustry_available, validate_with_mindustry
+
+        source = 'from mlog import print, printflush\nprint("Line 1")\nprint("\\n")\nprint("Line 2")\nprintflush("message1")\n'
+        res = compile_py(source)
+        self.assertIn('print "\\n"', res.mlog)
+
+        # 1. Runtime emulation verification
+        self.assertEqual(get_print_buffer(), "")
+        _rt_print("Line 1")
+        _rt_print("\n")
+        _rt_print("Line 2")
+        self.assertEqual(get_print_buffer(), "Line 1\nLine 2")
+        _rt_printflush("message1")
+        self.assertEqual(get_print_buffer(), "")
+
+        # 2. Mindustry JVM engine validation if available
+        if is_mindustry_available():
+            ok, msg, count = validate_with_mindustry(res.mlog)
+            self.assertTrue(ok, f"Mindustry rejected print newline: {msg}")
+
+        # 3. Decompile and roundtrip
+        py = decompile(res.mlog)
+        self.assertIn('print("\\n")', py)
+        recompiled = compile_py(py).mlog.strip()
+        self.assertEqual(recompiled, res.mlog.strip())
+
+    def test_print_crlf_normalization_prevents_unclosed_quotes(self):
+        """String literals with CRLF/CR are normalized into escaped \\n to avoid Mindustry quote syntax errors."""
+        from src.mindustry_validator import is_mindustry_available, validate_with_mindustry
+
+        source = 'from mlog import print\nprint("A\\r\\nB\\rC")\n'
+        res = compile_py(source)
+        # Emitted MLog must NOT contain raw \r byte (which breaks Mindustry LParser)
+        self.assertNotIn("\r", res.mlog)
+        self.assertIn('print "A\\nB\\nC"', res.mlog)
+
+        if is_mindustry_available():
+            ok, msg, count = validate_with_mindustry(res.mlog)
+            self.assertTrue(ok, f"Mindustry rejected normalized CRLF string: {msg}")
+
+    def test_validator_rejects_unterminated_string_literal(self):
+        """MlogValidator catches unclosed string literals."""
+        from src.validator import MlogValidator, ValidationError
+
+        with self.assertRaises(ValidationError):
+            MlogValidator.validate('print "unclosed string')
+
+    def test_printchar_compilation_runtime_and_roundtrip(self):
+        """printchar compiles, emulates character buffer append, and round-trips."""
+        from src.metadata import _rt_printchar
+        from src.mindustry_validator import is_mindustry_available, validate_with_mindustry
+
+        # 1. Compilation
+        source = "from mlog import printchar\nprintchar(65)\nprintchar(val)\n"
+        res = compile_py(source)
+        lines = res.mlog.strip().splitlines()
+        self.assertEqual(lines[0], "printchar 65")
+        self.assertEqual(lines[1], "printchar val")
+
+        # 2. Runtime emulation
+        self.assertEqual(get_print_buffer(), "")
+        _rt_printchar(65)
+        _rt_printchar(66)
+        _rt_printchar(67)
+        self.assertEqual(get_print_buffer(), "ABC")
+        _rt_printflush("message1")
+        self.assertEqual(get_print_buffer(), "")
+
+        # 3. Mindustry JVM engine validation if available
+        if is_mindustry_available():
+            ok, msg, count = validate_with_mindustry(res.mlog)
+            self.assertTrue(ok, f"Mindustry rejected printchar: {msg}")
+
+        # 4. Decompile and roundtrip
+        py = decompile(res.mlog)
+        self.assertIn("printchar(65)", py)
+        self.assertIn("printchar(val)", py)
+        recompiled = compile_py(py).mlog.strip()
+        self.assertEqual(recompiled, res.mlog.strip())
+
+    def test_format_compilation_runtime_and_roundtrip(self):
+        """format compiles, emulates placeholder substitution, and round-trips."""
+        from src.metadata import _rt_format
+        from src.mindustry_validator import is_mindustry_available, validate_with_mindustry
+
+        # 1. Compilation
+        source = 'from mlog import print, format, printflush\nprint("val: {0}\\n")\nformat(42)\nprintflush("message1")\n'
+        res = compile_py(source)
+        lines = res.mlog.strip().splitlines()
+        self.assertEqual(lines[0], 'print "val: {0}\\n"')
+        self.assertEqual(lines[1], "format 42")
+        self.assertEqual(lines[2], "printflush message1")
+
+        # 2. Runtime emulation
+        self.assertEqual(get_print_buffer(), "")
+        _rt_print("Item: {0}, Count: {1}\n")
+        _rt_format("copper")
+        _rt_format(100)
+        self.assertEqual(get_print_buffer(), "Item: copper, Count: 100\n")
+        _rt_printflush("message1")
+        self.assertEqual(get_print_buffer(), "")
+
+        # 3. Mindustry JVM engine validation if available
+        if is_mindustry_available():
+            ok, msg, count = validate_with_mindustry(res.mlog)
+            self.assertTrue(ok, f"Mindustry rejected format: {msg}")
+
+        # 4. Decompile and roundtrip
+        py = decompile(res.mlog)
+        self.assertTrue("format(42)" in py or 'f"val: {42}' in py)
+        recompiled = compile_py(py).mlog.strip()
+        self.assertEqual(recompiled, res.mlog.strip())
+
+        # 5. Standalone format without placeholder preserves format() call
+        standalone_res = compile_py('from mlog import format\nformat(42)\n')
+        standalone_py = decompile(standalone_res.mlog)
+        self.assertIn("format(42)", standalone_py)
+
+    def test_setrate_compilation_and_roundtrip(self):
+        """setrate compiles and survives roundtrip."""
+        from src.mindustry_validator import is_mindustry_available, validate_with_mindustry
+
+        # 1. Compilation
+        source = "from mlog import setrate\nsetrate(60)\nsetrate(target_ipt)\n"
+        res = compile_py(source)
+        lines = res.mlog.strip().splitlines()
+        self.assertEqual(lines[0], "setrate 60")
+        self.assertEqual(lines[1], "setrate target_ipt")
+
+        # 2. Mindustry JVM engine validation if available
+        if is_mindustry_available():
+            ok, msg, count = validate_with_mindustry(res.mlog)
+            self.assertTrue(ok, f"Mindustry rejected setrate: {msg}")
+
+        # 3. Decompile and roundtrip
+        py = decompile(res.mlog)
+        self.assertIn("setrate(60)", py)
+        self.assertIn("setrate(target_ipt)", py)
+        recompiled = compile_py(py).mlog.strip()
+        self.assertEqual(recompiled, res.mlog.strip())
+
+    def test_printchar_edge_cases_and_invalid_args(self):
+        """printchar rejects bad arity and emulates NaN/Inf/out-of-range correctly."""
+        from src.errors import CompileError
+        from src.metadata import _rt_printchar
+
+        with self.assertRaises(CompileError):
+            compile_py("from mlog import printchar\nprintchar()\n")
+        with self.assertRaises(CompileError):
+            compile_py("from mlog import printchar\nprintchar(1, 2)\n")
+
+        # Runtime edge cases
+        self.assertEqual(get_print_buffer(), "")
+        _rt_printchar(float("nan"))
+        _rt_printchar(float("inf"))
+        _rt_printchar(-1)
+        _rt_printchar(0x110000)  # beyond Unicode range
+        self.assertEqual(get_print_buffer(), "\0\0\0\0")
+        _rt_printflush("message1")
+        self.assertEqual(get_print_buffer(), "")
+
+    def test_format_edge_cases_and_invalid_args(self):
+        """format rejects bad arity and handles missing/multiple placeholders."""
+        from src.errors import CompileError
+        from src.metadata import _rt_format
+
+        with self.assertRaises(CompileError):
+            compile_py("from mlog import format\nformat()\n")
+        with self.assertRaises(CompileError):
+            compile_py("from mlog import format\nformat(1, 2)\n")
+
+        # Missing placeholder leaves buffer unchanged
+        self.assertEqual(get_print_buffer(), "")
+        _rt_print("No placeholder here")
+        _rt_format(999)
+        self.assertEqual(get_print_buffer(), "No placeholder here")
+        _rt_printflush("message1")
+
+        # First placeholder in string order is replaced
+        _rt_print("{5} then {2}")
+        _rt_format("FIRST")
+        self.assertEqual(get_print_buffer(), "FIRST then {2}")
+        _rt_format("SECOND")
+        self.assertEqual(get_print_buffer(), "FIRST then SECOND")
+        _rt_printflush("message1")
+
+    def test_setrate_invalid_args(self):
+        """setrate rejects invalid argument counts."""
+        from src.errors import CompileError
+
+        with self.assertRaises(CompileError):
+            compile_py("from mlog import setrate\nsetrate()\n")
+        with self.assertRaises(CompileError):
+            compile_py("from mlog import setrate\nsetrate(1, 2)\n")
+
+    def test_mindustry_crlf_reproduction_directly(self):
+        """Verify on real Mindustry JVM engine that raw CR causes quote error and normalized CRLF passes."""
+        from src.mindustry_validator import is_mindustry_available, validate_with_mindustry
+
+        if not is_mindustry_available():
+            self.skipTest("Mindustry engine classes not available")
+
+        # 1. Raw CR byte inside string triggers Missing closing quote error in Mindustry LParser
+        raw_cr_mlog = 'print "before\rafter"\n'
+        ok, msg, _ = validate_with_mindustry(raw_cr_mlog)
+        self.assertFalse(ok)
+        self.assertIn("Missing closing quote", msg)
+
+        # 2. Raw CRLF inside string also triggers it
+        raw_crlf_mlog = 'print "before\r\nafter"\n'
+        ok, msg, _ = validate_with_mindustry(raw_crlf_mlog)
+        self.assertFalse(ok)
+        self.assertIn("Missing closing quote", msg)
+
+        # 3. Normalized compiler output with escaped \\n passes cleanly
+        source = 'from mlog import print\nprint("before\\r\\nafter")\n'
+        res = compile_py(source)
+        ok, msg, _ = validate_with_mindustry(res.mlog)
+        self.assertTrue(ok, f"Mindustry unexpectedly rejected normalized output: {msg}")
+
 
 if __name__ == "__main__":
     unittest.main()
