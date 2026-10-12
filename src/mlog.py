@@ -51,6 +51,7 @@ from .metadata import (
     _rt_lookup as lookup,
     _rt_max as max,
     _rt_min as min,
+    _rt_noop as noop,
     _rt_op as op,
     _rt_packcolor as packcolor,
     _rt_print as print,

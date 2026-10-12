@@ -1590,6 +1590,12 @@ class Compiler:
             )
             return "0"
 
+        elif func_name == "noop":
+            if len(args) != 0:
+                self.error("invalid arguments for noop: expected noop()", call)
+            self.instructions.append(IRRaw(opcode="noop", args=[], loc=loc))
+            return "0"
+
         elif func_name == "stop":
             if len(args) != 0:
                 self.error("invalid arguments for stop: expected stop()", call)

@@ -115,6 +115,8 @@ def _collect_node_symbols(node: Any, symbols: Set[str]) -> None:
                 op_name = args[0] if len(args) > 0 else ""
                 if op_name not in PYTHON_BUILTIN_FUNCTIONS:
                     symbols.add("op")
+            elif op == "noop":
+                symbols.add("noop")
             elif op == "stop":
                 symbols.add("stop")
             elif op == "end":
@@ -142,6 +144,8 @@ def _collect_node_symbols(node: Any, symbols: Set[str]) -> None:
                     op_name = args[0] if len(args) > 0 else ""
                     if op_name not in PYTHON_BUILTIN_FUNCTIONS:
                         symbols.add("op")
+                elif op == "noop":
+                    symbols.add("noop")
                 elif op == "stop":
                     symbols.add("stop")
                 elif op == "end":

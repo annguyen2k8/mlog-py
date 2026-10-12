@@ -324,7 +324,7 @@ class OpcodeRegistry(BaseRegistry):
             "read", "write", "draw", "drawflush", "print", "printchar", "format", "printflush",
             "getlink", "control", "radar", "sensor", "set", "setrate", "op", "lookup",
             "packcolor", "unpackcolor", "wait", "stop", "end", "jump",
-            "ubind", "ucontrol", "uradar", "ulocate",
+            "ubind", "ucontrol", "uradar", "ulocate", "noop",
         ]
         entries = [
             RegistryEntry(source_name=op.upper(), mlog_token=op, category="opcode")

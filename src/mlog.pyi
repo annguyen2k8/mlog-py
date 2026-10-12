@@ -657,6 +657,11 @@ def min(a: Any, b: Any) -> Any:
     """
     ...
 
+def noop() -> None:
+    """No-operation instruction (occupies 1 instruction slot, executes nothing).
+    """
+    ...
+
 class _OpCallable:
     """Callable namespace object for Mindustry logic operations.
 
@@ -1249,6 +1254,7 @@ __all__ = [
     "main",
     "max",
     "min",
+    "noop",
     "null",
     "op",
     "packcolor",

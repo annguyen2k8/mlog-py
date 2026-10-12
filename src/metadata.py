@@ -622,6 +622,9 @@ def _rt_write(input_: Any, cell: Any, address: Any) -> None:
 def _rt_wait(seconds: Any = 0.5) -> None:
     return None
 
+def _rt_noop() -> None:
+    return None
+
 def _rt_stop() -> None:
     return None
 
@@ -1196,6 +1199,22 @@ INTRINSIC_DEFINITIONS: List[IntrinsicDef] = [
             ),
         ],
         runtime_fn=_rt_wait,
+    ),
+    IntrinsicDef(
+        name="noop",
+        summary="No-operation instruction (occupies 1 instruction slot and does nothing)",
+        docstring="No-operation instruction (occupies 1 instruction slot, executes nothing).",
+        min_args=0,
+        max_args=0,
+        valid_arg_counts=(0,),
+        signatures=[
+            IntrinsicSignature(
+                params=[],
+                return_type="None",
+                docstring="No-operation instruction (occupies 1 instruction slot, executes nothing).",
+            ),
+        ],
+        runtime_fn=_rt_noop,
     ),
     IntrinsicDef(
         name="stop",

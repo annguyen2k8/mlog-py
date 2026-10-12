@@ -19,6 +19,7 @@ class ValidationError(Exception):
 
 # Expected argument counts for standard vanilla mlog opcodes
 OPCODE_ARG_COUNTS = {
+    "noop": 0,
     "read": 3,
     "write": 3,
     "draw": 7,

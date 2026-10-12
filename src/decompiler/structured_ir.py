@@ -188,6 +188,9 @@ def instruction_to_python(
                 test = f"{c0} {cond} {c1}"
             return f"{dest} = {a} if {test} else {b}"
 
+    if op == "noop":
+        return "noop()"
+
     if op == "stop":
         return "stop()"
 

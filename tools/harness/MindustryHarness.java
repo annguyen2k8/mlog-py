@@ -53,11 +53,17 @@ public class MindustryHarness {
 
             String mlog = sb.toString();
             Seq<LStatement> stmts = LAssembler.read(mlog, false);
+            Seq<String[]> rawStatements = extractStatementTokens(mlog);
 
             for (int i = 0; i < stmts.size; i++) {
                 LStatement s = stmts.get(i);
                 if (s instanceof LStatements.InvalidStatement) {
-                    System.err.println("Line " + (i + 1) + ": Mindustry rejected statement as InvalidStatement");
+                    String[] toks = i < rawStatements.size ? rawStatements.get(i) : null;
+                    if (toks != null && toks.length == 1 && "noop".equals(toks[0])) {
+                        continue;
+                    }
+                    String repr = toks != null ? String.join(" ", toks) : "";
+                    System.err.println("Line " + (i + 1) + ": Mindustry rejected statement as InvalidStatement" + (repr.isEmpty() ? "" : ": '" + repr + "'"));
                     System.exit(1);
                 }
             }
@@ -103,5 +109,85 @@ public class MindustryHarness {
             t.printStackTrace(System.err);
             System.exit(2);
         }
+    }
+
+    private static Seq<String[]> extractStatementTokens(String text) {
+        if (text == null || text.isEmpty()) return new Seq<>();
+        char[] chars = text.toCharArray();
+        for (int i = 0; i < chars.length; i++) {
+            if (chars[i] == '\r') chars[i] = '\n';
+        }
+
+        Seq<String[]> result = new Seq<>();
+        String[] tokens = new String[16];
+        int pos = 0;
+        int line = 0;
+
+        while (pos < chars.length && line < LExecutor.maxInstructions) {
+            char c = chars[pos];
+            if (c == '\n' || c == ';' || c == ' ') {
+                pos++;
+                continue;
+            }
+
+            boolean expectNext = false;
+            int tok = 0;
+
+            while (pos < chars.length) {
+                char ch = chars[pos];
+                if (tok >= tokens.length) break;
+                if (ch == '\n' || ch == ';') break;
+
+                if (expectNext && ch != ' ' && ch != '#' && ch != '\t') {
+                    break;
+                }
+                expectNext = false;
+
+                if (ch == '#') {
+                    while (pos < chars.length && chars[pos++] != '\n');
+                    break;
+                } else if (ch == '"') {
+                    int from = pos;
+                    while (++pos < chars.length) {
+                        char sc = chars[pos];
+                        if (sc == '\\' && pos + 1 < chars.length && (chars[pos + 1] == 'n' || chars[pos + 1] == '"' || chars[pos + 1] == '\\')) {
+                            pos++;
+                            continue;
+                        }
+                        if (sc == '\\' && pos + 1 < chars.length && chars[pos + 1] == 'u') {
+                            pos += 5;
+                            continue;
+                        }
+                        if (sc == '\n' || sc == '"') break;
+                    }
+                    if (pos < chars.length && chars[pos] == '"') pos++;
+                    if (tok < tokens.length) tokens[tok++] = new String(chars, from, pos - from);
+                    expectNext = true;
+                } else if (ch != ' ' && ch != '\t') {
+                    int from = pos;
+                    while (pos < chars.length) {
+                        char tc = chars[pos];
+                        if (tc == '\n' || tc == ' ' || tc == '#' || tc == '\t' || tc == ';' || tc == '"') break;
+                        pos++;
+                    }
+                    if (tok < tokens.length) tokens[tok++] = new String(chars, from, pos - from);
+                    expectNext = true;
+                } else {
+                    pos++;
+                }
+            }
+
+            if (tok > 0) {
+                if (tok == 1 && tokens[0].length() > 0 && tokens[0].charAt(tokens[0].length() - 1) == ':') {
+                    // Jump label declaration - does not produce an LStatement in LParser
+                } else {
+                    String[] copy = new String[tok];
+                    System.arraycopy(tokens, 0, copy, 0, tok);
+                    result.add(copy);
+                    line++;
+                }
+            }
+        }
+        return result;
     }
 }
