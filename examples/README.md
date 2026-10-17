@@ -19,6 +19,7 @@ These examples show how to write Python code that compiles directly into Mindust
 | [`nested_loops.py`](compiler/nested_loops.py) | Nested Loops | Multi-level matrix grid loops calculating 2D coordinates. |
 | [`reactor_safety.py`](compiler/reactor_safety.py) | Reactor Controller | Thorium reactor safety monitor: reading `@heat` and toggling `control(enabled, ...)`. |
 | [`display_graphics.py`](compiler/display_graphics.py) | Logic Displays | Drawing shapes (`clear`, `color`, `rect`, `line`) and flushing to display screens. |
+| [`color_channels.py`](compiler/color_channels.py) | Color Channels | Packing RGBA with `packcolor` and unpacking it back with `r, g, b, a = unpackcolor(color)`. |
 | [`print_message.py`](compiler/print_message.py) | Message Displays | Concatenating text into processor buffers and outputting to message blocks via `printflush`. |
 | [`memory_cell.py`](compiler/memory_cell.py) | Memory Cells | Saving and loading persistent variables using `read()` and `write()` on memory cells. |
 | [`array_memory.py`](compiler/array_memory.py) | Memory Arrays | High-level `Array` API with static contiguous memory allocation and bounds checking on cells/banks. |
@@ -26,6 +27,7 @@ These examples show how to write Python code that compiles directly into Mindust
 | [`aug_assign.py`](compiler/aug_assign.py) | Augmented Assignment | In-place variable and array element arithmetic & bitwise updates with single-offset evaluation. |
 | [`block_vs_variable.py`](compiler/block_vs_variable.py) | Block Links vs Variables | Clear distinction between hardware link names (`"cell1"`) and dynamic variables (`b`). |
 | [`special_constants.py`](compiler/special_constants.py) | Special Variables | Using built-in game constants and registers (`@this`, `@time`, `@counter`, `@health`). |
+| [`unit_operations.py`](compiler/unit_operations.py) | Unit Control Operations | Canonical Mindustry unit logic APIs (`ubind`, `ulocate`, `uradar`, `ucontrol`) and combat tactics. |
 | [`functions.py`](compiler/functions.py) | Custom Procedures | Defining reusable functions with arguments and return values. |
 | [`roundtrip_demo.py`](compiler/roundtrip_demo.py) | Interactive Demo | Standalone script demonstrating live compilation of multiple beginner patterns. |
 

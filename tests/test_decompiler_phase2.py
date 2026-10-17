@@ -512,6 +512,47 @@ while running:
         self.assertIn("elif a == 2:", py)
         self.assertIn("elif a == 4:", py)
 
+    def test_decompile_ulocate_unpacking_roundtrip(self):
+        """Verify ulocate instructions decompile to clean tuple unpacking and roundtrip."""
+        from src.decompiler import decompile
+        mlog = """ulocate building core false @copper core_x core_y found_core core_build
+ulocate ore core true @copper ore_x ore_y found_ore __tmp0
+ulocate ore core true @copper ore_x ore_y found_ore custom_b
+ulocate spawn core true @copper sx sy sfound __tmp1
+ulocate damaged core true @copper dx dy dfound dbuild"""
+        py = decompile(mlog)
+        self.assertIn("core_x, core_y, found_core, core_build = ulocate.building(\"core\", False)", py)
+        self.assertIn("ore_x, ore_y, found_ore = ulocate.ore(\"@copper\")", py)
+        self.assertIn("ore_x, ore_y, found_ore, custom_b = ulocate.ore(\"@copper\")", py)
+        self.assertIn("sx, sy, sfound = ulocate.spawn()", py)
+        self.assertIn("dx, dy, dfound, dbuild = ulocate.damaged()", py)
+
+        # Roundtrip recompilation byte-for-byte
+        rec = compile_py(py).mlog.strip()
+        self.assertEqual(mlog.strip(), rec)
+
+    def test_decompile_ulocate_handwritten_and_compiler_generated_roundtrip(self):
+        """Verify hand-written MLog (with UI default 'building') retains 4 targets while compiler-generated retains 3 targets."""
+        from src.decompiler import decompile
+
+        # Hand-written MLog using standard Mindustry UI defaults
+        handwritten_mlog = """ulocate ore core true @copper ox oy ofound building
+ulocate building core false @copper bx by bfound building"""
+        py_hw = decompile(handwritten_mlog)
+        self.assertIn("ox, oy, ofound, building = ulocate.ore(\"@copper\")", py_hw)
+        self.assertIn("bx, by, bfound, building = ulocate.building(\"core\", False)", py_hw)
+        rec_hw = compile_py(py_hw).mlog.strip()
+        self.assertEqual(handwritten_mlog.strip(), rec_hw)
+
+        # Compiler-generated MLog using compiler temporaries
+        compiler_mlog = """ulocate ore core true @copper ox oy ofound __tmp0
+ulocate building core false @copper bx by bfound __tmp1"""
+        py_cg = decompile(compiler_mlog)
+        self.assertIn("ox, oy, ofound = ulocate.ore(\"@copper\")", py_cg)
+        self.assertIn("bx, by, bfound = ulocate.building(\"core\", False)", py_cg)
+        rec_cg = compile_py(py_cg).mlog.strip()
+        self.assertEqual(compiler_mlog.strip(), rec_cg)
+
 
 if __name__ == "__main__":
     unittest.main()

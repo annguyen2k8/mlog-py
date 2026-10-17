@@ -8,6 +8,7 @@ unknown opcode preservation (Zero Guessing), and end-to-end round-trip integrity
 """
 
 import ast
+import re
 import unittest
 
 from src.decompiler import (
@@ -175,10 +176,14 @@ op mul res __tmp0 2
 """
         py = decompile(mlog)
         ast.parse(py)
-        # Because 'a' was modified before __tmp0 was used, __tmp0 must NOT be inlined!
-        self.assertIn("__tmp0 = a + 1", py)
+        # Because 'a' was modified before __tmp0 was used, the temporary must NOT be inlined!
+        # It is renamed out of the compiler-reserved '__tmp' namespace so the result
+        # stays compilable Python DSL; the name itself is not significant.
+        temp = self._extract_preserved_temp(py)
+        self.assertEqual(py.count(f"{temp} = a + 1"), 1)
         self.assertIn("a = 10", py)
-        self.assertIn("res = __tmp0 * 2", py)
+        self.assertIn(f"res = {temp} * 2", py)
+        self.assertNotIn("__tmp0", py)
 
     def test_multiple_use_temporary_preserved(self):
         """Test that temporaries with multiple uses are not inlined/duplicated."""
@@ -190,9 +195,18 @@ op add y __tmp0 3
         py = decompile(mlog)
         ast.parse(py)
         # Multiple uses: do not duplicate computation
-        self.assertIn("__tmp0 = a + b", py)
-        self.assertIn("x = __tmp0 * 2", py)
-        self.assertIn("y = __tmp0 + 3", py)
+        temp = self._extract_preserved_temp(py)
+        self.assertEqual(py.count(f"{temp} = a + b"), 1)
+        self.assertIn(f"x = {temp} * 2", py)
+        self.assertIn(f"y = {temp} + 3", py)
+        self.assertNotIn("__tmp0", py)
+
+    def _extract_preserved_temp(self, py: str) -> str:
+        """Return the single renamed temporary assignment target in decompiled output."""
+        names = re.findall(r"^(\w+) = ", py, flags=re.MULTILINE)
+        candidates = [n for n in names if n not in ("a", "b", "x", "y", "res")]
+        self.assertEqual(len(candidates), 1, f"expected one preserved temp, got {candidates}")
+        return candidates[0]
 
     # -----------------------------------------------------------------------
     # 5. Expressions in If & While Conditions

@@ -14,11 +14,22 @@ Distinguishes between:
 - General operands
 """
 
+import ast
+import keyword
 from enum import Enum
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from src.decompiler.parser import MlogInstruction
 from src.metadata import INTRINSIC_DEFINITIONS, IntrinsicDef
+from src.mlog_registry import (
+    REG_ITEMS,
+    REG_LIQUIDS,
+    REG_UNIT_TYPES,
+    to_snake,
+)
+
+
+RESERVED_PYTHON_KEYWORDS = frozenset(keyword.kwlist) | frozenset(keyword.softkwlist)
 
 
 class ArgumentSemanticRole(Enum):
@@ -95,6 +106,13 @@ _PARAM_ROLE_MAP: Dict[str, ArgumentSemanticRole] = {
     "cond": ArgumentSemanticRole.KEYWORD_OR_ENUM,
     "cond_op": ArgumentSemanticRole.KEYWORD_OR_ENUM,
     "prop": ArgumentSemanticRole.KEYWORD_OR_ENUM,
+    "layer": ArgumentSemanticRole.KEYWORD_OR_ENUM,
+    "shape": ArgumentSemanticRole.KEYWORD_OR_ENUM,
+    "type_": ArgumentSemanticRole.KEYWORD_OR_ENUM,
+    "effect": ArgumentSemanticRole.KEYWORD_OR_ENUM,
+    "clear": ArgumentSemanticRole.KEYWORD_OR_ENUM,
+    "rule": ArgumentSemanticRole.KEYWORD_OR_ENUM,
+    "weather": ArgumentSemanticRole.KEYWORD_OR_ENUM,
 }
 
 
@@ -123,6 +141,27 @@ def get_argument_semantic_role(
         if action == "build" and arg_idx == 3:
             return ArgumentSemanticRole.KEYWORD_OR_ENUM
         if action == "getBlock" and arg_idx in (3, 4, 5):
+            return ArgumentSemanticRole.VARIABLE_DEF
+        return ArgumentSemanticRole.OPERAND
+
+    # Polymorphic opcode: cutscene
+    if opcode == "cutscene":
+        action = args[0] if (args and len(args) > 0) else ""
+        if arg_idx == 0:
+            return ArgumentSemanticRole.KEYWORD_OR_ENUM
+        if action in ("active", "getHud") and arg_idx == 1:
+            return ArgumentSemanticRole.VARIABLE_DEF
+        return ArgumentSemanticRole.OPERAND
+
+    # Polymorphic opcode: message
+    if opcode == "message":
+        if arg_idx == 0:
+            return ArgumentSemanticRole.KEYWORD_OR_ENUM
+        if arg_idx == 1:
+            return ArgumentSemanticRole.OPERAND
+        if arg_idx == 2:
+            if args and len(args) > 2 and args[2] == "@wait":
+                return ArgumentSemanticRole.OPERAND
             return ArgumentSemanticRole.VARIABLE_DEF
         return ArgumentSemanticRole.OPERAND
 
@@ -175,10 +214,16 @@ def get_instruction_dest_vars(instr: MlogInstruction) -> List[str]:
         return [args[0]]
     if op == "op" and len(args) >= 2:
         return [args[1]]
-    if op in ("read", "sensor", "packcolor", "getlink", "select") and len(args) >= 1:
+    if op in ("read", "sensor", "packcolor", "getlink", "select", "bullet", "getflag", "weathersense") and len(args) >= 1:
         return [args[0]]
-    if op == "lookup" and len(args) >= 2:
+    if op in ("lookup", "getblock", "fetch") and len(args) >= 2:
         return [args[1]]
+    if op == "message" and len(args) >= 3 and args[2] != "@wait":
+        return [args[2]]
+    if op == "cutscene" and len(args) >= 2 and args[0] in ("active", "getHud"):
+        return [args[1]]
+    if op == "spawn" and len(args) >= 6:
+        return [args[5]]
     if op == "radar" and len(args) >= 7:
         return [args[6]]
     if op == "uradar":
@@ -242,6 +287,48 @@ def get_instruction_read_vars(
     return reads
 
 
+def is_safe_inline_expression(token: str) -> bool:
+    """Check if an operand token is a side-effect-free arithmetic expression.
+
+    Used by the expression-recovery pipeline when a single-use compiler temporary is
+    folded into a raw instruction operand (e.g. ``print (r + g + b + a)``). Only
+    identifiers, numeric literals, and arithmetic/unary/bitwise operators over them
+    are accepted, so the rendered Python is always a pure value expression that the
+    compiler can lower back to a single mlog operand.
+    """
+    if not token or token.strip() != token:
+        return False
+    if token.isidentifier():
+        return False
+
+    try:
+        tree = ast.parse(token, mode="eval")
+    except (SyntaxError, ValueError, MemoryError, RecursionError):
+        return False
+
+    allowed_nodes = (
+        ast.Expression, ast.BinOp, ast.UnaryOp, ast.Constant, ast.Name, ast.Load,
+        # Arithmetic and bitwise operators only.
+        ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow,
+        ast.LShift, ast.RShift, ast.BitOr, ast.BitAnd, ast.BitXor,
+        ast.UAdd, ast.USub, ast.Invert, ast.Not,
+    )
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, bool) or not isinstance(node.value, (int, float)):
+                return False
+            continue
+        if isinstance(node, ast.Name):
+            if node.id in RESERVED_PYTHON_KEYWORDS:
+                return False
+            continue
+        if not isinstance(node, allowed_nodes):
+            return False
+
+    return True
+
+
 def format_semantic_argument(
     opcode: str,
     arg_idx: int,
@@ -299,6 +386,11 @@ def format_semantic_argument(
 
     # For general OPERAND:
     if arg.isidentifier() and not arg.startswith("@"):
+        return arg
+
+    # Compiler temporaries folded into a raw instruction operand by the dataflow
+    # optimizer arrive here as a pure arithmetic expression (e.g. 'r + g + b + a').
+    if is_safe_inline_expression(arg):
         return arg
 
     return quote_string_literal(arg)

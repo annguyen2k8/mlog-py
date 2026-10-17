@@ -528,8 +528,10 @@ printflush("message1")
 
         with self.assertRaises(CompileError):
             compile_py("from mlog import format\nformat()\n")
-        with self.assertRaises(CompileError):
-            compile_py("from mlog import format\nformat(1, 2)\n")
+
+        # Multi-argument format is supported and emits sequential instructions
+        multi_res = compile_py("from mlog import format\nformat(1, 2)\n")
+        self.assertEqual(multi_res.mlog.strip(), "format 1\nformat 2")
 
         # Missing placeholder leaves buffer unchanged
         self.assertEqual(get_print_buffer(), "")
@@ -538,13 +540,40 @@ printflush("message1")
         self.assertEqual(get_print_buffer(), "No placeholder here")
         _rt_printflush("message1")
 
-        # First placeholder in string order is replaced
+        # Format replaces placeholder with lowest index number {0}..{9}, not string offset order
+        # Case 1: "{5} then {2}" with format("FIRST") must replace {2} first
         _rt_print("{5} then {2}")
         _rt_format("FIRST")
-        self.assertEqual(get_print_buffer(), "FIRST then {2}")
+        self.assertEqual(get_print_buffer(), "{5} then FIRST")
+        _rt_format("SECOND")
+        self.assertEqual(get_print_buffer(), "SECOND then FIRST")
+        _rt_printflush("message1")
+
+        # Case 2: "{2} then {5}" with format("FIRST") must replace {2} first
+        _rt_print("{2} then {5}")
+        _rt_format("FIRST")
+        self.assertEqual(get_print_buffer(), "FIRST then {5}")
         _rt_format("SECOND")
         self.assertEqual(get_print_buffer(), "FIRST then SECOND")
         _rt_printflush("message1")
+
+        # Case 3: Multiple occurrences of the same placeholder replace earlier occurrence first
+        _rt_print("{0} and {0}")
+        _rt_format("X")
+        self.assertEqual(get_print_buffer(), "X and {0}")
+        _rt_format("Y")
+        self.assertEqual(get_print_buffer(), "X and Y")
+        _rt_printflush("message1")
+
+        # Case 4: Calling format with multiple arguments (e.g. format("A", "B"))
+        _rt_print("A={0}, B={1}")
+        _rt_format("alpha", "beta")
+        self.assertEqual(get_print_buffer(), "A=alpha, B=beta")
+        _rt_printflush("message1")
+
+        # Case 5: 0-arg format() at runtime raises TypeError matching Python call semantics
+        with self.assertRaises(TypeError):
+            _rt_format()
 
     def test_setrate_invalid_args(self):
         """setrate rejects invalid argument counts."""

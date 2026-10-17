@@ -36,4 +36,3 @@ op xor __tmp13 __tmp12 true
 write __tmp13 cell1 __tmp11
 op add i i 1
 jump 28 always 0 0
-

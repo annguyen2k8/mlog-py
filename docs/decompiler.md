@@ -22,6 +22,9 @@ Vanilla MLog Source (.mlog)
  [dataflow.py]        Phase 3: Scoped Use-Def analysis, temporary collapsing & expressions
        │
        ▼
+ [naming.py]          Phase 3.5: Reserved-identifier normalization for round-trip
+       │
+       ▼
 [function_analyzer.py] Phase 4: Function boundary & calling convention detection
        │
        ▼
@@ -88,6 +91,26 @@ Python DSL Source (.py) / SourceMap (.json)
   - Return value recovery from return register assignments (`set __retval_fn ...`).
 - **Whole-Program Structuring (`src/decompiler/function_ir.py`)**:
   Emits `FunctionDef` blocks with typed parameter lists and `ReturnNode` statements, isolating top-level script statements from procedure bodies.
+
+---
+
+## 5.5. Phase 3.5: Reserved-Identifier Normalization (`src/decompiler/naming.py`)
+
+The compiler allocates scratch registers named `__tmp0`, `__tmp1`, ... and the parser
+rejects those names in user source (`Compiler.format_name`). When Phase 3 cannot prove a
+temporary is safe to fold — for example a `read` feeding a `write` inside a loop, where
+re-evaluating would reorder a memory access — the temporary must stay as an explicit
+assignment. Emitting the raw name would produce Python the compiler refuses to recompile.
+
+This pass builds a single deterministic, collision-free mapping (`__tmp0` → `tmp_val_0`,
+numbered in first-appearance order) and applies it to every read, write, and instruction
+operand of the structured tree:
+
+- it is a pure 1:1 rename — no assignment, use, or operand is added, removed, or reordered;
+- identifiers that are not compiler temporaries are never touched;
+- a temporary that exists only in an elidable `ulocate` output slot keeps its original
+  name, because `instruction_to_python` drops that operand and the compiler regenerates the
+  same scratch register on its own.
 
 ---
 

@@ -1,1 +1,2 @@
 include mlog.pyi
+include src/mlog.pyi

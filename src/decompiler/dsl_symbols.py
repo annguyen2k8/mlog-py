@@ -123,6 +123,10 @@ def _collect_node_symbols(node: Any, symbols: Set[str]) -> None:
                 symbols.add("end")
             elif op == "wait":
                 symbols.add("wait")
+            elif op == "draw":
+                symbols.add("draw")
+                if len(args) >= 4 and args[0] == "print" and (args[3].startswith("@") or args[3] in ("center", "top", "bottom", "left", "right", "topLeft", "topRight", "bottomLeft", "bottomRight")):
+                    symbols.add("Align")
             elif op in MLOG_EXPORTS and op not in PYTHON_BUILTIN_FUNCTIONS:
                 symbols.add(op)
 
@@ -152,6 +156,10 @@ def _collect_node_symbols(node: Any, symbols: Set[str]) -> None:
                     symbols.add("end")
                 elif op == "wait":
                     symbols.add("wait")
+                elif op == "draw":
+                    symbols.add("draw")
+                    if len(args) >= 4 and args[0] == "print" and (args[3].startswith("@") or args[3] in ("center", "top", "bottom", "left", "right", "topLeft", "topRight", "bottomLeft", "bottomRight")):
+                        symbols.add("Align")
                 elif op in MLOG_EXPORTS and op not in PYTHON_BUILTIN_FUNCTIONS:
                     symbols.add(op)
 

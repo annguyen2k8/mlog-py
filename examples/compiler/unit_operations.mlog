@@ -1,0 +1,19 @@
+ubind @flare
+ulocate building core false @copper core_x core_y found_core core_build
+ulocate ore core true @copper ore_x ore_y found_ore __tmp0
+uradar enemy any any distance 0 1 enemy
+sensor u_health @unit @health
+sensor u_dead @unit @dead
+jump 13 equal enemy 0
+sensor e_x enemy @x
+sensor e_y enemy @y
+ucontrol approach e_x e_y 8 0 0
+ucontrol target e_x e_y 1 0 0
+ucontrol flag 1 0 0 0 0
+jump 19 always 0 0
+jump 18 equal found_core 0
+ucontrol approach core_x core_y 12 0 0
+ucontrol target 0 0 0 0 0
+ucontrol flag 0 0 0 0 0
+jump 19 always 0 0
+ucontrol idle 0 0 0 0 0

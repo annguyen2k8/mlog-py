@@ -98,8 +98,9 @@ The reverse decompiler reconstructs high-level, human-readable Python DSL from f
    Computes dominance frontiers and immediate dominators. Detects natural loop back-edges to reconstruct `WhileNode`, branching trees (`IfNode`, `elif`, `else`), and scoped loop exits (`BreakNode`, `ContinueNode`).
    *Fallback*: Irreducible CFG loops and computed jumps fall back safely to `UnstructuredNode`.
 
-3. **Phase 3: Expression & Dataflow Recovery (`src/decompiler/dataflow.py`, `src/decompiler/expression.py`)**:
+3. **Phase 3: Expression & Dataflow Recovery (`src/decompiler/dataflow.py`, `src/decompiler/expression.py`, `src/decompiler/naming.py`)**:
    Performs scoped Use-Def analysis to detect single-use compiler temporary variables (`__tmp0`) and collapses them into compound expression trees (`BinaryOpNode`, `UnaryOpNode`, `CallNode`). Preserves multi-use variables to protect program semantics.
+   A single-use temporary feeding a plain `OPERAND` of a raw instruction is also folded into the recovered expression, gated by `semantics.is_safe_inline_expression` so comparisons, booleans, calls, and control-flow opcodes are never rewritten. Temporaries that must be preserved (multi-use, or side-effect ordered) are renamed to valid DSL identifiers (`tmp_val_N`) by `naming.py`, keeping the `MLog → Python → MLog` round-trip recompilable.
 
 4. **Phase 4: Function & Procedure Recovery (`src/decompiler/function_analyzer.py`, `src/decompiler/function_ir.py`)**:
    Analyzes whole-program CFGs to identify calling conventions (`jump`, `set @counter`, return address handling). Reconstructs `FunctionDef`, `CallNode`, and `ReturnNode` structures while preserving global variables.

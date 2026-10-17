@@ -19,16 +19,25 @@ from .mlog_registry_data import (
     BUILTIN_VARS_SPEC,
     CONDITION_OPERATIONS,
     CONTROL_PROPERTIES,
+    CUTSCENE_ACTIONS,
+    FETCH_TYPES,
     GRAPHICS_TYPES,
     ITEMS,
     LIQUIDS,
+    LOGIC_FX,
     LOGIC_OPERATIONS,
+    LOGIC_RULES,
+    MARKER_CONTROLS,
+    MARKER_TYPES,
+    MESSAGE_TYPES,
     RADAR_SORTS,
     RADAR_TARGETS,
     SENSEABLE_PROPERTIES,
+    STATUS_EFFECTS,
     TEAMS,
     UNIT_CONTROL_ACTIONS,
     UNITS,
+    WEATHERS,
 )
 
 
@@ -140,6 +149,15 @@ class SensorPropertyRegistry(BaseRegistry):
                     source_name=src_name,
                     mlog_token=f"@{liquid}",
                     category="liquid",
+                )
+            )
+        for status in STATUS_EFFECTS:
+            src_name = self._to_snake(status).upper()
+            entries.append(
+                RegistryEntry(
+                    source_name=src_name,
+                    mlog_token=f"@status-{status}",
+                    category="status_effect",
                 )
             )
         super().__init__("sensor property", entries)
@@ -320,17 +338,82 @@ class OpcodeRegistry(BaseRegistry):
     """Validates mlog opcodes."""
 
     def __init__(self):
-        opcodes = [
+        standard_opcodes = [
             "read", "write", "draw", "drawflush", "print", "printchar", "format", "printflush",
             "getlink", "control", "radar", "sensor", "set", "setrate", "op", "lookup",
             "packcolor", "unpackcolor", "wait", "stop", "end", "jump",
-            "ubind", "ucontrol", "uradar", "ulocate", "noop",
+            "ubind", "ucontrol", "uradar", "ulocate", "noop", "select",
+        ]
+        world_opcodes = [
+            # Tier 4: World Processor opcodes (Group A, Group B, Group C, Group D & Group E)
+            "query", "getblock", "setblock",
+            "spawn", "bullet", "status", "explosion",
+            "getflag", "setflag", "setprop", "fetch", "sync", "setrule",
+            "weathersense", "weatherset", "spawnwave", "effect",
+            "message", "cutscene",
+            "playsound", "playmusic", "makemarker", "setmarker", "localeprint", "clientdata",
         ]
         entries = [
-            RegistryEntry(source_name=op.upper(), mlog_token=op, category="opcode")
-            for op in opcodes
+            RegistryEntry(source_name=op.upper(), mlog_token=op, category="standard")
+            for op in standard_opcodes
+        ] + [
+            RegistryEntry(source_name=op.upper(), mlog_token=op, category="world")
+            for op in world_opcodes
         ]
         super().__init__("opcode", entries)
+        self.standard_opcodes = set(standard_opcodes)
+        self.world_opcodes = set(world_opcodes)
+
+
+class StatusEffectRegistry(BaseRegistry):
+    """Validates status effects for 'status' instruction and sensor property."""
+
+    def __init__(self):
+        entries = [
+            RegistryEntry(
+                source_name=s.upper().replace("-", "_"),
+                mlog_token=f"@status-{s}",
+                category="status_effect",
+            )
+            for s in STATUS_EFFECTS
+        ]
+        super().__init__("status effect", entries)
+
+
+class TileLayerRegistry(BaseRegistry):
+    """Validates tile layers for 'getblock' and 'setblock'."""
+
+    def __init__(self):
+        layers = ["floor", "ore", "block", "building"]
+        entries = [
+            RegistryEntry(source_name=l.upper(), mlog_token=l, category="tile_layer")
+            for l in layers
+        ]
+        super().__init__("tile layer", entries)
+
+
+class QueryShapeRegistry(BaseRegistry):
+    """Validates spatial query shapes for 'query'."""
+
+    def __init__(self):
+        shapes = ["circle", "rect"]
+        entries = [
+            RegistryEntry(source_name=s.upper(), mlog_token=s, category="query_shape")
+            for s in shapes
+        ]
+        super().__init__("query shape", entries)
+
+
+class QueryTypeRegistry(BaseRegistry):
+    """Validates queryable entity types for 'query'."""
+
+    def __init__(self):
+        types = ["unit", "building"]
+        entries = [
+            RegistryEntry(source_name=t.upper(), mlog_token=t, category="query_type")
+            for t in types
+        ]
+        super().__init__("query type", entries)
 
 
 class LookupTypeRegistry(BaseRegistry):
@@ -343,6 +426,131 @@ class LookupTypeRegistry(BaseRegistry):
             for t in types
         ]
         super().__init__("lookup type", entries)
+
+
+class AlignRegistry(BaseRegistry):
+    """Validates print text alignments used by 'draw.print' matching Mindustry LStatement.nameToAlign."""
+
+    def __init__(self):
+        aligns = [
+            ("center", "@center"),
+            ("top", "@top"),
+            ("bottom", "@bottom"),
+            ("left", "@left"),
+            ("right", "@right"),
+            ("topLeft", "@topLeft"),
+            ("topRight", "@topRight"),
+            ("bottomLeft", "@bottomLeft"),
+            ("bottomRight", "@bottomRight"),
+        ]
+        entries = [
+            RegistryEntry(source_name=name, mlog_token=token, category="align")
+            for name, token in aligns
+        ]
+        super().__init__("align", entries)
+
+
+class FetchTypeRegistry(BaseRegistry):
+    """Validates entity fetch query types for 'fetch'."""
+
+    def __init__(self):
+        entries = [
+            RegistryEntry(source_name=t, mlog_token=t, category="fetch_type")
+            for t in FETCH_TYPES
+        ]
+        super().__init__("fetch type", entries)
+
+
+class LogicRuleRegistry(BaseRegistry):
+    """Validates game and team rules for 'setrule'."""
+
+    def __init__(self):
+        entries = [
+            RegistryEntry(source_name=r, mlog_token=r, category="logic_rule")
+            for r in LOGIC_RULES
+        ]
+        super().__init__("logic rule", entries)
+
+
+class WeatherRegistry(BaseRegistry):
+    """Validates weather types for 'weathersense' and 'weatherset'."""
+
+    def __init__(self):
+        entries = [
+            RegistryEntry(
+                source_name=w.upper().replace("-", "_"),
+                mlog_token=f"@{w}",
+                category="weather",
+            )
+            for w in WEATHERS
+        ]
+        entries.append(
+            RegistryEntry(
+                source_name="SNOW",
+                mlog_token="@snowing",
+                category="weather",
+            )
+        )
+        super().__init__("weather", entries)
+
+
+class LogicFxRegistry(BaseRegistry):
+    """Validates visual effects for 'effect'."""
+
+    def __init__(self):
+        entries = [
+            RegistryEntry(
+                source_name=to_snake(fx).upper(),
+                mlog_token=fx,
+                category="logic_fx",
+            )
+            for fx in LOGIC_FX
+        ]
+        super().__init__("logic effect", entries)
+
+
+class MessageTypeRegistry(BaseRegistry):
+    """Validates message display types for 'message'."""
+
+    def __init__(self):
+        entries = [
+            RegistryEntry(source_name=m.upper(), mlog_token=m, category="message_type")
+            for m in MESSAGE_TYPES
+        ]
+        super().__init__("message type", entries)
+
+
+class CutsceneActionRegistry(BaseRegistry):
+    """Validates cutscene actions for 'cutscene'."""
+
+    def __init__(self):
+        entries = [
+            RegistryEntry(source_name=to_snake(a).upper(), mlog_token=a, category="cutscene_action")
+            for a in CUTSCENE_ACTIONS
+        ]
+        super().__init__("cutscene action", entries)
+
+
+class MarkerTypeRegistry(BaseRegistry):
+    """Validates marker types for 'makemarker'."""
+
+    def __init__(self):
+        entries = [
+            RegistryEntry(source_name=to_snake(t).upper(), mlog_token=t, category="marker_type")
+            for t in MARKER_TYPES
+        ]
+        super().__init__("marker type", entries)
+
+
+class MarkerControlRegistry(BaseRegistry):
+    """Validates marker control actions for 'setmarker'."""
+
+    def __init__(self):
+        entries = [
+            RegistryEntry(source_name=to_snake(c).upper(), mlog_token=c, category="marker_control")
+            for c in MARKER_CONTROLS
+        ]
+        super().__init__("marker control", entries)
 
 
 # Registry Singletons
@@ -361,6 +569,19 @@ REG_UNIT_TYPES = UnitTypeRegistry()
 REG_TEAMS = TeamRegistry()
 REG_OPCODES = OpcodeRegistry()
 REG_LOOKUP_TYPES = LookupTypeRegistry()
+REG_ALIGN = AlignRegistry()
+REG_TILE_LAYERS = TileLayerRegistry()
+REG_QUERY_SHAPES = QueryShapeRegistry()
+REG_QUERY_TYPES = QueryTypeRegistry()
+REG_STATUS_EFFECTS = StatusEffectRegistry()
+REG_FETCH_TYPES = FetchTypeRegistry()
+REG_LOGIC_RULES = LogicRuleRegistry()
+REG_WEATHERS = WeatherRegistry()
+REG_LOGIC_FX = LogicFxRegistry()
+REG_MESSAGE_TYPES = MessageTypeRegistry()
+REG_CUTSCENE_ACTIONS = CutsceneActionRegistry()
+REG_MARKER_TYPES = MarkerTypeRegistry()
+REG_MARKER_CONTROLS = MarkerControlRegistry()
 
 
 # ---------------------------------------------------------------------------
@@ -394,6 +615,19 @@ Liquids = _build_enum_from_registry("Liquids", REG_LIQUIDS)
 Units = _build_enum_from_registry("Units", REG_UNIT_TYPES)
 Teams = _build_enum_from_registry("Teams", REG_TEAMS)
 LookupType = _build_enum_from_registry("LookupType", REG_LOOKUP_TYPES)
+Align = _build_enum_from_registry("Align", REG_ALIGN)
+TileLayer = _build_enum_from_registry("TileLayer", REG_TILE_LAYERS)
+QueryShape = _build_enum_from_registry("QueryShape", REG_QUERY_SHAPES)
+QueryType = _build_enum_from_registry("QueryType", REG_QUERY_TYPES)
+StatusEffects = _build_enum_from_registry("StatusEffects", REG_STATUS_EFFECTS)
+FetchType = _build_enum_from_registry("FetchType", REG_FETCH_TYPES)
+LogicRules = _build_enum_from_registry("LogicRules", REG_LOGIC_RULES)
+Weathers = _build_enum_from_registry("Weathers", REG_WEATHERS)
+Fx = _build_enum_from_registry("Fx", REG_LOGIC_FX)
+MessageType = _build_enum_from_registry("MessageType", REG_MESSAGE_TYPES)
+CutsceneAction = _build_enum_from_registry("CutsceneAction", REG_CUTSCENE_ACTIONS)
+MarkerType = _build_enum_from_registry("MarkerType", REG_MARKER_TYPES)
+MarkerControl = _build_enum_from_registry("MarkerControl", REG_MARKER_CONTROLS)
 
 # Mapping from Python enum class name to its registry
 ENUM_CLASS_TO_REGISTRY = {
@@ -410,6 +644,19 @@ ENUM_CLASS_TO_REGISTRY = {
     "Units": REG_UNIT_TYPES,
     "Teams": REG_TEAMS,
     "LookupType": REG_LOOKUP_TYPES,
+    "Align": REG_ALIGN,
+    "TileLayer": REG_TILE_LAYERS,
+    "QueryShape": REG_QUERY_SHAPES,
+    "QueryType": REG_QUERY_TYPES,
+    "StatusEffects": REG_STATUS_EFFECTS,
+    "FetchType": REG_FETCH_TYPES,
+    "LogicRules": REG_LOGIC_RULES,
+    "Weathers": REG_WEATHERS,
+    "Fx": REG_LOGIC_FX,
+    "MessageType": REG_MESSAGE_TYPES,
+    "CutsceneAction": REG_CUTSCENE_ACTIONS,
+    "MarkerType": REG_MARKER_TYPES,
+    "MarkerControl": REG_MARKER_CONTROLS,
 }
 
 

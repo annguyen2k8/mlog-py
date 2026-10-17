@@ -42,7 +42,7 @@ non-negotiable rules:
    after.
 7. **Run Full Test Suite Before Concluding**: Execute
    `python3 -m unittest discover -s tests` and verify all tests pass
-   (329/329 PASS) before completing any task.
+   (987/987 PASS) before completing any task.
 
 ---
 
@@ -69,7 +69,7 @@ mlog-py/
 │   ├── emitter.py           # Two-pass address resolution
 │   ├── validator.py         # Static grammar & processor limits
 │   └── decompiler/          # Decompiler subsystem (Phases 1–5)
-└── tests/                   # Comprehensive test suite (329 tests)
+└── tests/                   # Comprehensive test suite (987 tests)
     └── corpus/              # 32-case real-world corpus
 ```
 
@@ -112,6 +112,12 @@ The Python DSL is strongly typed and checked against Mindustry's engine classes:
   - Direct hardware links are quoted strings: `val = read("cell1", 0)`,
     `drawflush("display1")`, `printflush("message1")`.
   - Dynamic links bound via `b = getlink(0)` are unquoted Python identifiers.
+- **Tuple Unpacking (`ulocate`, `unpackcolor`)**: Multi-output intrinsics support a
+  Pythonic unpacking form that lowers to the same single Mindustry instruction as the
+  positional form. `unpackcolor` requires **exactly 4** distinct targets
+  (`r, g, b, a = unpackcolor(color)` -> `unpackcolor r g b a color`); `ulocate` accepts 3
+  or 4 depending on the locator. Duplicate target names, non-name targets, keyword
+  arguments, and wrong target counts are rejected at parse time.
 - **Special Registers**: Emitted as quoted strings with `@` prefix:
   `set("@counter", 10)`, `u = sensor("@unit", "@dead")`.
 - **Print Buffer Semantics (`print` & `printflush`)**:
@@ -162,6 +168,10 @@ $$
    $\le 500$ jumps, $\le 16$ tokens.
 5. **Java Engine Harness**: Verifies against Mindustry's live `LParser` and
    `LAssembler`.
+6. **Function Support Flag**: `def` / `return` are gated by `allow_functions`.
+   `compile_py()` defaults to `False` (strict subset for API callers); the
+   `mlog-py compile` CLI enables it by default so every documented example compiles,
+   and exposes `--no-functions` to opt back out.
 
 ---
 
@@ -257,7 +267,7 @@ The framework provides guaranteed round-trip verification across three flows:
 
 ## 7. Testing Requirements & Corpus Structure
 
-- **Test Suite**: 377 automated tests in `tests/test_*.py`.
+- **Test Suite**: 987 automated tests in `tests/test_*.py`.
 - **Hardening Corpus (`tests/corpus/`)**: 32 real-world programs across 6
   categories:
   - `handwritten/`: Real game controller scripts (turrets, mining drones,
@@ -282,8 +292,11 @@ The framework provides guaranteed round-trip verification across three flows:
 
 1. **Irreducible Control Flow**: Non-natural loops fall back to
    `UnstructuredNode` rather than synthetic while structures.
-2. **Temporary Scope**: Temporaries read multiple times or modified across
-   basic blocks are not inlined.
+2. **Temporary Scope**: Temporaries read multiple times, or ordered around
+   side-effecting operations (e.g. `read` feeding `write`), are not inlined.
+   They are preserved as explicit assignments under a renamed valid DSL
+   identifier (`tmp_val_N`) by `src/decompiler/naming.py`, so the output stays
+   recompilable; the recompiled MLog then carries an extra explicit `set`.
 3. **Flat Memory Model**: Mindustry has no heap or object system;
    object-oriented constructs, classes, and Python collections (`list`,
    `dict`) are not reconstructed.

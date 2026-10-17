@@ -17,7 +17,7 @@ The compiler targets a strict, strongly-typed subset of Python designed for Mind
 | **Comparisons** | `==`, `!=`, `<`, `<=`, `>`, `>=` | `op equal`, `op notEqual`, `op lessThan`, `op lessThanEq` |
 | **Boolean Logic** | `and`, `or`, `not` | Short-circuit conditional jumps |
 | **Ternary Operator** | `a if cond else b`, `select(...)` | `select dest op comp0 comp1 a b` or short-circuit jumps |
-| **Color Operations** | `packcolor(r, g, b, a)`, `unpackcolor(r, g, b, a, col)` | `packcolor dest r g b a`, `unpackcolor r g b a col` |
+| **Color Operations** | `packcolor(r, g, b, a)`, `unpackcolor(r, g, b, a, col)`, `r, g, b, a = unpackcolor(col)` | `packcolor dest r g b a`, `unpackcolor r g b a col` |
 | **Output & Formatting** | `printchar(val)`, `format(val)`, `f"..."` | `printchar val`, `format val`, `print "template"` |
 | **Rate Control** | `setrate(ipt)` | `setrate ipt` |
 | **Control Flow** | `if`, `elif`, `else`, `while`, `for ... in range(...)`, `break`, `continue` | Forward and backward numeric jumps |
@@ -386,7 +386,21 @@ draw("color", packcolor(1, 0, 0, 1))
 
 # Unpack a packed double color into 4 destination variables
 unpackcolor(r, g, b, a, col)                  # Emits: unpackcolor r g b a col
+
+# Equivalent tuple unpacking form (exactly 4 distinct targets required)
+r, g, b, a = unpackcolor(col)                  # Emits: unpackcolor r g b a col
 ```
+
+Both call conventions lower to the same single Mindustry instruction
+(`LStatements.UnpackColorStatement`), which always declares 4 destinations in RGBA order
+followed by the source operand. `LExecutor.UnpackColorI` reads the source value into a
+local before writing the destinations, so the source variable may safely be reused as one
+of the targets. The compiler rejects a target count other than 4, duplicate target names,
+keyword arguments, and non-name targets.
+
+In plain CPython (outside the compiler), `unpackcolor(value)` returns a `ColorChannels`
+named tuple so the unpacking form runs as ordinary Python, while the 5-argument statement
+form remains a no-op because Python cannot write through call arguments.
 
 ### Draw API & Callable Namespace Object (`draw.<method>`)
 
@@ -448,35 +462,41 @@ Similar to the Draw API, `ucontrol` and `ulocate` provide **Callable Namespace O
 ```python
 from mlog import ucontrol, ulocate
 
-# 1. Unit Control (ucontrol / unitControl / unit_control)
+# 1. Unit Control (ucontrol)
 ucontrol.move(10, 20)                        # Emits: ucontrol move 10 20 0 0 0
 ucontrol.approach(15, 25, 4)                 # Emits: ucontrol approach 15 25 4 0 0
 ucontrol.pathfind(30, 40)                    # Emits: ucontrol pathfind 30 40 0 0 0
-ucontrol.auto_pathfind()                     # Emits: ucontrol autoPathfind 0 0 0 0 0 (alias: autoPathfind)
+ucontrol.auto_pathfind()                     # Emits: ucontrol autoPathfind 0 0 0 0 0
 ucontrol.boost(True)                         # Emits: ucontrol boost true 0 0 0 0
 ucontrol.target(50, 60, 1)                   # Emits: ucontrol target 50 60 1 0 0
 ucontrol.targetp(enemy, 1)                   # Emits: ucontrol targetp enemy 1 0 0 0
-ucontrol.item_drop(core, 50)                 # Emits: ucontrol itemDrop core 50 0 0 0 (alias: itemDrop)
-ucontrol.item_take(core, "@copper", 30)      # Emits: ucontrol itemTake core @copper 30 0 0 (alias: itemTake)
-ucontrol.pay_drop()                          # Emits: ucontrol payDrop 0 0 0 0 0 (alias: payDrop)
-ucontrol.pay_take(1)                         # Emits: ucontrol payTake 1 0 0 0 0 (alias: payTake)
-ucontrol.pay_enter()                         # Emits: ucontrol payEnter 0 0 0 0 0 (alias: payEnter)
+ucontrol.item_drop(core, 50)                 # Emits: ucontrol itemDrop core 50 0 0 0
+ucontrol.item_take(core, "@copper", 30)      # Emits: ucontrol itemTake core @copper 30 0 0
+ucontrol.pay_drop()                          # Emits: ucontrol payDrop 0 0 0 0 0
+ucontrol.pay_take(1)                         # Emits: ucontrol payTake 1 0 0 0 0
+ucontrol.pay_enter()                         # Emits: ucontrol payEnter 0 0 0 0 0
 ucontrol.mine(12, 34)                        # Emits: ucontrol mine 12 34 0 0 0
 ucontrol.flag(999)                           # Emits: ucontrol flag 999 0 0 0 0
 ucontrol.build(10, 20, "@router", 0, 0)      # Emits: ucontrol build 10 20 @router 0 0
 ucontrol.deconstruct(10, 20)                 # Emits: ucontrol deconstruct 10 20 0 0 0
-ucontrol.get_block(10, 20, t, b, f)          # Emits: ucontrol getBlock 10 20 t b f (alias: getBlock)
+ucontrol.get_block(10, 20, t, b, f)          # Emits: ucontrol getBlock 10 20 t b f
 ucontrol.within(10, 20, 5, res)              # Emits: ucontrol within 10 20 5 res 0
 ucontrol.idle()                              # Emits: ucontrol idle 0 0 0 0 0
 ucontrol.stop()                              # Emits: ucontrol stop 0 0 0 0 0
 ucontrol.unbind()                            # Emits: ucontrol unbind 0 0 0 0 0
 
-# 2. Unit Locate (ulocate / unitLocate / unit_locate)
-# Injects Mindustry dummy operands automatically (e.g. 'core', 'true', '@copper', 'building')
-ulocate.ore("@copper", outX, outY, found)    # Emits: ulocate ore core true @copper outX outY found building
-ulocate.building("core", True, outX, outY, found, b) # Emits: ulocate building core true @copper outX outY found b
-ulocate.spawn(outX, outY, found)             # Emits: ulocate spawn core true @copper outX outY found building
-ulocate.damaged(outX, outY, found, b)        # Emits: ulocate damaged core true @copper outX outY found b
+# 2. Unit Locate (ulocate)
+# Modern Pythonic tuple unpacking syntax (supports 3 or 4 target variables):
+core_x, core_y, found_core, core_build = ulocate.building("core", False) # Emits: ulocate building core false @copper core_x core_y found_core core_build
+ore_x, ore_y, found_ore = ulocate.ore("@copper")                         # Emits: ulocate ore core true @copper ore_x ore_y found_ore __tmp0
+spawn_x, spawn_y, found_spawn, spawn_build = ulocate.spawn()             # Emits: ulocate spawn core true @copper spawn_x spawn_y found_spawn spawn_build
+dmg_x, dmg_y, found_dmg, dmg_build = ulocate.damaged()                   # Emits: ulocate damaged core true @copper dmg_x dmg_y found_dmg dmg_build
+
+# Legacy positional statement syntax (also fully supported):
+ulocate.ore("@copper", outX, outY, found)                                # Emits: ulocate ore core true @copper outX outY found __tmp0
+ulocate.building("core", True, outX, outY, found, b)                     # Emits: ulocate building core true @copper outX outY found b
+ulocate.spawn(outX, outY, found)                                         # Emits: ulocate spawn core true @copper outX outY found __tmp0
+ulocate.damaged(outX, outY, found, b)                                    # Emits: ulocate damaged core true @copper outX outY found b
 ```
 
 ### Operation Callable Namespace Object (`op.<method>`)
@@ -668,9 +688,17 @@ mlog-py compile input.py --debug
 # Disable compile-time constant folding
 mlog-py compile input.py -o output.mlog --no-fold-constants
 
+# Reject 'def' definitions and 'return' statements (functions are allowed by default)
+mlog-py compile input.py --no-functions
+
 # Validate with official Mindustry engine (requires Java)
 mlog-py compile input.py --mindustry
 ```
+
+User-defined functions are enabled by default so that every program in the documented
+Python subset, including `examples/compiler/functions.py`, compiles through the CLI. The
+Python API keeps the stricter default (`compile_py(..., allow_functions=False)`); pass
+`allow_functions=True` there to opt in.
 
 #### Automatic Clipboard Copying
 

@@ -17,6 +17,10 @@ Phase 3 provides:
 - Recovery of assignments (AssignNode) and binary/unary arithmetic/bitwise/comparison expression trees
 - Safe constant and copy propagation
 - Temporary variable identification and safe single-use inlining without side-effects or overwrite violation
+- Single-use temporaries folded into raw instruction operands, gated by the shared
+  is_safe_inline_expression predicate so an operand is never re-quoted into a string
+- Renaming of preserved compiler temporaries into valid DSL identifiers (naming.py),
+  keeping MLog -> Python -> MLog round-trips recompilable
 - Condition expression recovery for IfNode and WhileNode
 
 Phase 4 provides:
@@ -43,6 +47,7 @@ from .dataflow import (
     substitute_variable,
 )
 from .errors import CFGError, DecompileError, MlogParseError
+from .naming import rename_reserved_temporaries
 from .expression import (
     BinaryExpr,
     CallExpr,
@@ -117,7 +122,8 @@ def decompile_program(mlog_text: str, filename: str = "<stdin>") -> FunctionProg
     """Full Phase 1-4 pipeline: parses mlog, builds CFG, analyzes functions & expressions."""
     cfg = build_cfg(mlog_text, filename=filename)
     analyzer = FunctionAnalyzer(cfg)
-    return analyzer.analyze()
+    program = analyzer.analyze()
+    return rename_reserved_temporaries(program)
 
 
 def decompile(

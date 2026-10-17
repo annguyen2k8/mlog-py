@@ -42,6 +42,17 @@ def is_float(s: str) -> bool:
         return False
 
 
+def is_compiler_temporary(name: str) -> bool:
+    """Return True if variable name matches standard compiler temporary conventions."""
+    if name.startswith("__tmp"):
+        return True
+    if name.startswith("*tmp"):
+        return True
+    if name.startswith("_tmp") and (len(name) <= 5 or name[4:].isdigit()):
+        return True
+    return False
+
+
 def format_operand(op: str) -> str:
     """Format an mlog operand token into Python-friendly representation."""
     if op == "true":
@@ -82,6 +93,28 @@ def condition_to_python(cond: str, a: str, b: str, invert: bool = False) -> str:
     return f"{a_py} {py_op} {b_py}"
 
 
+ALIGN_TOKEN_TO_ENUM: Dict[str, str] = {
+    "@center": "Align.CENTER",
+    "@top": "Align.TOP",
+    "@bottom": "Align.BOTTOM",
+    "@left": "Align.LEFT",
+    "@right": "Align.RIGHT",
+    "@topLeft": "Align.TOP_LEFT",
+    "@topRight": "Align.TOP_RIGHT",
+    "@bottomLeft": "Align.BOTTOM_LEFT",
+    "@bottomRight": "Align.BOTTOM_RIGHT",
+    "center": "Align.CENTER",
+    "top": "Align.TOP",
+    "bottom": "Align.BOTTOM",
+    "left": "Align.LEFT",
+    "right": "Align.RIGHT",
+    "topLeft": "Align.TOP_LEFT",
+    "topRight": "Align.TOP_RIGHT",
+    "bottomLeft": "Align.BOTTOM_LEFT",
+    "bottomRight": "Align.BOTTOM_RIGHT",
+}
+
+
 def instruction_to_python(
     instr: MlogInstruction,
     defined_variables: Optional[Set[str]] = None,
@@ -89,6 +122,18 @@ def instruction_to_python(
     """Convert an MlogInstruction into a Python DSL statement string without expression synthesis."""
     op = instr.opcode
     args = instr.args
+
+    if op == "draw" and len(args) >= 4 and args[0] == "print":
+        x = format_semantic_argument("draw", 1, args[1], defined_variables, args)
+        y = format_semantic_argument("draw", 2, args[2], defined_variables, args)
+        align_token = args[3]
+        if align_token in ALIGN_TOKEN_TO_ENUM:
+            return f"draw.print({x}, {y}, {ALIGN_TOKEN_TO_ENUM[align_token]})"
+        elif align_token in ("0", "0.0"):
+            return f"draw.print({x}, {y})"
+        else:
+            align_arg = format_semantic_argument("draw", 3, align_token, defined_variables, args)
+            return f"draw.print({x}, {y}, {align_arg})"
 
     if op == "set" and len(args) == 2:
         dest, val = args[0], format_operand(args[1])
@@ -200,6 +245,82 @@ def instruction_to_python(
     if op == "wait":
         arg = format_operand(args[0]) if args else "0.5"
         return f"wait({arg})"
+
+    if op == "ulocate" and len(args) >= 8:
+        locate = args[0]
+        out_x, out_y, out_found, out_build = args[4], args[5], args[6], args[7]
+        is_temp = is_compiler_temporary(out_build)
+        targets = f"{out_x}, {out_y}, {out_found}" if is_temp else f"{out_x}, {out_y}, {out_found}, {out_build}"
+        if locate == "building":
+            group = format_semantic_argument("ulocate", 1, args[1], defined_variables, args)
+            enemy = format_semantic_argument("ulocate", 2, args[2], defined_variables, args)
+            return f"{targets} = ulocate.building({group}, {enemy})"
+        elif locate == "ore":
+            ore = format_semantic_argument("ulocate", 3, args[3], defined_variables, args)
+            return f"{targets} = ulocate.ore({ore})"
+        elif locate == "spawn":
+            return f"{targets} = ulocate.spawn()"
+        elif locate == "damaged":
+            return f"{targets} = ulocate.damaged()"
+
+    if op == "spawn" and len(args) == 7:
+        dest = args[5]
+        if dest.isidentifier() and not dest.startswith("@"):
+            params = [format_semantic_argument("spawn", i, args[i], defined_variables, args) for i in (0, 1, 2, 3, 4, 6)]
+            return f"{dest} = spawn({', '.join(params)})"
+
+    if op == "bullet" and len(args) == 13:
+        dest = args[0]
+        if dest.isidentifier() and not dest.startswith("@"):
+            params = [format_semantic_argument("bullet", i, args[i], defined_variables, args) for i in range(1, len(args))]
+            return f"{dest} = bullet({', '.join(params)})"
+
+    if op == "message" and len(args) == 3:
+        type_ = format_semantic_argument("message", 0, args[0], defined_variables, args)
+        duration = format_semantic_argument("message", 1, args[1], defined_variables, args)
+        out_success = args[2]
+        if out_success != "@wait" and out_success.isidentifier():
+            return f"{out_success} = message({type_}, {duration})"
+        elif duration == "3":
+            return f"message({type_})"
+        else:
+            return f"message({type_}, {duration})"
+
+    if op == "cutscene" and len(args) == 5:
+        action = args[0]
+        if action == "active":
+            dest = args[1]
+            if dest.isidentifier() and not dest.startswith("@"):
+                return f"{dest} = cutscene.active()"
+            return f"cutscene.active({dest})"
+        elif action in ("getHud", "get_hud"):
+            dest = args[1]
+            if dest.isidentifier() and not dest.startswith("@"):
+                return f"{dest} = cutscene.get_hud()"
+            return f"cutscene.get_hud({dest})"
+        elif action == "pan":
+            x = format_semantic_argument("cutscene", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("cutscene", 2, args[2], defined_variables, args)
+            speed = format_semantic_argument("cutscene", 3, args[3], defined_variables, args)
+            if speed in ("0.06", "0.060000"):
+                return f"cutscene.pan({x}, {y})"
+            return f"cutscene.pan({x}, {y}, {speed})"
+        elif action == "zoom":
+            level = format_semantic_argument("cutscene", 1, args[1], defined_variables, args)
+            return f"cutscene.zoom({level})"
+        elif action == "stop":
+            return "cutscene.stop()"
+        elif action == "shake":
+            amount = format_semantic_argument("cutscene", 1, args[1], defined_variables, args)
+            duration = format_semantic_argument("cutscene", 2, args[2], defined_variables, args)
+            return f"cutscene.shake({amount}, {duration})"
+        elif action in ("setHud", "set_hud"):
+            shown = format_semantic_argument("cutscene", 1, args[1], defined_variables, args)
+            if shown == "1":
+                return "cutscene.set_hud(True)"
+            elif shown == "0":
+                return "cutscene.set_hud(False)"
+            return f"cutscene.set_hud({shown})"
 
     # Format arguments using semantic roles from SSOT metadata
     formatted_args = [

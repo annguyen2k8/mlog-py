@@ -4,7 +4,7 @@ Do not edit directly; regenerated and verified via test suite.
 """
 
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union, overload
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, overload
 
 # Package version
 __version__: str
@@ -71,6 +71,22 @@ class Vars:
 # Mindustry Logic Enums (Three-Tier Tier 1)
 # ---------------------------------------------------------------------------
 
+class Align(Enum):
+    """Mindustry Logic Align registry enum."""
+    BOTTOM: 'Align'
+    BOTTOMLEFT: 'Align'
+    BOTTOMRIGHT: 'Align'
+    BOTTOM_LEFT: 'Align'
+    BOTTOM_RIGHT: 'Align'
+    CENTER: 'Align'
+    LEFT: 'Align'
+    RIGHT: 'Align'
+    TOP: 'Align'
+    TOPLEFT: 'Align'
+    TOPRIGHT: 'Align'
+    TOP_LEFT: 'Align'
+    TOP_RIGHT: 'Align'
+
 class Condition(Enum):
     """Mindustry Logic Condition registry enum."""
     ALWAYS: 'Condition'
@@ -96,6 +112,16 @@ class ControlProperty(Enum):
     SHOOT: 'ControlProperty'
     SHOOTP: 'ControlProperty'
 
+class CutsceneAction(Enum):
+    """Mindustry Logic CutsceneAction registry enum."""
+    ACTIVE: 'CutsceneAction'
+    GET_HUD: 'CutsceneAction'
+    PAN: 'CutsceneAction'
+    SET_HUD: 'CutsceneAction'
+    SHAKE: 'CutsceneAction'
+    STOP: 'CutsceneAction'
+    ZOOM: 'CutsceneAction'
+
 class DrawType(Enum):
     """Mindustry Logic DrawType registry enum."""
     CLEAR: 'DrawType'
@@ -116,6 +142,57 @@ class DrawType(Enum):
     STROKE: 'DrawType'
     TRANSLATE: 'DrawType'
     TRIANGLE: 'DrawType'
+
+class FetchType(Enum):
+    """Mindustry Logic FetchType registry enum."""
+    BUILD: 'FetchType'
+    BUILDCOUNT: 'FetchType'
+    BUILD_COUNT: 'FetchType'
+    CORE: 'FetchType'
+    CORECOUNT: 'FetchType'
+    CORE_COUNT: 'FetchType'
+    PLAYER: 'FetchType'
+    PLAYERCOUNT: 'FetchType'
+    PLAYER_COUNT: 'FetchType'
+    UNIT: 'FetchType'
+    UNITCOUNT: 'FetchType'
+    UNIT_COUNT: 'FetchType'
+
+class Fx(Enum):
+    """Mindustry Logic Fx registry enum."""
+    BLOCK_FALL: 'Fx'
+    BREAK_BLOCK: 'Fx'
+    BREAK_PROP: 'Fx'
+    BUBBLE: 'Fx'
+    CROSS: 'Fx'
+    CROSS_EXPLOSION: 'Fx'
+    DRILL: 'Fx'
+    DRILL_BIG: 'Fx'
+    EXPLOSION: 'Fx'
+    HIT: 'Fx'
+    HIT_SQUARE: 'Fx'
+    LIGHT_BLOCK: 'Fx'
+    PLACE_BLOCK: 'Fx'
+    PLACE_BLOCK_SPARK: 'Fx'
+    SHOOT_BIG: 'Fx'
+    SHOOT_SMALL: 'Fx'
+    SMOKE_BIG: 'Fx'
+    SMOKE_CLOUD: 'Fx'
+    SMOKE_COLOR: 'Fx'
+    SMOKE_PUFF: 'Fx'
+    SMOKE_SMALL: 'Fx'
+    SMOKE_SQUARE: 'Fx'
+    SMOKE_SQUARE_BIG: 'Fx'
+    SPARK: 'Fx'
+    SPARK_BIG: 'Fx'
+    SPARK_EXPLOSION: 'Fx'
+    SPARK_SHOOT: 'Fx'
+    SPARK_SHOOT_BIG: 'Fx'
+    SPAWN: 'Fx'
+    TRAIL: 'Fx'
+    VAPOR: 'Fx'
+    WARN: 'Fx'
+    WAVE: 'Fx'
 
 class Items(Enum):
     """Mindustry Logic Items registry enum."""
@@ -210,6 +287,66 @@ class LogicOp(Enum):
     USHR: 'LogicOp'
     XOR: 'LogicOp'
 
+class LogicRules(Enum):
+    """Mindustry Logic LogicRules registry enum."""
+    AMBIENTLIGHT: 'LogicRules'
+    AMBIENT_LIGHT: 'LogicRules'
+    ATTACKMODE: 'LogicRules'
+    ATTACK_MODE: 'LogicRules'
+    BAN: 'LogicRules'
+    BLOCKDAMAGE: 'LogicRules'
+    BLOCKHEALTH: 'LogicRules'
+    BLOCK_DAMAGE: 'LogicRules'
+    BLOCK_HEALTH: 'LogicRules'
+    BUILDSPEED: 'LogicRules'
+    BUILD_SPEED: 'LogicRules'
+    CANGAMEOVER: 'LogicRules'
+    CAN_GAME_OVER: 'LogicRules'
+    CURRENTWAVETIME: 'LogicRules'
+    CURRENT_WAVE_TIME: 'LogicRules'
+    DRAGMULTIPLIER: 'LogicRules'
+    DRAG_MULTIPLIER: 'LogicRules'
+    DROPZONERADIUS: 'LogicRules'
+    DROP_ZONE_RADIUS: 'LogicRules'
+    ENEMYCOREBUILDRADIUS: 'LogicRules'
+    ENEMY_CORE_BUILD_RADIUS: 'LogicRules'
+    LIGHTING: 'LogicRules'
+    MAPAREA: 'LogicRules'
+    MAP_AREA: 'LogicRules'
+    MUSICVOLUME: 'LogicRules'
+    MUSIC_VOLUME: 'LogicRules'
+    PAUSEDISABLED: 'LogicRules'
+    PAUSE_DISABLED: 'LogicRules'
+    RTSMINSQUAD: 'LogicRules'
+    RTSMINWEIGHT: 'LogicRules'
+    RTS_MIN_SQUAD: 'LogicRules'
+    RTS_MIN_WEIGHT: 'LogicRules'
+    SOLARMULTIPLIER: 'LogicRules'
+    SOLAR_MULTIPLIER: 'LogicRules'
+    UNBAN: 'LogicRules'
+    UNITBUILDSPEED: 'LogicRules'
+    UNITCAP: 'LogicRules'
+    UNITCOST: 'LogicRules'
+    UNITDAMAGE: 'LogicRules'
+    UNITHEALTH: 'LogicRules'
+    UNITLIGHT: 'LogicRules'
+    UNITMINESPEED: 'LogicRules'
+    UNIT_BUILD_SPEED: 'LogicRules'
+    UNIT_CAP: 'LogicRules'
+    UNIT_COST: 'LogicRules'
+    UNIT_DAMAGE: 'LogicRules'
+    UNIT_HEALTH: 'LogicRules'
+    UNIT_LIGHT: 'LogicRules'
+    UNIT_MINE_SPEED: 'LogicRules'
+    WAVE: 'LogicRules'
+    WAVES: 'LogicRules'
+    WAVESENDING: 'LogicRules'
+    WAVESPACING: 'LogicRules'
+    WAVETIMER: 'LogicRules'
+    WAVE_SENDING: 'LogicRules'
+    WAVE_SPACING: 'LogicRules'
+    WAVE_TIMER: 'LogicRules'
+
 class LookupType(Enum):
     """Mindustry Logic LookupType registry enum."""
     BLOCK: 'LookupType'
@@ -217,6 +354,63 @@ class LookupType(Enum):
     LIQUID: 'LookupType'
     TEAM: 'LookupType'
     UNIT: 'LookupType'
+
+class MarkerControl(Enum):
+    """Mindustry Logic MarkerControl registry enum."""
+    ARC: 'MarkerControl'
+    AUTOSCALE: 'MarkerControl'
+    COLOR: 'MarkerControl'
+    COLORI: 'MarkerControl'
+    DRAW_LAYER: 'MarkerControl'
+    END_POS: 'MarkerControl'
+    FLUSH_TEXT: 'MarkerControl'
+    FONT_SIZE: 'MarkerControl'
+    LABEL_FLAGS: 'MarkerControl'
+    LIGHT: 'MarkerControl'
+    LINE_ALIGN: 'MarkerControl'
+    MINIMAP: 'MarkerControl'
+    OUTLINE: 'MarkerControl'
+    POS: 'MarkerControl'
+    POSI: 'MarkerControl'
+    RADIUS: 'MarkerControl'
+    REMOVE: 'MarkerControl'
+    ROTATION: 'MarkerControl'
+    SHAPE: 'MarkerControl'
+    STROKE: 'MarkerControl'
+    TEXTURE: 'MarkerControl'
+    TEXTURE_SIZE: 'MarkerControl'
+    TEXT_ALIGN: 'MarkerControl'
+    TEXT_HEIGHT: 'MarkerControl'
+    UVI: 'MarkerControl'
+    WORLD: 'MarkerControl'
+
+class MarkerType(Enum):
+    """Mindustry Logic MarkerType registry enum."""
+    LIGHT: 'MarkerType'
+    LINE: 'MarkerType'
+    POINT: 'MarkerType'
+    QUAD: 'MarkerType'
+    SHAPE: 'MarkerType'
+    SHAPE_TEXT: 'MarkerType'
+    TEXT: 'MarkerType'
+    TEXTURE: 'MarkerType'
+
+class MessageType(Enum):
+    """Mindustry Logic MessageType registry enum."""
+    ANNOUNCE: 'MessageType'
+    MISSION: 'MessageType'
+    NOTIFY: 'MessageType'
+    TOAST: 'MessageType'
+
+class QueryShape(Enum):
+    """Mindustry Logic QueryShape registry enum."""
+    CIRCLE: 'QueryShape'
+    RECT: 'QueryShape'
+
+class QueryType(Enum):
+    """Mindustry Logic QueryType registry enum."""
+    BUILDING: 'QueryType'
+    UNIT: 'QueryType'
 
 class RadarSort(Enum):
     """Mindustry Logic RadarSort registry enum."""
@@ -245,8 +439,10 @@ class SensorProperty(Enum):
     ARKYCITE: 'SensorProperty'
     ARMOR: 'SensorProperty'
     BERYLLIUM: 'SensorProperty'
+    BLASTED: 'SensorProperty'
     BLAST_COMPOUND: 'SensorProperty'
     BOOSTING: 'SensorProperty'
+    BOSS: 'SensorProperty'
     BREAKING: 'SensorProperty'
     BUFFER_SIZE: 'SensorProperty'
     BUILDING: 'SensorProperty'
@@ -254,6 +450,7 @@ class SensorProperty(Enum):
     BUILD_Y: 'SensorProperty'
     BULLET_LIFETIME: 'SensorProperty'
     BULLET_TIME: 'SensorProperty'
+    BURNING: 'SensorProperty'
     CARBIDE: 'SensorProperty'
     COAL: 'SensorProperty'
     COLOR: 'SensorProperty'
@@ -261,39 +458,51 @@ class SensorProperty(Enum):
     CONTROLLED: 'SensorProperty'
     CONTROLLER: 'SensorProperty'
     COPPER: 'SensorProperty'
+    CORRODED: 'SensorProperty'
     CRYOFLUID: 'SensorProperty'
     CURRENT_AMMO_TYPE: 'SensorProperty'
     CYANOGEN: 'SensorProperty'
     DEAD: 'SensorProperty'
+    DISARMED: 'SensorProperty'
     DISPLAY_HEIGHT: 'SensorProperty'
     DISPLAY_WIDTH: 'SensorProperty'
     DORMANT_CYST: 'SensorProperty'
+    DYNAMIC: 'SensorProperty'
     EFFICIENCY: 'SensorProperty'
+    ELECTRIFIED: 'SensorProperty'
     ENABLED: 'SensorProperty'
+    FAST: 'SensorProperty'
     FIRST_ITEM: 'SensorProperty'
     FISSILE_MATTER: 'SensorProperty'
     FLAG: 'SensorProperty'
     FLYING: 'SensorProperty'
+    FREEZING: 'SensorProperty'
     GALLIUM: 'SensorProperty'
     GRAPHITE: 'SensorProperty'
     HEALTH: 'SensorProperty'
     HEAT: 'SensorProperty'
     HYDROGEN: 'SensorProperty'
     ID: 'SensorProperty'
+    INVINCIBLE: 'SensorProperty'
     ITEM_CAPACITY: 'SensorProperty'
     LEAD: 'SensorProperty'
     LIQUID_CAPACITY: 'SensorProperty'
     MAX_HEALTH: 'SensorProperty'
     MAX_UNITS: 'SensorProperty'
+    MELTING: 'SensorProperty'
     MEMORY_CAPACITY: 'SensorProperty'
     METAGLASS: 'SensorProperty'
     MINE_X: 'SensorProperty'
     MINE_Y: 'SensorProperty'
     MINING: 'SensorProperty'
+    MUDDY: 'SensorProperty'
     NAME: 'SensorProperty'
     NITROGEN: 'SensorProperty'
+    NONE: 'SensorProperty'
     OIL: 'SensorProperty'
     OPERATIONS: 'SensorProperty'
+    OVERCLOCK: 'SensorProperty'
+    OVERDRIVE: 'SensorProperty'
     OXIDE: 'SensorProperty'
     OZONE: 'SensorProperty'
     PAYLOAD_CAPACITY: 'SensorProperty'
@@ -314,20 +523,26 @@ class SensorProperty(Enum):
     RANGE: 'SensorProperty'
     ROTATION: 'SensorProperty'
     SAND: 'SensorProperty'
+    SAPPED: 'SensorProperty'
     SCRAP: 'SensorProperty'
     SELECTED_BLOCK: 'SensorProperty'
     SELECTED_ROTATION: 'SensorProperty'
     SHIELD: 'SensorProperty'
+    SHIELDED: 'SensorProperty'
+    SHOCKED: 'SensorProperty'
     SHOOTING: 'SensorProperty'
     SHOOT_X: 'SensorProperty'
     SHOOT_Y: 'SensorProperty'
     SILICON: 'SensorProperty'
     SIZE: 'SensorProperty'
     SLAG: 'SensorProperty'
+    SLOW: 'SensorProperty'
     SOLID: 'SensorProperty'
     SPEED: 'SensorProperty'
     SPORE_POD: 'SensorProperty'
+    SPORE_SLOWED: 'SensorProperty'
     SURGE_ALLOY: 'SensorProperty'
+    TARRED: 'SensorProperty'
     TEAM: 'SensorProperty'
     THORIUM: 'SensorProperty'
     TIMESCALE: 'SensorProperty'
@@ -338,11 +553,39 @@ class SensorProperty(Enum):
     TOTAL_POWER: 'SensorProperty'
     TUNGSTEN: 'SensorProperty'
     TYPE: 'SensorProperty'
+    UNMOVING: 'SensorProperty'
     VELOCITY_X: 'SensorProperty'
     VELOCITY_Y: 'SensorProperty'
     WATER: 'SensorProperty'
+    WET: 'SensorProperty'
     X: 'SensorProperty'
     Y: 'SensorProperty'
+
+class StatusEffects(Enum):
+    """Mindustry Logic StatusEffects registry enum."""
+    BLASTED: 'StatusEffects'
+    BOSS: 'StatusEffects'
+    BURNING: 'StatusEffects'
+    CORRODED: 'StatusEffects'
+    DISARMED: 'StatusEffects'
+    DYNAMIC: 'StatusEffects'
+    ELECTRIFIED: 'StatusEffects'
+    FAST: 'StatusEffects'
+    FREEZING: 'StatusEffects'
+    INVINCIBLE: 'StatusEffects'
+    MELTING: 'StatusEffects'
+    MUDDY: 'StatusEffects'
+    NONE: 'StatusEffects'
+    OVERCLOCK: 'StatusEffects'
+    OVERDRIVE: 'StatusEffects'
+    SAPPED: 'StatusEffects'
+    SHIELDED: 'StatusEffects'
+    SHOCKED: 'StatusEffects'
+    SLOW: 'StatusEffects'
+    SPORE_SLOWED: 'StatusEffects'
+    TARRED: 'StatusEffects'
+    UNMOVING: 'StatusEffects'
+    WET: 'StatusEffects'
 
 class Teams(Enum):
     """Mindustry Logic Teams registry enum."""
@@ -353,6 +596,13 @@ class Teams(Enum):
     MALIS: 'Teams'
     NEOPLASTIC: 'Teams'
     SHARDED: 'Teams'
+
+class TileLayer(Enum):
+    """Mindustry Logic TileLayer registry enum."""
+    BLOCK: 'TileLayer'
+    BUILDING: 'TileLayer'
+    FLOOR: 'TileLayer'
+    ORE: 'TileLayer'
 
 class UnitControl(Enum):
     """Mindustry Logic UnitControl registry enum."""
@@ -511,6 +761,16 @@ class Units(Enum):
     _SINKS_HEAT: 'Units'
     _SPINE: 'Units'
 
+class Weathers(Enum):
+    """Mindustry Logic Weathers registry enum."""
+    FOG: 'Weathers'
+    RAIN: 'Weathers'
+    SANDSTORM: 'Weathers'
+    SNOW: 'Weathers'
+    SNOWING: 'Weathers'
+    SPORESTORM: 'Weathers'
+    SUSPEND_PARTICLES: 'Weathers'
+
 # ---------------------------------------------------------------------------
 # Compiler Core Entry Points
 # ---------------------------------------------------------------------------
@@ -533,6 +793,23 @@ def main(argv: Optional[List[str]] = None) -> int:
 # Compiler Intrinsics (Python DSL APIs)
 # ---------------------------------------------------------------------------
 
+@overload
+def bullet(from_: Any, index: Any, x: Any, y: Any, rotation: Any, team: Union[Teams, str], owner: Any = "null", damage: Any = -1, velocityScl: Any = 1, lifeScl: Any = 1, aimX: Any = -1, aimY: Any = -1) -> Any:
+    """Create a bullet and assign to variable.
+    """
+    ...
+
+@overload
+def bullet(result: Any, from_: Any, index: Any, x: Any, y: Any, rotation: Any, team: Union[Teams, str], owner: Any = "null", damage: Any = -1, velocityScl: Any = 1, lifeScl: Any = 1, aimX: Any = -1, aimY: Any = -1) -> None:
+    """Create a bullet into specified result variable.
+    """
+    ...
+
+def clientdata(channel: Any, value: Any, reliable: Any = False) -> None:
+    """Send custom network logic data on a channel.
+    """
+    ...
+
 def control(type: Union[ControlProperty, str], target: Any, p1: Any = 0, p2: Any = 0, p3: Any = 0, p4: Any = 0) -> None:
     """Control a building property.
 
@@ -542,6 +819,47 @@ def control(type: Union[ControlProperty, str], target: Any, p1: Any = 0, p2: Any
         p1, p2, p3, p4: Control parameters (default 0).
     """
     ...
+
+class _CutsceneCallable:
+    """Callable namespace object for Mindustry cutscene operations.
+
+    Supports both direct function-call syntax:
+        cutscene("pan", x, y, speed)
+        cutscene(CutsceneAction.PAN, x, y, speed)
+        result = cutscene(CutsceneAction.ACTIVE)
+    and modern namespace method syntax:
+        cutscene.pan(x, y, speed=0.06)
+        cutscene.zoom(level)
+        cutscene.stop()
+        cutscene.shake(amount, duration)
+        result = cutscene.active()
+        result = cutscene.get_hud()
+        cutscene.set_hud(shown)
+    """
+    def __call__(self, action: Union[CutsceneAction, str], p1: Any = 0, p2: Any = 0, p3: Any = 0, p4: Any = 0) -> Any: ...
+    @overload
+    def active(self) -> Any: ...
+    @overload
+    def active(self, out_result: Any) -> None: ...
+    def active(self, *args: Any) -> Any: ...
+    def pan(self, x: Any, y: Any, speed: Any = 0.06) -> None: ...
+    def zoom(self, level: Any) -> None: ...
+    def stop(self) -> None: ...
+    def shake(self, amount: Any, duration: Any) -> None: ...
+    @overload
+    def get_hud(self) -> Any: ...
+    @overload
+    def get_hud(self, out_result: Any) -> None: ...
+    def get_hud(self, *args: Any) -> Any: ...
+    @overload
+    def getHud(self) -> Any: ...
+    @overload
+    def getHud(self, out_result: Any) -> None: ...
+    def getHud(self, *args: Any) -> Any: ...
+    def set_hud(self, shown: Any) -> None: ...
+    def setHud(self, shown: Any) -> None: ...
+
+cutscene: _CutsceneCallable
 
 class _DrawCallable:
     """Callable namespace object for Mindustry draw operations.
@@ -585,28 +903,98 @@ def drawflush(display: Any) -> None:
     """
     ...
 
+def effect(type: Union[Fx, str], x: Any, y: Any, sizerot: Any = 0, color: Any = 0, data: Any = 0) -> None:
+    """Creates a visual effect at world coordinates in World Processor.
+
+    Args:
+        type: Effect name (Fx enum or string, e.g. Fx.WARN, Fx.EXPLOSION, 'spark').
+        x: World tile X coordinate.
+        y: World tile Y coordinate.
+        sizerot: Effect size or rotation angle (default 0).
+        color: Packed color integer or color literal (default 0).
+        data: Associated entity or block data (default 0).
+    """
+    ...
+
 def end() -> None:
     """Jump processor execution back to instruction 0 (restart loop).
     """
     ...
 
-def format(value: Any) -> None:
-    """Replace the first placeholder {0}..{9} in the print buffer matching LExecutor.FormatI.
+def explosion(team: Union[Teams, str], x: Any, y: Any, radius: Any, damage: Any, air: Any = 1, ground: Any = 1, pierce: Any = 0, effect: Any = 1) -> None:
+    """Creates an explosion dealing damage to enemy entities within radius.
 
     Args:
-        value: Value to replace the placeholder with.
+        team: Team initiating explosion (friendly units/buildings take no damage).
+        x: Map tile X coordinate.
+        y: Map tile Y coordinate.
+        radius: Blast radius in tiles (max 100).
+        damage: Maximum blast damage at epicenter (damage < 0 ignored).
+        air: Damage flying targets (1 or 0, default 1).
+        ground: Damage ground targets (1 or 0, default 1).
+        pierce: Damage pierces armor/shields (1 or 0, default 0).
+        effect: Trigger explosion visual effect (1 or 0, default 1).
     """
     ...
 
 @overload
-def getlink(dest: Any, index: Any) -> Any:
-    """Get linked block by index into dest variable (statement form).
+def fetch(type: Union[FetchType, str], team: Union[Teams, str], index: Any = 0, extra: Any = 0) -> Any:
+    """Fetch entity or count and return result (expression form).
+    """
+    ...
+
+@overload
+def fetch(type: Union[FetchType, str], result: Any, team: Union[Teams, str], index: Any = 0, extra: Any = 0) -> None:
+    """Fetch entity or count into result variable (statement form).
+    """
+    ...
+
+def format(value: Any, *values: Any) -> None:
+    """Replace placeholders {0}..{9} in the print buffer matching LExecutor.FormatI.
+
+    Supports single or multiple arguments:
+        format(value)
+        format(wScr, hScr)
+
+    Args:
+        value: First value to replace the next placeholder with.
+        values: Additional values to replace subsequent placeholders.
+    """
+    ...
+
+@overload
+def getblock(layer: Union[TileLayer, str], x: Any, y: Any) -> Any:
+    """Get block/tile at coordinates into target variable.
+    """
+    ...
+
+@overload
+def getblock(layer: Union[TileLayer, str], result: Any, x: Any, y: Any) -> None:
+    """Get block/tile at coordinates into specified result variable.
+    """
+    ...
+
+@overload
+def getflag(flag: Any) -> Any:
+    """Check if objective flag is set and return 1 or 0 (expression form: res = getflag(flag)).
+    """
+    ...
+
+@overload
+def getflag(result: Any, flag: Any) -> None:
+    """Check if objective flag is set into result variable (statement form: getflag(result, flag)).
     """
     ...
 
 @overload
 def getlink(index: Any) -> Any:
     """Get linked block by index and return it (expression form: block = getlink(i)).
+    """
+    ...
+
+@overload
+def getlink(dest: Any, index: Any) -> Any:
+    """Get linked block by index into dest variable (statement form: getlink(dest, i)).
     """
     ...
 
@@ -618,6 +1006,11 @@ def jump(target: Union[str, int], cond: Union[Condition, str] = "always", a: Any
         cond: Jump condition (Condition enum or string, e.g. Condition.EQUAL, 'lessThan', default 'always').
         a: First comparison operand (default 0).
         b: Second comparison operand (default 0).
+    """
+    ...
+
+def localeprint(value: Any) -> None:
+    """Append a localized bundle string to the print buffer.
     """
     ...
 
@@ -633,6 +1026,11 @@ def lookup(type: Union[LookupType, str], index: Any) -> Any:
     """
     ...
 
+def makemarker(type: Any, id: Any, x: Any, y: Any, replace: Any = True) -> None:
+    """Create an objective map marker at tile coordinates.
+    """
+    ...
+
 def max(a: Any, b: Any) -> Any:
     """Compute the maximum of two values without compile-time evaluation.
 
@@ -642,6 +1040,16 @@ def max(a: Any, b: Any) -> Any:
 
     Returns:
         The larger of a and b.
+    """
+    ...
+
+def message(type: Any, duration: Any = 3, out_success: Any = "@wait") -> Any:
+    """Display an on-screen message or set mission text in World Processor.
+
+    Args:
+        type: Message display type (MessageType enum or string, e.g. MessageType.ANNOUNCE, 'notify', 'toast', 'mission').
+        duration: Display duration in seconds (default 3).
+        out_success: Variable receiving success status (1 or 0) or @wait (default '@wait').
     """
     ...
 
@@ -949,6 +1357,16 @@ def packcolor(r: Any, g: Any, b: Any, a: Any) -> Any:
     """
     ...
 
+def playmusic(name: Any, interrupt: Any = True) -> None:
+    """Play a background music track.
+    """
+    ...
+
+def playsound(positional: Any, id: Any, volume: Any = 1, pitch: Any = 1, pan: Any = 0, x: Any = 0, y: Any = 0, limit: Any = True) -> None:
+    """Play a sound effect globally or at world coordinates.
+    """
+    ...
+
 def print(value: Any) -> None:
     """Append text or a value to the processor print buffer.
 
@@ -985,6 +1403,21 @@ def printflush(message: Any) -> None:
 
     Args:
         message: Target message block.
+    """
+    ...
+
+def query(shape: Union[QueryShape, str], type_: Union[QueryType, str], team: Any, x: Any, y: Any, w: Any, h: Any) -> None:
+    """Queries units or buildings in a specified spatial area.
+    Results are outputted into @queries (can be read via read instruction or measured via sensor @size).
+
+    Args:
+        shape: Spatial shape ('circle' or 'rect', or QueryShape enum).
+        type_: Target type ('unit' or 'building', or QueryType enum).
+        team: Target team (Teams enum, team string, or 'null' for all teams).
+        x: Center X coordinate in world/tile units.
+        y: Center Y coordinate in world/tile units.
+        w: Radius (circle) or Width (rect).
+        h: Height (rect) or unused (circle).
     """
     ...
 
@@ -1068,6 +1501,46 @@ def set(to: Any, from_: Any) -> Any:
     """
     ...
 
+def setblock(layer: Union[TileLayer, str], block: Any, x: Any, y: Any, team: Any = "@derelict", rotation: Any = 0) -> None:
+    """Sets the block, floor, or ore at specified map tile coordinates.
+
+    Args:
+        layer: Target layer ('floor', 'ore', or 'block', or TileLayer enum).
+        block: Target block/floor content (e.g. '@copper-wall', '@dirt', '@air').
+        x: Map tile X coordinate.
+        y: Map tile Y coordinate.
+        team: Target team (optional, defaults to @derelict).
+        rotation: Block rotation 0..3 (optional, defaults to 0).
+    """
+    ...
+
+def setflag(flag: Any, value: Any) -> None:
+    """Adds or removes an objective flag from world rules.
+    If value evaluates to true (1), the flag is added; if false (0), the flag is removed.
+
+    Args:
+        flag: Flag name string (e.g. 'flag1' or 'sector_complete').
+        value: Boolean truth value (1/True to add, 0/False to remove).
+    """
+    ...
+
+def setmarker(type: Any, id: Any, p1: Any = 0, p2: Any = 0, p3: Any = 0) -> None:
+    """Control properties or remove an existing map marker.
+    """
+    ...
+
+def setprop(type: Any, of: Any, value: Any) -> None:
+    """Directly modifies a property on a target Settable entity (Unit or Building).
+    The property can be an LAccess property (e.g. '@health', '@team', '@shield', '@rotation')
+    or an item/liquid UnlockableContent token (e.g. '@copper', '@water').
+
+    Args:
+        type: Property token (SensorProperty enum, Item, Liquid, or string token).
+        of: Target unit or building entity.
+        value: New value to set.
+    """
+    ...
+
 def setrate(ipt: Any) -> None:
     """Set processor execution speed in instructions per tick (IPT).
 
@@ -1076,8 +1549,67 @@ def setrate(ipt: Any) -> None:
     """
     ...
 
+def setrule(rule: Union[LogicRules, str], value: Any, p1: Any = 0, p2: Any = 0, p3: Any = 0, p4: Any = 0) -> None:
+    """Modifies world rules or team-specific rules.
+    For global rules (e.g. waveTimer, waves, waveSpacing), modifies rule using value.
+    For team rules (e.g. unitHealth, buildSpeed, unitDamage), p1 is team and value is multiplier.
+    For mapArea, p1=x, p2=y, p3=w, p4=h.
+    For ban/unban, value is block or unit content to ban/unban.
+
+    Args:
+        rule: LogicRules enum or string (e.g. LogicRules.WAVE_TIMER, LogicRules.UNIT_HEALTH).
+        value: Value or multiplier for rule.
+        p1, p2, p3, p4: Additional parameters (team, coordinate, dimension; default 0).
+    """
+    ...
+
+@overload
+def spawn(type: Union[Units, str], x: Any, y: Any, rotation: Any, team: Union[Teams, str], effect: Any = 0) -> Any:
+    """Spawn a unit and assign to variable.
+    """
+    ...
+
+@overload
+def spawn(type: Union[Units, str], x: Any, y: Any, rotation: Any, team: Union[Teams, str], result: Any, effect: Any = 0) -> None:
+    """Spawn a unit into specified result variable.
+    """
+    ...
+
+def spawnwave(x: Any, y: Any, natural: Any = 0) -> None:
+    """Spawns an enemy wave in World Processor.
+
+    If natural is True (1), triggers the natural wave progression (advancing @waveNumber).
+    If natural is False (0), spawns enemy wave units from map spawn rules at (x, y).
+
+    Args:
+        x: World tile X coordinate (default 0).
+        y: World tile Y coordinate (default 0).
+        natural: 1/True to advance natural wave, 0/False to spawn at coords (default 0).
+    """
+    ...
+
+def status(clear: Any, effect: Union[StatusEffects, str], unit: Any, duration: Any = 0) -> None:
+    """Applies or clears a status effect on the target unit.
+
+    Args:
+        clear: 1/True to unapply/clear, 0/False to apply.
+        effect: Status effect token (StatusEffects enum or string, e.g. StatusEffects.BURNING).
+        unit: Target unit variable.
+        duration: Effect duration in seconds (default 0).
+    """
+    ...
+
 def stop() -> None:
     """Halt processor execution completely until reset.
+    """
+    ...
+
+def sync(variable: Any) -> None:
+    """Broadcasts a processor variable value to multiplayer clients.
+    Rate-limited by Mindustry engine to 20 syncs per second.
+
+    Args:
+        variable: Variable name to synchronize.
     """
     ...
 
@@ -1133,39 +1665,69 @@ class _UnitControlCallable:
     def unbind(self) -> None: ...
 
 ucontrol: _UnitControlCallable
-unitControl: _UnitControlCallable
-unit_control: _UnitControlCallable
+
+class LocateResult(NamedTuple):
+    """Runtime mock result for ulocate building/spawn/damaged queries (4-tuple: x, y, found, building)."""
+    x: float
+    y: float
+    found: int
+    building: Any
+
+class OreLocateResult(NamedTuple):
+    """Runtime mock result for ulocate ore queries (3-tuple: x, y, found)."""
+    x: float
+    y: float
+    found: int
 
 class _UnitLocateCallable:
     """Callable namespace object for Mindustry unit locate operations.
 
-    Supports both legacy function-call syntax:
-        ulocate("ore", "core", "true", "@copper", outX, outY, found, building)
-    and modern namespace method syntax:
-        ulocate.ore("@copper", outX, outY, found)
-        ulocate.building("core", True, outX, outY, found, building)
-        ulocate.spawn(outX, outY, found, building)
-        ulocate.damaged(outX, outY, found, building)
+    NOTE: These runtime methods are local static stubs/mocks for AST validation
+    and IDE autocompletion. They do not connect to or query a live Mindustry game.
+
+    Supports both Pythonic tuple unpacking:
+        core_x, core_y, found_core, core_build = ulocate.building("core", False)
+        ore_x, ore_y, found_ore = ulocate.ore("@copper")
+        spawn_x, spawn_y, found_spawn, spawn_build = ulocate.spawn()
+        dmg_x, dmg_y, found_dmg, dmg_build = ulocate.damaged()
+    and positional argument syntax.
     """
-    def __call__(self, locate: Any, flag: Any, enemy: Any, ore: Any, out_x: Any, out_y: Any, out_found: Any, out_build: Any) -> None: ...
-    def ore(self, ore: Any, out_x: Any, out_y: Any, out_found: Any, out_build: Any = 'building') -> None: ...
-    def building(self, group: Any, enemy: Any, out_x: Any, out_y: Any, out_found: Any, out_building: Any) -> None: ...
-    def spawn(self, out_x: Any, out_y: Any, out_found: Any, out_build: Any = 'building') -> None: ...
-    def damaged(self, out_x: Any, out_y: Any, out_found: Any, out_building: Any) -> None: ...
+    def __call__(self, locate: Any, *params: Any) -> Any: ...
+    @overload
+    def ore(self, ore: Any) -> OreLocateResult: ...
+    @overload
+    def ore(self, ore: Any, out_x: Any, out_y: Any, out_found: Any, out_build: Any = None) -> None: ...
+    @overload
+    def building(self, group: Any, enemy: Any) -> LocateResult: ...
+    @overload
+    def building(self, group: Any, enemy: Any, out_x: Any, out_y: Any, out_found: Any, out_building: Any = None) -> None: ...
+    @overload
+    def spawn(self) -> LocateResult: ...
+    @overload
+    def spawn(self, out_x: Any, out_y: Any, out_found: Any, out_build: Any = None) -> None: ...
+    @overload
+    def damaged(self) -> LocateResult: ...
+    @overload
+    def damaged(self, out_x: Any, out_y: Any, out_found: Any, out_building: Any = None) -> None: ...
 
 ulocate: _UnitLocateCallable
-unitLocate: _UnitLocateCallable
-unit_locate: _UnitLocateCallable
 
+class ColorChannels(NamedTuple):
+    """Runtime mock result for unpackcolor queries (4-tuple: r, g, b, a)."""
+    r: float
+    g: float
+    b: float
+    a: float
+
+@overload
+def unpackcolor(value: Any) -> ColorChannels:
+    """Unpack a packed color value and return its RGBA channels (tuple unpacking form).
+    """
+    ...
+
+@overload
 def unpackcolor(r: Any, g: Any, b: Any, a: Any, value: Any) -> None:
-    """Unpack a 64-bit double color into 4 target variables r, g, b, a.
-
-    Args:
-        r: Target variable for red channel.
-        g: Target variable for green channel.
-        b: Target variable for blue channel.
-        a: Target variable for alpha channel.
-        value: 64-bit packed double color operand.
+    """Unpack packed color value into r, g, b, a variables (statement form).
     """
     ...
 
@@ -1195,6 +1757,27 @@ def wait(seconds: Any = 0.5) -> None:
     """
     ...
 
+@overload
+def weathersense(weather: Union[Weathers, str]) -> Any:
+    """Query whether weather event is active.
+    """
+    ...
+
+@overload
+def weathersense(to: Any, weather: Union[Weathers, str]) -> None:
+    """Query whether weather event is active into destination variable.
+    """
+    ...
+
+def weatherset(weather: Union[Weathers, str], state: Any = 1) -> None:
+    """Activates or deactivates a weather event.
+
+    Args:
+        weather: Weather type (Weathers enum or token, e.g. Weathers.RAIN, '@snowing').
+        state: Target state (1/True to activate, 0/False to deactivate, default 1).
+    """
+    ...
+
 def write(input: Any, cell: Any, address: Any) -> None:
     """Write a value to a memory cell or memory bank at the specified index.
 
@@ -1204,6 +1787,64 @@ def write(input: Any, cell: Any, address: Any) -> None:
         address: Numeric address index.
     """
     ...
+
+class _SoundCallable:
+    """Callable namespace object for Mindustry sound operations."""
+    def __call__(self, positional: Any, id: Any, volume: Any = 1, pitch: Any = 1, pan: Any = 0, x: Any = 0, y: Any = 0, limit: Any = True) -> None: ...
+    def play(self, id: Any, volume: Any = 1, pitch: Any = 1, pan: Any = 0, limit: Any = True) -> None: ...
+    def play_at(self, id: Any, x: Any, y: Any, volume: Any = 1, pitch: Any = 1, limit: Any = True) -> None: ...
+    def playAt(self, id: Any, x: Any, y: Any, volume: Any = 1, pitch: Any = 1, limit: Any = True) -> None: ...
+
+sound: _SoundCallable
+
+class _MusicCallable:
+    """Callable namespace object for Mindustry music operations."""
+    def __call__(self, name: Any, interrupt: Any = True) -> None: ...
+    def play(self, name: Any, interrupt: Any = True) -> None: ...
+    def stop(self) -> None: ...
+
+music: _MusicCallable
+
+class _MarkerCallable:
+    """Callable namespace object for Mindustry map marker operations."""
+    def make(self, type: Union[MarkerType, str], id: Any, x: Any, y: Any, replace: Any = True) -> None: ...
+    def remove(self, id: Any) -> None: ...
+    def world(self, id: Any, enabled: Any = True) -> None: ...
+    def minimap(self, id: Any, enabled: Any = True) -> None: ...
+    def light(self, id: Any, enabled: Any = True) -> None: ...
+    def autoscale(self, id: Any, enabled: Any = True) -> None: ...
+    def pos(self, id: Any, x: Any, y: Any) -> None: ...
+    def end_pos(self, id: Any, x: Any, y: Any) -> None: ...
+    def endPos(self, id: Any, x: Any, y: Any) -> None: ...
+    def draw_layer(self, id: Any, layer: Any) -> None: ...
+    def drawLayer(self, id: Any, layer: Any) -> None: ...
+    def color(self, id: Any, color: Any) -> None: ...
+    def radius(self, id: Any, radius: Any) -> None: ...
+    def stroke(self, id: Any, stroke: Any) -> None: ...
+    def outline(self, id: Any, outline: Any = True) -> None: ...
+    def rotation(self, id: Any, rotation: Any) -> None: ...
+    def shape(self, id: Any, sides: Any, fill: Any = 1, outline: Any = 1) -> None: ...
+    def arc(self, id: Any, start: Any, end: Any) -> None: ...
+    def flush_text(self, id: Any, fetch: Any = False) -> None: ...
+    def flushText(self, id: Any, fetch: Any = False) -> None: ...
+    def font_size(self, id: Any, size: Any) -> None: ...
+    def fontSize(self, id: Any, size: Any) -> None: ...
+    def text_height(self, id: Any, height: Any) -> None: ...
+    def textHeight(self, id: Any, height: Any) -> None: ...
+    def text_align(self, id: Any, align: Any) -> None: ...
+    def textAlign(self, id: Any, align: Any) -> None: ...
+    def line_align(self, id: Any, align: Any) -> None: ...
+    def lineAlign(self, id: Any, align: Any) -> None: ...
+    def label_flags(self, id: Any, background: Any = 1, outline: Any = 1) -> None: ...
+    def labelFlags(self, id: Any, background: Any = 1, outline: Any = 1) -> None: ...
+    def texture(self, id: Any, name: Any, print_flush: Any = False) -> None: ...
+    def texture_size(self, id: Any, width: Any, height: Any) -> None: ...
+    def textureSize(self, id: Any, width: Any, height: Any) -> None: ...
+    def posi(self, id: Any, index: Any, x: Any, y: Any) -> None: ...
+    def uvi(self, id: Any, index: Any, x: Any, y: Any) -> None: ...
+    def colori(self, id: Any, index: Any, color: Any) -> None: ...
+
+marker: _MarkerCallable
 
 # ---------------------------------------------------------------------------
 # Array Class (Memory Cell / Bank Allocator)
@@ -1220,64 +1861,108 @@ class Array:
     def __len__(self) -> int: ...
 
 __all__ = [
+    "Align",
     "Array",
     "BuiltinVarToken",
+    "ColorChannels",
     "CompileResult",
     "Condition",
     "ControlProperty",
+    "CutsceneAction",
     "DrawType",
+    "FetchType",
+    "Fx",
     "Items",
     "Liquids",
+    "LocateResult",
     "LogicOp",
+    "LogicRules",
     "LookupType",
+    "MarkerControl",
+    "MarkerType",
+    "MessageType",
+    "OreLocateResult",
+    "QueryShape",
+    "QueryType",
     "RadarSort",
     "RadarTarget",
     "SensorProperty",
+    "StatusEffects",
     "Teams",
+    "TileLayer",
     "UnitControl",
     "Units",
     "Vars",
+    "Weathers",
+    "_CutsceneCallable",
     "_DrawCallable",
+    "_MarkerCallable",
+    "_MusicCallable",
     "_OpCallable",
+    "_SoundCallable",
     "_UnitControlCallable",
     "_UnitLocateCallable",
     "__version__",
+    "bullet",
+    "clientdata",
     "compile_py",
     "control",
+    "cutscene",
     "draw",
     "drawflush",
+    "effect",
     "end",
+    "explosion",
+    "fetch",
     "format",
+    "getblock",
+    "getflag",
     "getlink",
     "jump",
+    "localeprint",
     "lookup",
     "main",
+    "makemarker",
+    "marker",
     "max",
+    "message",
     "min",
+    "music",
     "noop",
     "null",
     "op",
     "packcolor",
+    "playmusic",
+    "playsound",
     "print",
     "printchar",
     "printflush",
+    "query",
     "radar",
     "raw",
     "read",
     "select",
     "sensor",
     "set",
+    "setblock",
+    "setflag",
+    "setmarker",
+    "setprop",
     "setrate",
+    "setrule",
+    "sound",
+    "spawn",
+    "spawnwave",
+    "status",
     "stop",
+    "sync",
     "ubind",
     "ucontrol",
     "ulocate",
-    "unitControl",
-    "unitLocate",
-    "unit_control",
-    "unit_locate",
     "unpackcolor",
     "uradar",
     "wait",
+    "weathersense",
+    "weatherset",
     "write",
 ]

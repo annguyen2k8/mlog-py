@@ -40,17 +40,20 @@ pip install .
 Use the `mlog-py compile` CLI:
 
 ```bash
-# Compile to stdout (automatically copies to clipboard)
+# Compile to stdout (auto-copies to clipboard by default)
 mlog-py compile input.py
 
-# Compile and output to a file (also copies to clipboard)
+# Compile and save to file (also copies to clipboard)
 mlog-py compile input.py -o output.mlog
 
-# Compile without copying to clipboard
+# Compile without clipboard copy
 mlog-py compile input.py --no-clipboard
 
 # Debug mode: view IR instructions and resolved label addresses
 mlog-py compile input.py --debug
+
+# Reject 'def' definitions and 'return' statements (functions allowed by default)
+mlog-py compile input.py --no-functions
 ```
 
 ### 2. Decompile MLog to Python DSL
@@ -61,10 +64,10 @@ Use the `mlog-py decompile` CLI:
 # Decompile to stdout
 mlog-py decompile input.mlog
 
-# Decompile and output to a file
+# Decompile and save to file
 mlog-py decompile input.mlog -o output.py
 
-# Decompile with inline provenance comments (# mlog[<addr>])
+# Include instruction addresses in comments (# mlog[<addr>])
 mlog-py decompile input.mlog --debug
 ```
 
@@ -81,11 +84,11 @@ end
 control enabled reactor1 1 0 0 0
 """
 
-# Decompile to clean Python DSL
+# Decompile to structured Python DSL
 py_code = decompile(mlog_code)
 print(py_code)
 
-# Decompile with inline provenance comments (# mlog[<addr>])
+# Decompile with debug comments showing original bytecode addresses
 debug_code = decompile(mlog_code, debug=True)
 ```
 
@@ -93,7 +96,7 @@ debug_code = decompile(mlog_code, debug=True)
 
 ## Example: Reactor Safety Controller
 
-A complete beginner-friendly example protecting a Thorium reactor from overheating:
+A real-world example protecting a Thorium reactor from exploding due to overheating:
 
 ### Python Source (`examples/compiler/reactor_safety.py`)
 
@@ -116,7 +119,7 @@ wait(0.5)
 mlog-py compile examples/compiler/reactor_safety.py
 ```
 
-### Compiled Output (`examples/compiler/reactor_safety.mlog`)
+### Resulting MLog Bytecode (`examples/compiler/reactor_safety.mlog`)
 
 ```text
 sensor heat reactor1 @heat
@@ -127,32 +130,33 @@ control enabled reactor1 1 0 0 0
 wait 0.5
 ```
 
-### How to Use in Mindustry
+### Load into Mindustry
 
-1. Copy the compiled `.mlog` output above to your clipboard.
-2. In Mindustry, build a Micro/Logic/Hyper Processor and connect it to your reactor (`reactor1`).
-3. Click the processor, click **Edit**, and select **Import from clipboard**.
+1. Copy the compiled `.mlog` content to your clipboard.
+2. In Mindustry, build a logic processor (Micro, Logic, or Hyper Processor) and link it to the reactor (`reactor1`).
+3. Click the processor, choose **Edit**, then select **Import from clipboard**.
 
 ---
 
-## Examples Catalog
+## Example Catalog
 
-Explore our comprehensive, paired examples in [`examples/`](examples/README.md):
+Explore complete paired examples in [`examples/`](examples/README.md):
 
 - **Arithmetic & Bitwise**: [`arithmetic.py`](examples/compiler/arithmetic.py), [`bitwise.py`](examples/compiler/bitwise.py), [`min_max.py`](examples/compiler/min_max.py)
 - **Control Flow**: [`for_loop.py`](examples/compiler/for_loop.py), [`while_loop.py`](examples/compiler/while_loop.py), [`conditionals.py`](examples/compiler/conditionals.py), [`nested_loops.py`](examples/compiler/nested_loops.py)
-- **Game Hardware**: [`reactor_safety.py`](examples/compiler/reactor_safety.py), [`display_graphics.py`](examples/compiler/display_graphics.py), [`print_message.py`](examples/compiler/print_message.py), [`memory_cell.py`](examples/compiler/memory_cell.py), [`array_memory.py`](examples/compiler/array_memory.py)
+- **Hardware Interaction**: [`reactor_safety.py`](examples/compiler/reactor_safety.py), [`display_graphics.py`](examples/compiler/display_graphics.py), [`print_message.py`](examples/compiler/print_message.py), [`memory_cell.py`](examples/compiler/memory_cell.py), [`array_memory.py`](examples/compiler/array_memory.py)
+- **Unit Operations (Canonical Unit APIs)**: [`unit_operations.py`](examples/compiler/unit_operations.py)
 - **Interactive Demos**: [`roundtrip_demo.py`](examples/compiler/roundtrip_demo.py), [`roundtrip_verify.py`](examples/decompiler/roundtrip_verify.py)
 
 ---
 
 ## Key Features
 
-- **Structured Control Flow**: `for` loops with `range(...)`, `while`, `break`, `continue`, `if`, `elif`, and `else` with automatic label and instruction address resolution.
+- **Structured Control Flow**: Full support for `for` loops with `range(...)`, `while`, `break`, `continue`, `if`, `elif`, and `else` with automatic label and instruction address resolution.
 - **Arithmetic, Bitwise & Math**: Full expression support (`+`, `-`, `*`, `/`, `//`, `%`, bitwise `&`, `|`, `^`, `~`, `<<`, `>>`, built-in `min` and `max`) lowered with deterministic temporary variable management and strict 64-bit integer hardening.
 - **Compile-Time Constant Folding**: Recursively folds pure constant expressions (`+`, `-`, `*`, `/`, `//`, `%`, `**`, `&`, `|`, `^`, `<<`, `>>`, comparisons, boolean logic, and string concatenation) at compile time while preserving Mindustry IEEE-754 runtime semantics, eliminating runtime temporaries, and statically resolving `Array` allocation sizes and subscript bounds checks.
 - **Conditional Selection & Python Ternary**: Pure ternary expressions (`a if cond else b`) lower directly to the Mindustry `select dest op comp0 comp1 a b` opcode (zero jumps). Expressions with side effects, division, or memory access safely fall back to short-circuiting jump ladders. Full intrinsic `select()` supports 3, 4, 5, and 6-argument conventions.
-- **Color Operations (`packcolor`, `unpackcolor`)**: Pack 4 RGBA channels in `[0, 1]` into a 64-bit double color (`packcolor(r, g, b, a)` with full expression nesting), and unpack double colors into 4 destination variables (`unpackcolor(r, g, b, a, color)`).
+- **Color Operations (`packcolor`, `unpackcolor`)**: Pack 4 RGBA channels in `[0, 1]` into a 64-bit double color (`packcolor(r, g, b, a)` with full expression nesting), and unpack double colors into 4 destination variables (`unpackcolor(r, g, b, a, color)` or the equivalent tuple form `r, g, b, a = unpackcolor(color)`).
 - **Character Output, Print Formatting & f-Strings**: Low-level character/emoji output via `printchar(val)`, print buffer placeholder substitution via `format(val)`, and native Python f-strings (`f"..."`) automatically compiled into optimized template print and format sequences with strict evaluation order preservation.
 - **Processor Execution Rate (`setrate`)**: Direct configuration of processor instructions per tick (IPT) via `setrate(ipt)`.
 - **Memory Arrays & Static Allocation**: High-level `Array("cell1", size=10, dtype=...)` abstraction supporting `int`, `float`, and `bool` dtypes with compile-time contiguous layout tracking, capacity validation (64 for cells, 512 for banks), base offset calculations, and static index bounds checking.
@@ -202,17 +206,35 @@ mlog-py/
 
 ---
 
-## Testing
+## Testing & Verification
 
-The project maintains a comprehensive automated test suite verifying both compiler and decompiler:
+The project maintains a comprehensive automated test suite verifying both compiler and decompiler across a 3-tier verification architecture:
+
+- **Tier 1 (AST & Semantics)**: Python AST parsing, type constraints, and semantic argument validation.
+- **Tier 2 (Bytecode & Round-Trip)**: Assembler/disassembler equivalence and invariance under the `MLog → Python → MLog` round-trip.
+- **Tier 3 (Runtime JVM Mindustry v160.7)**: Direct execution on official Mindustry bytecode engine (`LExecutor` + `LAssembler`), verifying variable registers, print buffer states, hardware interactions, and edge cases.
 
 ```bash
+# Run entire test suite
 python3 -m unittest discover -s tests -p "test_*.py"
+
+# Run Tier 3 runtime test suite on real Mindustry JVM engine
+python3 -m unittest tests/test_tier3_runtime.py
 ```
 
-- **813 Automated Tests**: 100% passing baseline across compiler, decompiler, registry, CFG, structuring, dataflow, function recovery, bitwise operators, min/max, for loops, memory arrays (int, float, bool), Memory Bank Header Protocol (inter-processor communication layout), Callable Namespace Objects (`draw.<method>`, `ucontrol.<method>`, `ulocate.<method>`, `op.<method>` with both expression and statement forms), augmented assignment, constant folding, system clipboard, built-in variables (Vars API), Mindustry v8 modulo semantics, color packing/unpacking, printchar, format & f-strings, setrate, select & ternary expressions, comprehensive is/is not semantics (including JVM verification for 0 is not None, nested and/or, not, while, and elif chains), and source mapping.
+- **987 Automated Tests**: 100% passing baseline across compiler, decompiler, registry, CFG, structuring, dataflow, function recovery, bitwise operators, min/max, for loops, memory arrays (int, float, bool), Memory Bank Header Protocol (inter-processor communication layout), Callable Namespace Objects (`draw.<method>`, `ucontrol.<method>`, `ulocate.<method>`, `op.<method>`), augmented assignment, constant folding, system clipboard, built-in variables (Vars API), Mindustry v8 modulo semantics, color packing/unpacking, printchar, format & f-strings, setrate, select & ternary expressions, comprehensive `is`/`is not` semantics, source mapping, and real JVM runtime verification.
 - **Real-World Test Corpus**: 32 representative programs across handwritten scripts, compiler-generated programs, control flow patterns, and pathological edge cases.
-- **Round-Trip Verification**: Guarantees that MLog → Decompiler → Compiler produces valid, identical instructions.
+- **Round-Trip Verification**: Guarantees that `MLog → Decompiler → Compiler` produces valid, identical instructions.
+
+### Mindustry v160.7 Tier 3 Runtime Scorecard (28/28 Opcodes — 100%)
+
+| Group | Opcode List | Tier 3 Status | Runtime Semantics Verified in Real Engine |
+| :--- | :--- | :---: | :--- |
+| **A: Core & Control** (9) | `select`, `packcolor`, `unpackcolor`, `noop`, `set`, `op`, `jump`, `stop`, `end` | **VERIFIED** | Conditional branching, RGBA color pack/unpack, cycle halt (`stop`), cycle reset (`end`), division by zero propagation (`null`), all arithmetic and comparison operators |
+| **B: Text & Buffer** (4) | `print`, `printchar`, `format`, `printflush` | **VERIFIED** | String concatenation, 400-char buffer limit, unicode/surrogate characters, template format placeholder substitution, message block flush and buffer reset |
+| **C: Timing & Rate** (2) | `wait`, `setrate` | **VERIFIED** | Virtual Clock tick scheduler, IPT execution rate clamping ([1, 120] micro/logic, [1, 1500] hyper, [1, 8000] world), zero/negative duration yield |
+| **D: Hardware & Data** (6) | `read`, `write`, `getlink`, `sensor`, `radar`, `lookup` | **VERIFIED** | Memory Cell (64) & Bank (512) read/write, string character code extraction, game content table lookup, turret radar unit scanning, building property sensing, null/dead target safety |
+| **E: Graphics & Units** (7) | `draw`, `drawflush`, `control`, `ubind`, `ucontrol`, `uradar`, `ulocate` | **VERIFIED** | Display draw command buffer, building enable/disable toggle via control, round-robin unit cycling, coordinate distance check (`within`), unit radar target acquisition, core/ore locating |
 
 ---
 
@@ -222,10 +244,11 @@ python3 -m unittest discover -s tests -p "test_*.py"
 - **Irreducible Control Flow**: Non-natural loops and indirect jumps (`set @counter ...`) are preserved as fallback comments and raw jumps instead of synthetic loops.
 - **Flat Memory Model**: Mindustry Logic has no heap or object system; object-oriented constructs, classes, and Python collections (`list`, `dict`) are not reconstructed.
 - **Multi-Use Temporaries**: Temporaries read multiple times or modified across basic blocks are preserved as explicit assignments to ensure semantic correctness.
+- **Privileged Opcodes**: Custom map / world processor opcodes (`setblock`, `spawnunit`, `applystatus`, etc.) require privileged world permissions and are not part of the standard 28 survival player opcodes.
 
 ---
 
-## Documentation
+## Technical Documentation
 
 Detailed architecture specifications are available in [`docs/`](docs/):
 
@@ -234,6 +257,8 @@ Detailed architecture specifications are available in [`docs/`](docs/):
 - [Decompiler Specification](docs/decompiler.md): CFG reconstruction, structuring, and function recovery.
 - [Semantic Argument Recovery](docs/semantic-arguments.md): Hardware link detection and quoting rules.
 - [Source Mapping](docs/source-mapping.md): Provenance tracking, debug comments, and JSON export.
+- [Mindustry Logic Command Coverage](docs/mlog-command-coverage.md): Comprehensive mapping of 53 in-game UI commands and 28 standard opcodes in Mindustry v160.7.
+- [ADR-001: Modulo Operator Semantics](docs/adr/0001-modulo-semantics.md): Architectural decision on lowering `%` to `emod`.
 - [Upstream Mindustry Sync Guide](docs/mindustry-updates.md): Guide for updating and syncing mlog-py when new Mindustry versions release.
 
 ---

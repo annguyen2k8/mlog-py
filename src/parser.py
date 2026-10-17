@@ -1,7 +1,7 @@
 """Python AST parser and validator for the controlled Mindustry Logic subset."""
 
 import ast
-from typing import Set
+from typing import Set, Union
 
 from .errors import CompileError, SourceLocation
 from .metadata import ALLOWED_INTRINSICS, MLOG_EXPORTS
@@ -195,7 +195,7 @@ class ASTValidator(ast.NodeVisitor):
                 if node.attr not in DRAW_METHODS:
                     self.error(f"unknown draw method: 'draw.{node.attr}'", node)
                 return
-            if node.value.id in ("ucontrol", "unitControl", "unit_control"):
+            if node.value.id == "ucontrol":
                 UCONTROL_METHODS = {
                     "idle", "stop", "move", "approach", "pathfind", "auto_pathfind", "autoPathfind",
                     "boost", "target", "targetp", "item_drop", "itemDrop", "item_take", "itemTake",
@@ -205,7 +205,7 @@ class ASTValidator(ast.NodeVisitor):
                 if node.attr not in UCONTROL_METHODS:
                     self.error(f"unknown ucontrol method: '{node.value.id}.{node.attr}'", node)
                 return
-            if node.value.id in ("ulocate", "unitLocate", "unit_locate"):
+            if node.value.id == "ulocate":
                 ULOCATE_METHODS = {"ore", "building", "spawn", "damaged"}
                 if node.attr not in ULOCATE_METHODS:
                     self.error(f"unknown ulocate method: '{node.value.id}.{node.attr}'", node)
@@ -225,12 +225,133 @@ class ASTValidator(ast.NodeVisitor):
                 if node.attr not in OP_METHODS:
                     self.error(f"unknown op method: 'op.{node.attr}'", node)
                 return
+            if node.value.id == "cutscene":
+                CUTSCENE_METHODS = {
+                    "active", "pan", "zoom", "stop", "shake", "get_hud", "getHud", "set_hud", "setHud",
+                }
+                if node.attr not in CUTSCENE_METHODS:
+                    self.error(f"unknown cutscene method: 'cutscene.{node.attr}'", node)
+                return
+            if node.value.id == "sound":
+                SOUND_METHODS = {"play", "play_at", "playAt"}
+                if node.attr not in SOUND_METHODS:
+                    self.error(f"unknown sound method: 'sound.{node.attr}'", node)
+                return
+            if node.value.id == "music":
+                MUSIC_METHODS = {"play", "stop"}
+                if node.attr not in MUSIC_METHODS:
+                    self.error(f"unknown music method: 'music.{node.attr}'", node)
+                return
+            if node.value.id == "marker":
+                MARKER_METHODS = {
+                    "make", "remove", "world", "minimap", "light", "autoscale",
+                    "pos", "end_pos", "endPos", "draw_layer", "drawLayer", "color",
+                    "radius", "stroke", "outline", "rotation", "shape", "arc",
+                    "flush_text", "flushText", "font_size", "fontSize",
+                    "text_height", "textHeight", "text_align", "textAlign",
+                    "line_align", "lineAlign", "label_flags", "labelFlags",
+                    "texture", "texture_size", "textureSize", "posi", "uvi", "colori",
+                }
+                if node.attr not in MARKER_METHODS:
+                    self.error(f"unknown marker method: 'marker.{node.attr}'", node)
+                return
             if node.value.id in ENUM_CLASS_TO_REGISTRY:
                 return
         self.error(
-            f"attribute access is only supported on DSL enum types ({', '.join(sorted(ENUM_CLASS_TO_REGISTRY.keys()))}), 'Vars', 'draw', 'ucontrol', 'ulocate', and 'op'",
+            f"attribute access is only supported on DSL enum types ({', '.join(sorted(ENUM_CLASS_TO_REGISTRY.keys()))}), 'Vars', 'draw', 'ucontrol', 'ulocate', 'cutscene', 'sound', 'music', 'marker', and 'op'",
             node,
         )
+
+    def _check_single_target_ulocate_call(self, node: ast.Assign, target: ast.Name) -> None:
+        call = node.value
+        if not isinstance(call, ast.Call):
+            return
+        if isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name) and call.func.value.id == "ulocate":
+            m = call.func.attr
+            if m == "building" and len(call.args) == 2:
+                self.error("ulocate.building produces 4 outputs and must be unpacked into a tuple: core_x, core_y, found, building = ulocate.building(group, enemy)", node)
+            elif m == "ore" and len(call.args) == 1:
+                self.error("ulocate.ore produces 3 outputs and must be unpacked into a tuple: ore_x, ore_y, found = ulocate.ore(ore)", node)
+            elif m == "spawn" and len(call.args) == 0:
+                self.error("ulocate.spawn produces 4 outputs and must be unpacked into a tuple: spawn_x, spawn_y, found, building = ulocate.spawn()", node)
+            elif m == "damaged" and len(call.args) == 0:
+                self.error("ulocate.damaged produces 4 outputs and must be unpacked into a tuple: dmg_x, dmg_y, found, building = ulocate.damaged()", node)
+
+    def _validate_unpacking_assign(self, node: ast.Assign, target: Union[ast.Tuple, ast.List]) -> None:
+        if not target.elts:
+            self.error("cannot unpack into an empty tuple", target)
+        seen_names = set()
+        for elt in target.elts:
+            if not isinstance(elt, ast.Name):
+                self.error("unpacking target elements must be simple variable names", elt)
+            if elt.id == "Vars":
+                self.error("cannot unpack into 'Vars'", elt)
+            if elt.id in seen_names:
+                self.error(f"duplicate variable name '{elt.id}' in tuple unpacking targets", elt)
+            seen_names.add(elt.id)
+
+        call = node.value
+        if not isinstance(call, ast.Call):
+            self.error("assignment target must be a simple variable name: tuple unpacking is only supported for 'ulocate' operations (e.g., core_x, core_y, found, building = ulocate.building(...)) and 'unpackcolor' (e.g., r, g, b, a = unpackcolor(color))", node.value)
+
+        is_ulocate_method = (
+            isinstance(call.func, ast.Attribute)
+            and isinstance(call.func.value, ast.Name)
+            and call.func.value.id == "ulocate"
+        )
+        is_ulocate_call = (
+            isinstance(call.func, ast.Name)
+            and call.func.id == "ulocate"
+        )
+        is_unpackcolor_call = (
+            isinstance(call.func, ast.Name)
+            and call.func.id == "unpackcolor"
+        )
+
+        if is_unpackcolor_call:
+            if call.keywords:
+                self.error("unpackcolor does not support keyword arguments", call)
+            if len(call.args) != 1:
+                self.error(
+                    f"invalid arguments for unpackcolor unpacking: expected unpackcolor(value), got {len(call.args)} arguments",
+                    call,
+                )
+            target_count = len(target.elts)
+            if target_count != 4:
+                self.error(
+                    f"unpackcolor unpacking expects exactly 4 target variables (out_r, out_g, out_b, out_a), got {target_count}",
+                    target,
+                )
+            return
+
+        if not (is_ulocate_method or is_ulocate_call):
+            self.error("assignment target must be a simple variable name: tuple unpacking is only supported for 'ulocate' operations (e.g., core_x, core_y, found, building = ulocate.building(...)) and 'unpackcolor' (e.g., r, g, b, a = unpackcolor(color))", node.value)
+
+        target_count = len(target.elts)
+        if is_ulocate_method:
+            method_name = call.func.attr
+            if method_name == "building":
+                if len(call.args) != 2 or call.keywords:
+                    self.error("invalid arguments for ulocate.building unpacking: expected ulocate.building(group, enemy)", call)
+                if target_count not in (3, 4):
+                    self.error(f"ulocate.building unpacking expects 3 or 4 target variables (out_x, out_y, out_found[, out_building]), got {target_count}", target)
+            elif method_name == "ore":
+                if len(call.args) != 1 or call.keywords:
+                    self.error("invalid arguments for ulocate.ore unpacking: expected ulocate.ore(ore)", call)
+                if target_count not in (3, 4):
+                    self.error(f"ulocate.ore unpacking expects 3 or 4 target variables (out_x, out_y, out_found[, out_building]), got {target_count}", target)
+            elif method_name == "spawn":
+                if len(call.args) != 0 or call.keywords:
+                    self.error("invalid arguments for ulocate.spawn unpacking: expected ulocate.spawn()", call)
+                if target_count not in (3, 4):
+                    self.error(f"ulocate.spawn unpacking expects 3 or 4 target variables (out_x, out_y, out_found[, out_building]), got {target_count}", target)
+            elif method_name == "damaged":
+                if len(call.args) != 0 or call.keywords:
+                    self.error("invalid arguments for ulocate.damaged unpacking: expected ulocate.damaged()", call)
+                if target_count not in (3, 4):
+                    self.error(f"ulocate.damaged unpacking expects 3 or 4 target variables (out_x, out_y, out_found[, out_building]), got {target_count}", target)
+            else:
+                self.error(f"unknown ulocate method: 'ulocate.{method_name}'", call)
 
     def visit_Assign(self, node: ast.Assign):
         if len(node.targets) != 1:
@@ -239,7 +360,7 @@ class ASTValidator(ast.NodeVisitor):
         if isinstance(target, ast.Subscript):
             self.visit_Subscript(target)
         elif isinstance(target, ast.Name):
-            pass
+            self._check_single_target_ulocate_call(node, target)
         elif isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "Vars":
             from .mlog_registry import BUILTIN_VARIABLES_DATA
             token = BUILTIN_VARIABLES_DATA.get(target.attr)
@@ -247,8 +368,10 @@ class ASTValidator(ast.NodeVisitor):
                 self.error(f"unknown Mindustry built-in variable: 'Vars.{target.attr}'", target)
             if token.readonly:
                 self.error(f"cannot assign to read-only built-in variable 'Vars.{target.attr}' ('{token.token}')", target)
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            self._validate_unpacking_assign(node, target)
         else:
-            self.error("assignment target must be a simple variable name or array index (unpacking not supported)", target)
+            self.error("assignment target must be a simple variable name, array index, or ulocate unpacking tuple", target)
         if isinstance(node.value, ast.JoinedStr):
             self.error("f-strings cannot be assigned to variables (Mindustry Logic only supports string formatting via the print buffer)", node.value)
         self.visit(node.value)
@@ -308,7 +431,7 @@ class ASTValidator(ast.NodeVisitor):
         if (
             isinstance(node.func, ast.Attribute)
             and isinstance(node.func.value, ast.Name)
-            and node.func.value.id in ("draw", "ucontrol", "unitControl", "unit_control", "ulocate", "unitLocate", "unit_locate", "op")
+            and node.func.value.id in ("draw", "ucontrol", "ulocate", "op", "cutscene", "sound", "music", "marker")
         ):
             self.visit(node.func)
             for arg in node.args:
@@ -359,6 +482,17 @@ class ASTValidator(ast.NodeVisitor):
     def visit_Expr(self, node: ast.Expr):
         if isinstance(node.value, ast.JoinedStr):
             self.error("f-strings cannot be used as standalone statements; use print(f\"...\") instead", node.value)
+        if isinstance(node.value, ast.Constant) and node.value.value is Ellipsis:
+            # Standalone placeholder statement '...' is allowed
+            return
+        self.generic_visit(node)
+
+    def visit_Constant(self, node: ast.Constant):
+        if node.value is Ellipsis:
+            self.error(
+                "Ellipsis (...) is only supported as a placeholder statement, not as an expression value",
+                node,
+            )
         self.generic_visit(node)
 
     def visit_BinOp(self, node: ast.BinOp):

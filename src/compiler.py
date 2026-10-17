@@ -9,6 +9,7 @@ from .ir import IRJump, IRLabel, IRNode, IROp, IRRaw, IRSet
 from .mlog_registry import (
     BaseRegistry,
     ENUM_CLASS_TO_REGISTRY,
+    REG_ALIGN,
     REG_CONDITIONS,
     REG_CONTROL_PROPERTIES,
     REG_DRAW_TYPES,
@@ -19,7 +20,21 @@ from .mlog_registry import (
     REG_SENSOR_PROPERTIES,
     REG_UNIT_CONTROL,
     REG_UNIT_TYPES,
+    REG_TILE_LAYERS,
+    REG_QUERY_SHAPES,
+    REG_QUERY_TYPES,
+    REG_STATUS_EFFECTS,
+    REG_FETCH_TYPES,
+    REG_LOGIC_RULES,
+    REG_WEATHERS,
+    REG_LOGIC_FX,
+    REG_MESSAGE_TYPES,
+    REG_CUTSCENE_ACTIONS,
+    REG_MARKER_TYPES,
+    REG_MARKER_CONTROLS,
+    REG_TEAMS,
     BUILTIN_VARIABLES_DATA,
+    to_snake,
 )
 from .mlog_registry_data import BUILTIN_CONSTANTS
 from .allocator import ArraySymbol, MemoryBlockAllocator
@@ -586,6 +601,11 @@ class Compiler:
             return f'"{escaped}"'
         elif val is None:
             return "null"
+        elif val is Ellipsis:
+            raise CompileError(
+                "Ellipsis (...) is only supported as a placeholder statement, not as an expression value",
+                loc,
+            )
         else:
             raise CompileError(f"unsupported constant value: {val!r}", loc)
 
@@ -746,6 +766,8 @@ class Compiler:
             return dest
 
         elif isinstance(expr, ast.Call):
+            if isinstance(expr.func, ast.Name) and expr.func.id == "raw":
+                return self.compile_raw_value(expr, target_dest=target_dest)
             if isinstance(expr.func, ast.Name) and expr.func.id == "len":
                 if len(expr.args) == 1 and isinstance(expr.args[0], ast.Name) and expr.args[0].id in self.allocator.arrays:
                     arr = self.allocator.arrays[expr.args[0].id]
@@ -943,8 +965,17 @@ class Compiler:
         if isinstance(arg, ast.Attribute):
             return self.compile_attribute(arg)
 
+        is_const, const_val = _extract_const_val(arg)
+        if is_const and isinstance(const_val, (int, float)) and not isinstance(const_val, bool):
+            return str(const_val)
+
         if isinstance(arg, ast.Constant):
             val = arg.value
+            if val is Ellipsis:
+                self.error(
+                    "Ellipsis (...) is only supported as a placeholder statement, not as an expression value",
+                    arg,
+                )
             if isinstance(val, str):
                 if is_string_literal:
                     escaped = (
@@ -976,6 +1007,27 @@ class Compiler:
         else:
             return self.compile_expr(arg)
 
+    def compile_raw_value(self, call: ast.Call, target_dest: Optional[str] = None) -> str:
+        """Compile raw("<token>") used as a standalone value expression.
+
+        ``raw()`` is the explicit escape hatch for emitting a bare mlog operand token
+        that has no registry representation. As an assignment target it must produce a
+        single ``set`` instruction; nesting it inside arithmetic is rejected because a
+        Mindustry instruction operand cannot hold a compound expression.
+        """
+        if not isinstance(call, ast.Call):
+            self.error("raw() expects exactly 1 string argument", call)
+        if len(call.args) != 1 or call.keywords:
+            self.error("raw() expects exactly 1 string argument and no keyword arguments", call)
+        arg = call.args[0]
+        if not (isinstance(arg, ast.Constant) and isinstance(arg.value, str)):
+            self.error("raw() expects a string literal, e.g. raw(\"@copper\")", arg)
+        token = str(self.format_intrinsic_arg(arg, is_ident=True))
+        if target_dest is not None:
+            self.instructions.append(IRSet(to=target_dest, from_=token, loc=self.loc(call)))
+            return target_dest
+        return token
+
     def compile_call(
         self,
         call: ast.Call,
@@ -989,12 +1041,20 @@ class Compiler:
                 ns = call.func.value.id
                 if ns == "draw":
                     return self.compile_draw_method(call, target_dest=target_dest, is_statement=is_statement)
-                elif ns in ("ucontrol", "unitControl", "unit_control"):
+                elif ns == "ucontrol":
                     return self.compile_ucontrol_method(call, target_dest=target_dest, is_statement=is_statement)
-                elif ns in ("ulocate", "unitLocate", "unit_locate"):
+                elif ns == "ulocate":
                     return self.compile_ulocate_method(call, target_dest=target_dest, is_statement=is_statement)
                 elif ns == "op":
                     return self.compile_op_method(call, target_dest=target_dest, is_statement=is_statement)
+                elif ns == "cutscene":
+                    return self.compile_cutscene_method(call, target_dest=target_dest, is_statement=is_statement)
+                elif ns == "sound":
+                    return self.compile_sound_method(call, target_dest=target_dest, is_statement=is_statement)
+                elif ns == "music":
+                    return self.compile_music_method(call, target_dest=target_dest, is_statement=is_statement)
+                elif ns == "marker":
+                    return self.compile_marker_method(call, target_dest=target_dest, is_statement=is_statement)
             self.error(
                 f"unsupported method call on '{call.func.value.id if isinstance(call.func.value, ast.Name) else 'object'}'",
                 call,
@@ -1181,9 +1241,23 @@ class Compiler:
             param_strs = [type_str]
             for i in range(1, 7):
                 if i < len(args):
-                    param_strs.append(
-                        str(self.format_intrinsic_arg(args[i], is_ident=False))
-                    )
+                    if type_str == "print" and i == 3:
+                        align_val = self.format_intrinsic_arg(args[i], is_ident=False)
+                        raw_str = str(align_val)
+                        if raw_str in REG_ALIGN.by_token or raw_str in REG_ALIGN.by_source_name:
+                            param_strs.append(REG_ALIGN.get_token(raw_str))
+                        elif raw_str.startswith('"') and raw_str.endswith('"'):
+                            unquoted = raw_str[1:-1]
+                            if unquoted in REG_ALIGN.by_token or unquoted in REG_ALIGN.by_source_name:
+                                param_strs.append(REG_ALIGN.get_token(unquoted))
+                            else:
+                                param_strs.append(raw_str)
+                        else:
+                            param_strs.append(raw_str)
+                    else:
+                        param_strs.append(
+                            str(self.format_intrinsic_arg(args[i], is_ident=False))
+                        )
                 else:
                     param_strs.append("0")
             self.instructions.append(
@@ -1228,14 +1302,15 @@ class Compiler:
             return "0"
 
         elif func_name == "format":
-            if len(args) != 1:
-                self.error("invalid arguments for format: expected format(value)", call)
-            val = str(self.format_intrinsic_arg(
-                args[0], is_ident=False, is_string_literal=True
-            ))
-            self.instructions.append(
-                IRRaw(opcode="format", args=[val], loc=loc)
-            )
+            if len(args) < 1:
+                self.error("invalid arguments for format: expected at least 1 value, e.g. format(val) or format(v1, v2, ...)", call)
+            for arg in args:
+                val = str(self.format_intrinsic_arg(
+                    arg, is_ident=False, is_string_literal=True
+                ))
+                self.instructions.append(
+                    IRRaw(opcode="format", args=[val], loc=loc)
+                )
             return "0"
 
         elif func_name == "printflush":
@@ -1471,7 +1546,7 @@ class Compiler:
         elif func_name == "unpackcolor":
             if len(args) != 5:
                 self.error(
-                    "invalid arguments for unpackcolor: expected unpackcolor(r, g, b, a, value)",
+                    "invalid arguments for unpackcolor: expected unpackcolor(r, g, b, a, value) or r, g, b, a = unpackcolor(value)",
                     call,
                 )
             r = str(self.format_intrinsic_arg(args[0], is_ident=True))
@@ -1606,6 +1681,615 @@ class Compiler:
             if len(args) != 0:
                 self.error("invalid arguments for end: expected end()", call)
             self.instructions.append(IRRaw(opcode="end", args=[], loc=loc))
+            return "0"
+
+        elif func_name == "query":
+            if len(args) != 7:
+                self.error(
+                    "invalid arguments for query: expected query(shape, type, team, x, y, w, h)",
+                    call,
+                )
+            shape_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+            shape = self.validate_arg(shape_arg, REG_QUERY_SHAPES, self.loc(args[0]))
+            type_arg = self.format_intrinsic_arg(args[1], is_ident=True)
+            type_str = self.validate_arg(type_arg, REG_QUERY_TYPES, self.loc(args[1]))
+            team = str(self.format_intrinsic_arg(args[2], is_ident=True))
+            x = str(self.format_intrinsic_arg(args[3], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[4], is_ident=False))
+            w = str(self.format_intrinsic_arg(args[5], is_ident=False))
+            h = str(self.format_intrinsic_arg(args[6], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="query", args=[shape, type_str, team, x, y, w, h], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "getblock":
+            if len(args) == 4:
+                layer_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+                layer = self.validate_arg(layer_arg, REG_TILE_LAYERS, self.loc(args[0]))
+                dest = str(self.format_intrinsic_arg(args[1], is_ident=True))
+                x = str(self.format_intrinsic_arg(args[2], is_ident=False))
+                y = str(self.format_intrinsic_arg(args[3], is_ident=False))
+                self.instructions.append(
+                    IRRaw(opcode="getblock", args=[layer, dest, x, y], loc=loc)
+                )
+                return dest
+            elif len(args) == 3 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                layer_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+                layer = self.validate_arg(layer_arg, REG_TILE_LAYERS, self.loc(args[0]))
+                x = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                y = str(self.format_intrinsic_arg(args[2], is_ident=False))
+                self.instructions.append(
+                    IRRaw(opcode="getblock", args=[layer, dest, x, y], loc=loc)
+                )
+                return dest
+            else:
+                self.error(
+                    "invalid arguments for getblock: expected getblock(layer, result, x, y) or result = getblock(layer, x, y)",
+                    call,
+                )
+
+        elif func_name == "setblock":
+            if len(args) < 4 or len(args) > 6:
+                self.error(
+                    "invalid arguments for setblock: expected setblock(layer, block, x, y, [team, rotation])",
+                    call,
+                )
+            layer_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+            layer = self.validate_arg(layer_arg, REG_TILE_LAYERS, self.loc(args[0]))
+            block = str(self.format_intrinsic_arg(args[1], is_ident=True))
+            x = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[3], is_ident=False))
+            team = str(self.format_intrinsic_arg(args[4], is_ident=True)) if len(args) >= 5 else "@derelict"
+            rotation = str(self.format_intrinsic_arg(args[5], is_ident=False)) if len(args) == 6 else "0"
+            self.instructions.append(
+                IRRaw(opcode="setblock", args=[layer, block, x, y, team, rotation], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "spawn":
+            # Statement form: spawn(type, x, y, rotation, team, result, [effect=0]) (6 or 7 args)
+            # Assignment form: result = spawn(type, x, y, rotation, team, [effect=0]) (5 or 6 args)
+            if is_statement and target_dest is None and len(args) in (6, 7):
+                type_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+                type_ = self.validate_arg(type_arg, REG_UNIT_TYPES, self.loc(args[0]))
+                x = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                y = str(self.format_intrinsic_arg(args[2], is_ident=False))
+                rotation = str(self.format_intrinsic_arg(args[3], is_ident=False))
+                team_arg = self.format_intrinsic_arg(args[4], is_ident=True)
+                team = self.validate_arg(team_arg, REG_TEAMS, self.loc(args[4]))
+                dest = str(self.format_intrinsic_arg(args[5], is_ident=True))
+                effect = str(self.format_intrinsic_arg(args[6], is_ident=False)) if len(args) == 7 else "0"
+                if effect in ("True", "true"):
+                    effect = "1"
+                elif effect in ("False", "false"):
+                    effect = "0"
+                self.instructions.append(
+                    IRRaw(opcode="spawn", args=[type_, x, y, rotation, team, dest, effect], loc=loc)
+                )
+                return dest
+            elif (target_dest is not None or not is_statement) and len(args) in (5, 6):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                type_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+                type_ = self.validate_arg(type_arg, REG_UNIT_TYPES, self.loc(args[0]))
+                x = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                y = str(self.format_intrinsic_arg(args[2], is_ident=False))
+                rotation = str(self.format_intrinsic_arg(args[3], is_ident=False))
+                team_arg = self.format_intrinsic_arg(args[4], is_ident=True)
+                team = self.validate_arg(team_arg, REG_TEAMS, self.loc(args[4]))
+                effect = str(self.format_intrinsic_arg(args[5], is_ident=False)) if len(args) == 6 else "0"
+                if effect in ("True", "true"):
+                    effect = "1"
+                elif effect in ("False", "false"):
+                    effect = "0"
+                self.instructions.append(
+                    IRRaw(opcode="spawn", args=[type_, x, y, rotation, team, dest, effect], loc=loc)
+                )
+                return dest
+            else:
+                self.error(
+                    "invalid arguments for spawn: expected spawn(type, x, y, rotation, team, [result], [effect])",
+                    call,
+                )
+
+        elif func_name == "bullet":
+            # Statement form: bullet(result, from_, index, x, y, rotation, team, [owner, damage, velocityScl, lifeScl, aimX, aimY]) (7 to 13 args)
+            # Assignment form: result = bullet(from_, index, x, y, rotation, team, [owner, damage, velocityScl, lifeScl, aimX, aimY]) (6 to 12 args)
+            if 7 <= len(args) <= 13 and is_statement and (target_dest is None):
+                dest = str(self.format_intrinsic_arg(args[0], is_ident=True))
+                from_ = str(self.format_intrinsic_arg(args[1], is_ident=True))
+                index = str(self.format_intrinsic_arg(args[2], is_ident=True))
+                x = str(self.format_intrinsic_arg(args[3], is_ident=False))
+                y = str(self.format_intrinsic_arg(args[4], is_ident=False))
+                rotation = str(self.format_intrinsic_arg(args[5], is_ident=False))
+                team_arg = self.format_intrinsic_arg(args[6], is_ident=True)
+                team = self.validate_arg(team_arg, REG_TEAMS, self.loc(args[6])) if (team_arg.startswith("@") or team_arg.upper() in REG_TEAMS.by_source_name) else str(team_arg)
+                owner = str(self.format_intrinsic_arg(args[7], is_ident=True)) if len(args) >= 8 else "null"
+                damage = str(self.format_intrinsic_arg(args[8], is_ident=False)) if len(args) >= 9 else "-1"
+                vel = str(self.format_intrinsic_arg(args[9], is_ident=False)) if len(args) >= 10 else "1"
+                life = str(self.format_intrinsic_arg(args[10], is_ident=False)) if len(args) >= 11 else "1"
+                aim_x = str(self.format_intrinsic_arg(args[11], is_ident=False)) if len(args) >= 12 else "-1"
+                aim_y = str(self.format_intrinsic_arg(args[12], is_ident=False)) if len(args) >= 13 else "-1"
+                self.instructions.append(
+                    IRRaw(
+                        opcode="bullet",
+                        args=[dest, from_, index, x, y, rotation, team, owner, damage, vel, life, aim_x, aim_y],
+                        loc=loc,
+                    )
+                )
+                return dest
+            elif 6 <= len(args) <= 12 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                from_ = str(self.format_intrinsic_arg(args[0], is_ident=True))
+                index = str(self.format_intrinsic_arg(args[1], is_ident=True))
+                x = str(self.format_intrinsic_arg(args[2], is_ident=False))
+                y = str(self.format_intrinsic_arg(args[3], is_ident=False))
+                rotation = str(self.format_intrinsic_arg(args[4], is_ident=False))
+                team_arg = self.format_intrinsic_arg(args[5], is_ident=True)
+                team = self.validate_arg(team_arg, REG_TEAMS, self.loc(args[5])) if (team_arg.startswith("@") or team_arg.upper() in REG_TEAMS.by_source_name) else str(team_arg)
+                owner = str(self.format_intrinsic_arg(args[6], is_ident=True)) if len(args) >= 7 else "null"
+                damage = str(self.format_intrinsic_arg(args[7], is_ident=False)) if len(args) >= 8 else "-1"
+                vel = str(self.format_intrinsic_arg(args[8], is_ident=False)) if len(args) >= 9 else "1"
+                life = str(self.format_intrinsic_arg(args[9], is_ident=False)) if len(args) >= 10 else "1"
+                aim_x = str(self.format_intrinsic_arg(args[10], is_ident=False)) if len(args) >= 11 else "-1"
+                aim_y = str(self.format_intrinsic_arg(args[11], is_ident=False)) if len(args) >= 12 else "-1"
+                self.instructions.append(
+                    IRRaw(
+                        opcode="bullet",
+                        args=[dest, from_, index, x, y, rotation, team, owner, damage, vel, life, aim_x, aim_y],
+                        loc=loc,
+                    )
+                )
+                return dest
+            else:
+                self.error(
+                    "invalid arguments for bullet: expected bullet(from, index, x, y, rotation, team, ...) or result = bullet(...)",
+                    call,
+                )
+
+        elif func_name == "status":
+            # status(clear, effect, unit, [duration=0]) (3 or 4 args)
+            if len(args) not in (3, 4):
+                self.error(
+                    "invalid arguments for status: expected status(clear, effect, unit, [duration])",
+                    call,
+                )
+            clear_arg = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            if clear_arg in ("True", "true"):
+                clear_val = "1"
+            elif clear_arg in ("False", "false"):
+                clear_val = "0"
+            else:
+                clear_val = clear_arg
+            effect_arg = self.format_intrinsic_arg(args[1], is_ident=True)
+            effect = self.validate_arg(effect_arg, REG_STATUS_EFFECTS, self.loc(args[1])) if (effect_arg.startswith("@") or effect_arg.upper().replace("-", "_") in REG_STATUS_EFFECTS.by_source_name) else str(effect_arg)
+            unit = str(self.format_intrinsic_arg(args[2], is_ident=True))
+            duration = str(self.format_intrinsic_arg(args[3], is_ident=False)) if len(args) == 4 else "0"
+            self.instructions.append(
+                IRRaw(opcode="status", args=[clear_val, effect, unit, duration], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "explosion":
+            # explosion(team, x, y, radius, damage, [air=1, ground=1, pierce=0, effect=1]) (5 to 9 args)
+            if not (5 <= len(args) <= 9):
+                self.error(
+                    "invalid arguments for explosion: expected explosion(team, x, y, radius, damage, [air, ground, pierce, effect])",
+                    call,
+                )
+            team_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+            team = self.validate_arg(team_arg, REG_TEAMS, self.loc(args[0])) if (team_arg.startswith("@") or team_arg.upper() in REG_TEAMS.by_source_name) else str(team_arg)
+            x = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            radius = str(self.format_intrinsic_arg(args[3], is_ident=False))
+            damage = str(self.format_intrinsic_arg(args[4], is_ident=False))
+            air = str(self.format_intrinsic_arg(args[5], is_ident=False)) if len(args) >= 6 else "1"
+            ground = str(self.format_intrinsic_arg(args[6], is_ident=False)) if len(args) >= 7 else "1"
+            pierce = str(self.format_intrinsic_arg(args[7], is_ident=False)) if len(args) >= 8 else "0"
+            effect = str(self.format_intrinsic_arg(args[8], is_ident=False)) if len(args) >= 9 else "1"
+            air_val = "1" if air in ("True", "true", "1") else ("0" if air in ("False", "false", "0") else air)
+            ground_val = "1" if ground in ("True", "true", "1") else ("0" if ground in ("False", "false", "0") else ground)
+            pierce_val = "1" if pierce in ("True", "true", "1") else ("0" if pierce in ("False", "false", "0") else pierce)
+            effect_val = "1" if effect in ("True", "true", "1") else ("0" if effect in ("False", "false", "0") else effect)
+            self.instructions.append(
+                IRRaw(
+                    opcode="explosion",
+                    args=[team, x, y, radius, damage, air_val, ground_val, pierce_val, effect_val],
+                    loc=loc,
+                )
+            )
+            return "0"
+
+        elif func_name == "getflag":
+            # Statement form: getflag(result, flag) (2 args)
+            # Expression form: result = getflag(flag) (1 arg)
+            if len(args) == 2 and is_statement and (target_dest is None):
+                dest = str(self.format_intrinsic_arg(args[0], is_ident=True))
+                flag = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                self.instructions.append(
+                    IRRaw(opcode="getflag", args=[dest, flag], loc=loc)
+                )
+                return dest
+            elif len(args) == 1 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                flag = str(self.format_intrinsic_arg(args[0], is_ident=False))
+                self.instructions.append(
+                    IRRaw(opcode="getflag", args=[dest, flag], loc=loc)
+                )
+                return dest
+            else:
+                self.error(
+                    "invalid arguments for getflag: expected getflag(result, flag) or result = getflag(flag)",
+                    call,
+                )
+
+        elif func_name == "setflag":
+            if len(args) != 2:
+                self.error("invalid arguments for setflag: expected setflag(flag, value)", call)
+            flag = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            val_raw = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            val = "1" if val_raw in ("True", "true", "1") else ("0" if val_raw in ("False", "false", "0") else val_raw)
+            self.instructions.append(
+                IRRaw(opcode="setflag", args=[flag, val], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "setprop":
+            if len(args) != 3:
+                self.error("invalid arguments for setprop: expected setprop(type, of, value)", call)
+            type_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+            if type_arg.startswith("@") or type_arg.upper() in REG_SENSOR_PROPERTIES.by_source_name:
+                type_ = self.validate_arg(type_arg, REG_SENSOR_PROPERTIES, self.loc(args[0]))
+            else:
+                type_ = str(type_arg)
+            of = str(self.format_intrinsic_arg(args[1], is_ident=True))
+            val = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="setprop", args=[type_, of, val], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "fetch":
+            # Statement form: fetch(type, result, team, [index=0], [extra=0]) (3 to 5 args)
+            # Expression form: result = fetch(type, team, [index=0], [extra=0]) (2 to 4 args)
+            if 3 <= len(args) <= 5 and is_statement and (target_dest is None):
+                type_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+                type_ = self.validate_arg(type_arg, REG_FETCH_TYPES, self.loc(args[0]))
+                dest = str(self.format_intrinsic_arg(args[1], is_ident=True))
+                team_arg = self.format_intrinsic_arg(args[2], is_ident=True)
+                team = self.validate_arg(team_arg, REG_TEAMS, self.loc(args[2])) if (team_arg.startswith("@") or team_arg.upper() in REG_TEAMS.by_source_name) else str(team_arg)
+                index = str(self.format_intrinsic_arg(args[3], is_ident=False)) if len(args) >= 4 else "0"
+                extra = str(self.format_intrinsic_arg(args[4], is_ident=True)) if len(args) >= 5 else "0"
+                self.instructions.append(
+                    IRRaw(opcode="fetch", args=[type_, dest, team, index, extra], loc=loc)
+                )
+                return dest
+            elif 2 <= len(args) <= 4 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                type_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+                type_ = self.validate_arg(type_arg, REG_FETCH_TYPES, self.loc(args[0]))
+                team_arg = self.format_intrinsic_arg(args[1], is_ident=True)
+                team = self.validate_arg(team_arg, REG_TEAMS, self.loc(args[1])) if (team_arg.startswith("@") or team_arg.upper() in REG_TEAMS.by_source_name) else str(team_arg)
+                index = str(self.format_intrinsic_arg(args[2], is_ident=False)) if len(args) >= 3 else "0"
+                extra = str(self.format_intrinsic_arg(args[3], is_ident=True)) if len(args) >= 4 else "0"
+                self.instructions.append(
+                    IRRaw(opcode="fetch", args=[type_, dest, team, index, extra], loc=loc)
+                )
+                return dest
+            else:
+                self.error(
+                    "invalid arguments for fetch: expected fetch(type, result, team, [index], [extra]) or result = fetch(type, team, [index], [extra])",
+                    call,
+                )
+
+        elif func_name == "sync":
+            if len(args) != 1:
+                self.error("invalid arguments for sync: expected sync(variable)", call)
+            var_name = str(self.format_intrinsic_arg(args[0], is_ident=True))
+            self.instructions.append(
+                IRRaw(opcode="sync", args=[var_name], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "setrule":
+            if not (2 <= len(args) <= 6):
+                self.error(
+                    "invalid arguments for setrule: expected setrule(rule, value, [p1, p2, p3, p4])",
+                    call,
+                )
+            rule_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+            rule = self.validate_arg(rule_arg, REG_LOGIC_RULES, self.loc(args[0]))
+            val = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            p1 = str(self.format_intrinsic_arg(args[2], is_ident=True)) if len(args) >= 3 else "0"
+            p2 = str(self.format_intrinsic_arg(args[3], is_ident=False)) if len(args) >= 4 else "0"
+            p3 = str(self.format_intrinsic_arg(args[4], is_ident=False)) if len(args) >= 5 else "0"
+            p4 = str(self.format_intrinsic_arg(args[5], is_ident=False)) if len(args) >= 6 else "0"
+            self.instructions.append(
+                IRRaw(opcode="setrule", args=[rule, val, p1, p2, p3, p4], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "weathersense":
+            # Statement form: weathersense(to, weather) (2 args)
+            # Expression form: to = weathersense(weather) (1 arg)
+            if target_dest is not None and len(args) == 1:
+                dest = target_dest
+                w_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+                weather = self.validate_arg(w_arg, REG_WEATHERS, self.loc(args[0])) if (w_arg.startswith("@") or w_arg.upper().replace("-", "_") in REG_WEATHERS.by_source_name) else str(w_arg)
+                self.instructions.append(
+                    IRRaw(opcode="weathersense", args=[dest, weather], loc=loc)
+                )
+                return dest
+            elif len(args) == 2:
+                dest = str(self.format_intrinsic_arg(args[0], is_ident=True))
+                w_arg = self.format_intrinsic_arg(args[1], is_ident=True)
+                weather = self.validate_arg(w_arg, REG_WEATHERS, self.loc(args[1])) if (w_arg.startswith("@") or w_arg.upper().replace("-", "_") in REG_WEATHERS.by_source_name) else str(w_arg)
+                self.instructions.append(
+                    IRRaw(opcode="weathersense", args=[dest, weather], loc=loc)
+                )
+                return dest
+            elif target_dest is None and len(args) == 1:
+                dest = self.new_temp()
+                w_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+                weather = self.validate_arg(w_arg, REG_WEATHERS, self.loc(args[0])) if (w_arg.startswith("@") or w_arg.upper().replace("-", "_") in REG_WEATHERS.by_source_name) else str(w_arg)
+                self.instructions.append(
+                    IRRaw(opcode="weathersense", args=[dest, weather], loc=loc)
+                )
+                return dest
+            else:
+                self.error(
+                    "invalid arguments for weathersense: expected weathersense(weather) or weathersense(to, weather)",
+                    call,
+                )
+
+        elif func_name == "weatherset":
+            # weatherset(weather, [state=1]) (1 or 2 args)
+            if not (1 <= len(args) <= 2):
+                self.error(
+                    "invalid arguments for weatherset: expected weatherset(weather, [state=1])",
+                    call,
+                )
+            w_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+            weather = self.validate_arg(w_arg, REG_WEATHERS, self.loc(args[0])) if (w_arg.startswith("@") or w_arg.upper().replace("-", "_") in REG_WEATHERS.by_source_name) else str(w_arg)
+            state = str(self.format_intrinsic_arg(args[1], is_ident=False)) if len(args) == 2 else "1"
+            if state in ("True", "true"):
+                state = "1"
+            elif state in ("False", "false"):
+                state = "0"
+            self.instructions.append(
+                IRRaw(opcode="weatherset", args=[weather, state], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "spawnwave":
+            # spawnwave(x, y, [natural=0]) (2 or 3 args)
+            if not (2 <= len(args) <= 3):
+                self.error(
+                    "invalid arguments for spawnwave: expected spawnwave(x, y, [natural=0])",
+                    call,
+                )
+            x = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            natural = str(self.format_intrinsic_arg(args[2], is_ident=False)) if len(args) == 3 else "0"
+            if natural in ("True", "true"):
+                natural = "1"
+            elif natural in ("False", "false"):
+                natural = "0"
+            self.instructions.append(
+                IRRaw(opcode="spawnwave", args=[x, y, natural], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "effect":
+            # effect(type, x, y, [sizerot=0, color=0, data=0]) (3 to 6 args)
+            if not (3 <= len(args) <= 6):
+                self.error(
+                    "invalid arguments for effect: expected effect(type, x, y, [sizerot=0, color=0, data=0])",
+                    call,
+                )
+            fx_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+            fx_snake = to_snake(fx_arg).upper() if isinstance(fx_arg, str) else str(fx_arg)
+            type_ = self.validate_arg(fx_arg, REG_LOGIC_FX, self.loc(args[0])) if fx_snake in REG_LOGIC_FX.by_source_name else str(fx_arg)
+            x = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            sizerot = str(self.format_intrinsic_arg(args[3], is_ident=False)) if len(args) >= 4 else "0"
+            color = str(self.format_intrinsic_arg(args[4], is_ident=False)) if len(args) >= 5 else "0"
+            data = str(self.format_intrinsic_arg(args[5], is_ident=False)) if len(args) >= 6 else "0"
+            self.instructions.append(
+                IRRaw(opcode="effect", args=[type_, x, y, sizerot, color, data], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "message":
+            # Statement form: message(type, [duration=3], [out_success="@wait"])
+            # Expression form: result = message(type, [duration=3])
+            kwargs = {kw.arg: kw.value for kw in call.keywords} if call.keywords else {}
+            for k in kwargs:
+                if k not in ("type", "duration", "out_success", "outSuccess"):
+                    self.error(f"unexpected keyword argument '{k}' for message", call)
+
+            # extract type
+            if len(args) >= 1:
+                type_node = args[0]
+            elif "type" in kwargs:
+                type_node = kwargs["type"]
+            else:
+                self.error("missing required argument 'type' for message", call)
+
+            type_arg = self.format_intrinsic_arg(type_node, is_ident=True)
+            type_upper = type_arg.upper() if isinstance(type_arg, str) else str(type_arg)
+            type_ = self.validate_arg(type_arg, REG_MESSAGE_TYPES, self.loc(type_node)) if type_upper in REG_MESSAGE_TYPES.by_source_name else str(type_arg)
+
+            # extract duration
+            if len(args) >= 2:
+                duration = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            elif "duration" in kwargs:
+                duration = str(self.format_intrinsic_arg(kwargs["duration"], is_ident=False))
+            else:
+                duration = "3"
+
+            # extract out_success
+            if len(args) >= 3:
+                out_success = str(self.format_intrinsic_arg(args[2], is_ident=True))
+                dest = out_success
+            elif "out_success" in kwargs:
+                out_success = str(self.format_intrinsic_arg(kwargs["out_success"], is_ident=True))
+                dest = out_success
+            elif "outSuccess" in kwargs:
+                out_success = str(self.format_intrinsic_arg(kwargs["outSuccess"], is_ident=True))
+                dest = out_success
+            elif target_dest is not None or not is_statement:
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                out_success = dest
+            else:
+                dest = "0"
+                out_success = "@wait"
+
+            if len(args) > 3:
+                self.error("too many arguments for message: expected message(type, [duration=3], [out_success='@wait'])", call)
+
+            self.instructions.append(
+                IRRaw(opcode="message", args=[type_, duration, out_success], loc=loc)
+            )
+            return dest if (target_dest is not None or not is_statement) else "0"
+
+        elif func_name == "cutscene":
+            # cutscene(action, [p1=0, p2=0, p3=0, p4=0]) (1 to 5 args)
+            if not (1 <= len(args) <= 5):
+                self.error("invalid arguments for cutscene: expected cutscene(action, [p1, p2, p3, p4])", call)
+            action_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+            action_snake = to_snake(action_arg).upper() if isinstance(action_arg, str) else str(action_arg)
+            action = self.validate_arg(action_arg, REG_CUTSCENE_ACTIONS, self.loc(args[0])) if action_snake in REG_CUTSCENE_ACTIONS.by_source_name else str(action_arg)
+
+            if action in ("active", "getHud"):
+                if target_dest is not None or not is_statement:
+                    dest = target_dest if target_dest is not None else self.new_temp(loc)
+                    p1 = dest
+                elif len(args) >= 2:
+                    p1 = str(self.format_intrinsic_arg(args[1], is_ident=True))
+                    dest = p1
+                else:
+                    self.error(f"cutscene('{action}') requires a destination variable or assignment (e.g. res = cutscene('{action}'))", call)
+                p2 = "0"
+                p3 = "0"
+                p4 = "0"
+                self.instructions.append(
+                    IRRaw(opcode="cutscene", args=[action, p1, p2, p3, p4], loc=loc)
+                )
+                return dest
+
+            p1 = str(self.format_intrinsic_arg(args[1], is_ident=False)) if len(args) >= 2 else "0"
+            if action == "setHud":
+                if p1 in ("True", "true"):
+                    p1 = "1"
+                elif p1 in ("False", "false"):
+                    p1 = "0"
+            p2 = str(self.format_intrinsic_arg(args[2], is_ident=False)) if len(args) >= 3 else "0"
+            p3 = str(self.format_intrinsic_arg(args[3], is_ident=False)) if len(args) >= 4 else "0"
+            p4 = str(self.format_intrinsic_arg(args[4], is_ident=False)) if len(args) >= 5 else "0"
+
+            self.instructions.append(
+                IRRaw(opcode="cutscene", args=[action, p1, p2, p3, p4], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "playsound":
+            # playsound(positional, id, [volume=1, pitch=1, pan=0, x=0, y=0, limit=True])
+            if not (2 <= len(args) <= 8):
+                self.error("invalid arguments for playsound: expected playsound(positional, id, [volume, pitch, pan, x, y, limit])", call)
+            pos_arg = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            pos = "true" if pos_arg in ("True", "true", "1") else "false"
+            id_ = str(self.format_intrinsic_arg(args[1], is_ident=True))
+            volume = str(self.format_intrinsic_arg(args[2], is_ident=False)) if len(args) >= 3 else "1"
+            pitch = str(self.format_intrinsic_arg(args[3], is_ident=False)) if len(args) >= 4 else "1"
+            pan = str(self.format_intrinsic_arg(args[4], is_ident=False)) if len(args) >= 5 else "0"
+            x = str(self.format_intrinsic_arg(args[5], is_ident=False)) if len(args) >= 6 else ("@thisx" if pos == "true" else "0")
+            y = str(self.format_intrinsic_arg(args[6], is_ident=False)) if len(args) >= 7 else ("@thisy" if pos == "true" else "0")
+            limit_arg = str(self.format_intrinsic_arg(args[7], is_ident=False)) if len(args) >= 8 else "true"
+            limit = "true" if limit_arg in ("True", "true", "1") else ("false" if limit_arg in ("False", "false", "0") else limit_arg)
+            self.instructions.append(
+                IRRaw(opcode="playsound", args=[pos, id_, volume, pitch, pan, x, y, limit], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "playmusic":
+            # playmusic(name, [interrupt=True])
+            if not (1 <= len(args) <= 2):
+                self.error("invalid arguments for playmusic: expected playmusic(name, [interrupt=True])", call)
+            name = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            intr_arg = str(self.format_intrinsic_arg(args[1], is_ident=False)) if len(args) >= 2 else "true"
+            intr = "true" if intr_arg in ("True", "true", "1") else ("false" if intr_arg in ("False", "false", "0") else intr_arg)
+            self.instructions.append(
+                IRRaw(opcode="playmusic", args=[name, intr], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "makemarker":
+            # makemarker(type, id, x, y, [replace=True])
+            if not (4 <= len(args) <= 5):
+                self.error("invalid arguments for makemarker: expected makemarker(type, id, x, y, [replace=True])", call)
+            type_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+            type_snake = to_snake(type_arg).upper() if isinstance(type_arg, str) else str(type_arg)
+            type_ = self.validate_arg(type_arg, REG_MARKER_TYPES, self.loc(args[0])) if type_snake in REG_MARKER_TYPES.by_source_name else str(type_arg)
+            id_ = str(self.format_intrinsic_arg(args[1], is_ident=True))
+            x = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[3], is_ident=False))
+            replace_arg = str(self.format_intrinsic_arg(args[4], is_ident=False)) if len(args) >= 5 else "true"
+            replace = "true" if replace_arg in ("True", "true", "1") else ("false" if replace_arg in ("False", "false", "0") else replace_arg)
+            self.instructions.append(
+                IRRaw(opcode="makemarker", args=[type_, id_, x, y, replace], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "setmarker":
+            # setmarker(type, id, [p1=0, p2=0, p3=0])
+            if not (2 <= len(args) <= 5):
+                self.error("invalid arguments for setmarker: expected setmarker(type, id, [p1, p2, p3])", call)
+            type_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+            type_snake = to_snake(type_arg).upper() if isinstance(type_arg, str) else str(type_arg)
+            type_ = self.validate_arg(type_arg, REG_MARKER_CONTROLS, self.loc(args[0])) if type_snake in REG_MARKER_CONTROLS.by_source_name else str(type_arg)
+            id_ = str(self.format_intrinsic_arg(args[1], is_ident=True))
+            p1 = str(self.format_intrinsic_arg(args[2], is_ident=False)) if len(args) >= 3 else "0"
+            if p1 in ("True", "true"):
+                p1 = "1"
+            elif p1 in ("False", "false"):
+                p1 = "0"
+            p2 = str(self.format_intrinsic_arg(args[3], is_ident=False)) if len(args) >= 4 else "0"
+            if p2 in ("True", "true"):
+                p2 = "1"
+            elif p2 in ("False", "false"):
+                p2 = "0"
+            p3 = str(self.format_intrinsic_arg(args[4], is_ident=False)) if len(args) >= 5 else "0"
+            if p3 in ("True", "true"):
+                p3 = "1"
+            elif p3 in ("False", "false"):
+                p3 = "0"
+            self.instructions.append(
+                IRRaw(opcode="setmarker", args=[type_, id_, p1, p2, p3], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "localeprint":
+            if len(args) != 1:
+                self.error("invalid arguments for localeprint: expected localeprint(value)", call)
+            val = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="localeprint", args=[val], loc=loc)
+            )
+            return "0"
+
+        elif func_name == "clientdata":
+            # clientdata(channel, value, [reliable=False])
+            if not (2 <= len(args) <= 3):
+                self.error("invalid arguments for clientdata: expected clientdata(channel, value, [reliable=False])", call)
+            chan = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            val = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            rel_arg = str(self.format_intrinsic_arg(args[2], is_ident=False)) if len(args) >= 3 else "0"
+            rel = "1" if rel_arg in ("True", "true", "1") else "0"
+            self.instructions.append(
+                IRRaw(opcode="clientdata", args=[chan, val, rel], loc=loc)
+            )
             return "0"
 
         else:
@@ -1827,7 +2511,23 @@ class Compiler:
                 self.error("invalid arguments for draw.print: expected draw.print(x, y, [align=0])", call)
             x = str(self.format_intrinsic_arg(pos_args[0], is_ident=False))
             y = str(self.format_intrinsic_arg(pos_args[1], is_ident=False))
-            align = str(self.format_intrinsic_arg(align_arg, is_ident=False)) if align_arg is not None else "0"
+            if align_arg is not None:
+                align_val = self.format_intrinsic_arg(align_arg, is_ident=False)
+                raw_str = str(align_val)
+                if raw_str in REG_ALIGN.by_token or raw_str in REG_ALIGN.by_source_name:
+                    align = REG_ALIGN.get_token(raw_str)
+                elif raw_str.startswith('"') and raw_str.endswith('"'):
+                    unquoted = raw_str[1:-1]
+                    if unquoted in REG_ALIGN.by_token or unquoted in REG_ALIGN.by_source_name:
+                        align = REG_ALIGN.get_token(unquoted)
+                    else:
+                        self.error(f"unknown align '{unquoted}'", align_arg)
+                elif raw_str.isdigit() or (raw_str.startswith("-") and raw_str[1:].isdigit()) or raw_str.isidentifier():
+                    align = raw_str
+                else:
+                    self.error(f"invalid align argument '{raw_str}'", align_arg)
+            else:
+                align = "0"
             self.instructions.append(
                 IRRaw(opcode="draw", args=["print", x, y, align, "0", "0", "0"], loc=loc)
             )
@@ -2112,12 +2812,14 @@ class Compiler:
 
         # Mindustry v160.7 UnitLocate mapping
         if method_name == "ore":
-            if len(args) == 4 and not call.keywords:
+            if len(args) == 1 and not call.keywords:
+                self.error(f"invalid arguments for {ns}.ore: for statement calls expected {ns}.ore(ore, out_x, out_y, out_found, [out_build]); for tuple unpacking use: out_x, out_y, out_found = {ns}.ore(ore)", call)
+            elif len(args) == 4 and not call.keywords:
                 ore = str(self.format_intrinsic_arg(args[0], is_ident=True))
                 out_x = str(self.format_intrinsic_arg(args[1], is_ident=True))
                 out_y = str(self.format_intrinsic_arg(args[2], is_ident=True))
                 out_found = str(self.format_intrinsic_arg(args[3], is_ident=True))
-                out_build = "building"
+                out_build = self.new_temp(loc)
             elif len(args) == 5 and not call.keywords:
                 ore = str(self.format_intrinsic_arg(args[0], is_ident=True))
                 out_x = str(self.format_intrinsic_arg(args[1], is_ident=True))
@@ -2125,15 +2827,17 @@ class Compiler:
                 out_found = str(self.format_intrinsic_arg(args[3], is_ident=True))
                 out_build = str(self.format_intrinsic_arg(args[4], is_ident=True))
             else:
-                self.error(f"invalid arguments for {ns}.ore: expected {ns}.ore(ore, out_x, out_y, out_found, [out_build])", call)
+                self.error(f"invalid arguments for {ns}.ore: expected {ns}.ore(ore, out_x, out_y, out_found, [out_build]) or tuple unpacking", call)
             self.instructions.append(
                 IRRaw(opcode="ulocate", args=["ore", "core", "true", ore, out_x, out_y, out_found, out_build], loc=loc)
             )
             return "0"
 
         elif method_name == "building":
-            if len(args) != 6 or call.keywords:
-                self.error(f"invalid arguments for {ns}.building: expected {ns}.building(group, enemy, out_x, out_y, out_found, out_building)", call)
+            if len(args) == 2 and not call.keywords:
+                self.error(f"invalid arguments for {ns}.building: for statement calls expected {ns}.building(group, enemy, out_x, out_y, out_found, out_building); for tuple unpacking use: core_x, core_y, found, building = {ns}.building(group, enemy)", call)
+            elif len(args) != 6 or call.keywords:
+                self.error(f"invalid arguments for {ns}.building: expected {ns}.building(group, enemy, out_x, out_y, out_found, out_building) or tuple unpacking", call)
             group = str(self.format_intrinsic_arg(args[0], is_ident=True))
             enemy = str(self.format_intrinsic_arg(args[1], is_ident=False))
             out_x = str(self.format_intrinsic_arg(args[2], is_ident=True))
@@ -2146,26 +2850,30 @@ class Compiler:
             return "0"
 
         elif method_name == "spawn":
-            if len(args) == 3 and not call.keywords:
+            if len(args) == 0 and not call.keywords:
+                self.error(f"invalid arguments for {ns}.spawn: for statement calls expected {ns}.spawn(out_x, out_y, out_found, [out_build]); for tuple unpacking use: out_x, out_y, out_found, out_build = {ns}.spawn()", call)
+            elif len(args) == 3 and not call.keywords:
                 out_x = str(self.format_intrinsic_arg(args[0], is_ident=True))
                 out_y = str(self.format_intrinsic_arg(args[1], is_ident=True))
                 out_found = str(self.format_intrinsic_arg(args[2], is_ident=True))
-                out_build = "building"
+                out_build = self.new_temp(loc)
             elif len(args) == 4 and not call.keywords:
                 out_x = str(self.format_intrinsic_arg(args[0], is_ident=True))
                 out_y = str(self.format_intrinsic_arg(args[1], is_ident=True))
                 out_found = str(self.format_intrinsic_arg(args[2], is_ident=True))
                 out_build = str(self.format_intrinsic_arg(args[3], is_ident=True))
             else:
-                self.error(f"invalid arguments for {ns}.spawn: expected {ns}.spawn(out_x, out_y, out_found, [out_build])", call)
+                self.error(f"invalid arguments for {ns}.spawn: expected {ns}.spawn(out_x, out_y, out_found, [out_build]) or tuple unpacking", call)
             self.instructions.append(
                 IRRaw(opcode="ulocate", args=["spawn", "core", "true", "@copper", out_x, out_y, out_found, out_build], loc=loc)
             )
             return "0"
 
         elif method_name == "damaged":
-            if len(args) != 4 or call.keywords:
-                self.error(f"invalid arguments for {ns}.damaged: expected {ns}.damaged(out_x, out_y, out_found, out_building)", call)
+            if len(args) == 0 and not call.keywords:
+                self.error(f"invalid arguments for {ns}.damaged: for statement calls expected {ns}.damaged(out_x, out_y, out_found, out_building); for tuple unpacking use: out_x, out_y, out_found, out_build = {ns}.damaged()", call)
+            elif len(args) != 4 or call.keywords:
+                self.error(f"invalid arguments for {ns}.damaged: expected {ns}.damaged(out_x, out_y, out_found, out_building) or tuple unpacking", call)
             out_x = str(self.format_intrinsic_arg(args[0], is_ident=True))
             out_y = str(self.format_intrinsic_arg(args[1], is_ident=True))
             out_found = str(self.format_intrinsic_arg(args[2], is_ident=True))
@@ -2263,6 +2971,274 @@ class Compiler:
                     call,
                 )
 
+    def compile_cutscene_method(
+        self,
+        call: ast.Call,
+        target_dest: Optional[str] = None,
+        is_statement: bool = False,
+    ) -> str:
+        """Compile cutscene.<method>(...) call into Mindustry 'cutscene' instruction."""
+        loc = self.loc(call)
+        assert isinstance(call.func, ast.Attribute)
+        method_name = call.func.attr
+        args = call.args
+
+        if method_name == "active":
+            if call.keywords:
+                self.error("cutscene.active does not support keyword arguments", call)
+            if target_dest is not None or not is_statement:
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+            elif len(args) == 1:
+                dest = str(self.format_intrinsic_arg(args[0], is_ident=True))
+            else:
+                self.error("cutscene.active requires a destination variable or assignment (e.g. res = cutscene.active())", call)
+            self.instructions.append(
+                IRRaw(opcode="cutscene", args=["active", dest, "0", "0", "0"], loc=loc)
+            )
+            return dest
+
+        elif method_name in ("get_hud", "getHud"):
+            if call.keywords:
+                self.error(f"cutscene.{method_name} does not support keyword arguments", call)
+            if target_dest is not None or not is_statement:
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+            elif len(args) == 1:
+                dest = str(self.format_intrinsic_arg(args[0], is_ident=True))
+            else:
+                self.error(f"cutscene.{method_name} requires a destination variable or assignment (e.g. res = cutscene.{method_name}())", call)
+            self.instructions.append(
+                IRRaw(opcode="cutscene", args=["getHud", dest, "0", "0", "0"], loc=loc)
+            )
+            return dest
+
+        elif method_name == "pan":
+            if not (2 <= len(args) <= 3) or call.keywords:
+                self.error("invalid arguments for cutscene.pan: expected cutscene.pan(x, y, [speed=0.06])", call)
+            x = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            speed = str(self.format_intrinsic_arg(args[2], is_ident=False)) if len(args) == 3 else "0.06"
+            self.instructions.append(
+                IRRaw(opcode="cutscene", args=["pan", x, y, speed, "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "zoom":
+            if len(args) != 1 or call.keywords:
+                self.error("invalid arguments for cutscene.zoom: expected cutscene.zoom(level)", call)
+            level = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="cutscene", args=["zoom", level, "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "stop":
+            if len(args) != 0 or call.keywords:
+                self.error("invalid arguments for cutscene.stop: expected cutscene.stop()", call)
+            self.instructions.append(
+                IRRaw(opcode="cutscene", args=["stop", "0", "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "shake":
+            if len(args) != 2 or call.keywords:
+                self.error("invalid arguments for cutscene.shake: expected cutscene.shake(amount, duration)", call)
+            amount = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            duration = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="cutscene", args=["shake", amount, duration, "0", "0"], loc=loc)
+            )
+            return "0"
+
+        elif method_name in ("set_hud", "setHud"):
+            if len(args) != 1 or call.keywords:
+                self.error(f"invalid arguments for cutscene.{method_name}: expected cutscene.{method_name}(shown)", call)
+            shown_arg = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            if shown_arg in ("True", "true"):
+                shown = "1"
+            elif shown_arg in ("False", "false"):
+                shown = "0"
+            else:
+                shown = shown_arg
+            self.instructions.append(
+                IRRaw(opcode="cutscene", args=["setHud", shown, "0", "0", "0"], loc=loc)
+            )
+            return "0"
+
+        else:
+            self.error(f"unknown cutscene method: 'cutscene.{method_name}'", call)
+
+    def compile_sound_method(
+        self,
+        call: ast.Call,
+        target_dest: Optional[str] = None,
+        is_statement: bool = False,
+    ) -> str:
+        loc = self.loc(call)
+        assert isinstance(call.func, ast.Attribute)
+        method_name = call.func.attr
+        args = call.args
+
+        if method_name == "play":
+            # sound.play(id, [volume=1, pitch=1, pan=0, limit=True])
+            if not (1 <= len(args) <= 5):
+                self.error("invalid arguments for sound.play: expected sound.play(id, [volume=1, pitch=1, pan=0, limit=True])", call)
+            id_ = str(self.format_intrinsic_arg(args[0], is_ident=True))
+            volume = str(self.format_intrinsic_arg(args[1], is_ident=False)) if len(args) >= 2 else "1"
+            pitch = str(self.format_intrinsic_arg(args[2], is_ident=False)) if len(args) >= 3 else "1"
+            pan = str(self.format_intrinsic_arg(args[3], is_ident=False)) if len(args) >= 4 else "0"
+            limit_arg = str(self.format_intrinsic_arg(args[4], is_ident=False)) if len(args) >= 5 else "true"
+            limit = "true" if limit_arg in ("True", "true", "1") else ("false" if limit_arg in ("False", "false", "0") else limit_arg)
+            self.instructions.append(
+                IRRaw(opcode="playsound", args=["false", id_, volume, pitch, pan, "0", "0", limit], loc=loc)
+            )
+            return "0"
+
+        elif method_name in ("play_at", "playAt"):
+            # sound.play_at(id, x, y, [volume=1, pitch=1, limit=True])
+            if not (3 <= len(args) <= 6):
+                self.error(f"invalid arguments for sound.{method_name}: expected sound.{method_name}(id, x, y, [volume=1, pitch=1, limit=True])", call)
+            id_ = str(self.format_intrinsic_arg(args[0], is_ident=True))
+            x = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            volume = str(self.format_intrinsic_arg(args[3], is_ident=False)) if len(args) >= 4 else "1"
+            pitch = str(self.format_intrinsic_arg(args[4], is_ident=False)) if len(args) >= 5 else "1"
+            limit_arg = str(self.format_intrinsic_arg(args[5], is_ident=False)) if len(args) >= 6 else "true"
+            limit = "true" if limit_arg in ("True", "true", "1") else ("false" if limit_arg in ("False", "false", "0") else limit_arg)
+            self.instructions.append(
+                IRRaw(opcode="playsound", args=["true", id_, volume, pitch, "0", x, y, limit], loc=loc)
+            )
+            return "0"
+
+        else:
+            self.error(f"unknown sound method: 'sound.{method_name}'", call)
+
+    def compile_music_method(
+        self,
+        call: ast.Call,
+        target_dest: Optional[str] = None,
+        is_statement: bool = False,
+    ) -> str:
+        loc = self.loc(call)
+        assert isinstance(call.func, ast.Attribute)
+        method_name = call.func.attr
+        args = call.args
+
+        if method_name == "play":
+            # music.play(name, [interrupt=True])
+            if not (1 <= len(args) <= 2):
+                self.error("invalid arguments for music.play: expected music.play(name, [interrupt=True])", call)
+            name = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            intr_arg = str(self.format_intrinsic_arg(args[1], is_ident=False)) if len(args) >= 2 else "true"
+            intr = "true" if intr_arg in ("True", "true", "1") else ("false" if intr_arg in ("False", "false", "0") else intr_arg)
+            self.instructions.append(
+                IRRaw(opcode="playmusic", args=[name, intr], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "stop":
+            # music.stop() -> playmusic null false
+            if len(args) != 0:
+                self.error("invalid arguments for music.stop: expected music.stop()", call)
+            self.instructions.append(
+                IRRaw(opcode="playmusic", args=["null", "false"], loc=loc)
+            )
+            return "0"
+
+        else:
+            self.error(f"unknown music method: 'music.{method_name}'", call)
+
+    def compile_marker_method(
+        self,
+        call: ast.Call,
+        target_dest: Optional[str] = None,
+        is_statement: bool = False,
+    ) -> str:
+        loc = self.loc(call)
+        assert isinstance(call.func, ast.Attribute)
+        method_name = call.func.attr
+        args = call.args
+
+        if method_name == "make":
+            # marker.make(type, id, x, y, [replace=True])
+            if not (4 <= len(args) <= 5):
+                self.error("invalid arguments for marker.make: expected marker.make(type, id, x, y, [replace=True])", call)
+            type_arg = self.format_intrinsic_arg(args[0], is_ident=True)
+            type_snake = to_snake(type_arg).upper() if isinstance(type_arg, str) else str(type_arg)
+            type_ = self.validate_arg(type_arg, REG_MARKER_TYPES, self.loc(args[0])) if type_snake in REG_MARKER_TYPES.by_source_name else str(type_arg)
+            id_ = str(self.format_intrinsic_arg(args[1], is_ident=True))
+            x = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[3], is_ident=False))
+            replace_arg = str(self.format_intrinsic_arg(args[4], is_ident=False)) if len(args) >= 5 else "true"
+            replace = "true" if replace_arg in ("True", "true", "1") else ("false" if replace_arg in ("False", "false", "0") else replace_arg)
+            self.instructions.append(
+                IRRaw(opcode="makemarker", args=[type_, id_, x, y, replace], loc=loc)
+            )
+            return "0"
+
+        ctrl_map = {
+            "remove": ("remove", 0),
+            "world": ("world", 1),
+            "minimap": ("minimap", 1),
+            "light": ("light", 1),
+            "autoscale": ("autoscale", 1),
+            "pos": ("pos", 2),
+            "end_pos": ("endPos", 2),
+            "endPos": ("endPos", 2),
+            "draw_layer": ("drawLayer", 1),
+            "drawLayer": ("drawLayer", 1),
+            "color": ("color", 1),
+            "radius": ("radius", 1),
+            "stroke": ("stroke", 1),
+            "outline": ("outline", 1),
+            "rotation": ("rotation", 1),
+            "shape": ("shape", 3),
+            "arc": ("arc", 2),
+            "flush_text": ("flushText", 1),
+            "flushText": ("flushText", 1),
+            "font_size": ("fontSize", 1),
+            "fontSize": ("fontSize", 1),
+            "text_height": ("textHeight", 1),
+            "textHeight": ("textHeight", 1),
+            "text_align": ("textAlign", 1),
+            "textAlign": ("textAlign", 1),
+            "line_align": ("lineAlign", 1),
+            "lineAlign": ("lineAlign", 1),
+            "label_flags": ("labelFlags", 2),
+            "labelFlags": ("labelFlags", 2),
+            "texture": ("texture", 2),
+            "texture_size": ("textureSize", 2),
+            "textureSize": ("textureSize", 2),
+            "posi": ("posi", 3),
+            "uvi": ("uvi", 3),
+            "colori": ("colori", 2),
+        }
+
+        if method_name in ctrl_map:
+            ctrl_type, expected_params = ctrl_map[method_name]
+            if len(args) < 1:
+                self.error(f"marker.{method_name} requires at least an id argument", call)
+            id_ = str(self.format_intrinsic_arg(args[0], is_ident=True))
+            p_args = args[1:]
+            p1 = "0"
+            p2 = "0"
+            p3 = "0"
+            if len(p_args) >= 1:
+                p1_val = str(self.format_intrinsic_arg(p_args[0], is_ident=False))
+                p1 = "1" if p1_val in ("True", "true") else ("0" if p1_val in ("False", "false") else p1_val)
+            if len(p_args) >= 2:
+                p2_val = str(self.format_intrinsic_arg(p_args[1], is_ident=False))
+                p2 = "1" if p2_val in ("True", "true") else ("0" if p2_val in ("False", "false") else p2_val)
+            if len(p_args) >= 3:
+                p3_val = str(self.format_intrinsic_arg(p_args[2], is_ident=False))
+                p3 = "1" if p3_val in ("True", "true") else ("0" if p3_val in ("False", "false") else p3_val)
+            self.instructions.append(
+                IRRaw(opcode="setmarker", args=[ctrl_type, id_, p1, p2, p3], loc=loc)
+            )
+            return "0"
+
+        self.error(f"unknown marker method: 'marker.{method_name}'", call)
+
+
     def compile_fstring_print(self, node: ast.JoinedStr, loc: SourceLocation) -> str:
         """Compile a print(f"...") f-string call into MLog print and format opcodes."""
         formatted_values = [v for v in node.values if isinstance(v, ast.FormattedValue)]
@@ -2317,10 +3293,139 @@ class Compiler:
 
         return "0"
 
+    def compile_unpacking_assignment(self, node: ast.Assign, target: Union[ast.Tuple, ast.List]) -> None:
+        loc = self.loc(node)
+        call = node.value
+        assert isinstance(call, ast.Call)
+
+        target_names = [self.format_name(elt.id, elt) for elt in target.elts]
+
+        if isinstance(call.func, ast.Name) and call.func.id == "unpackcolor":
+            args = call.args
+            if call.keywords:
+                self.error("unpackcolor does not support keyword arguments", call)
+            if len(args) != 1:
+                self.error(
+                    f"invalid arguments for unpackcolor unpacking: expected unpackcolor(value), got {len(args)} arguments",
+                    call,
+                )
+            if len(target_names) != 4:
+                self.error(
+                    f"unpackcolor unpacking expects exactly 4 target variables (out_r, out_g, out_b, out_a), got {len(target_names)}",
+                    target,
+                )
+            value = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="unpackcolor", args=list(target_names) + [value], loc=loc)
+            )
+            return
+
+        if isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name) and call.func.value.id == "ulocate":
+            method_name = call.func.attr
+            args = call.args
+
+            if method_name == "building":
+                if len(args) != 2 or call.keywords:
+                    self.error("invalid arguments for ulocate.building unpacking: expected ulocate.building(group, enemy)", call)
+                if len(target_names) not in (3, 4):
+                    self.error(f"ulocate.building unpacking expects 3 or 4 target variables (out_x, out_y, out_found[, out_building]), got {len(target_names)}", target)
+                group = str(self.format_intrinsic_arg(args[0], is_ident=True))
+                enemy = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                out_x = target_names[0]
+                out_y = target_names[1]
+                out_found = target_names[2]
+                out_build = target_names[3] if len(target_names) == 4 else self.new_temp(loc)
+                self.instructions.append(
+                    IRRaw(opcode="ulocate", args=["building", group, enemy, "@copper", out_x, out_y, out_found, out_build], loc=loc)
+                )
+                return
+
+            elif method_name == "ore":
+                if len(args) != 1 or call.keywords:
+                    self.error("invalid arguments for ulocate.ore unpacking: expected ulocate.ore(ore)", call)
+                if len(target_names) not in (3, 4):
+                    self.error(f"ulocate.ore unpacking expects 3 or 4 target variables (out_x, out_y, out_found[, out_building]), got {len(target_names)}", target)
+                ore = str(self.format_intrinsic_arg(args[0], is_ident=True))
+                out_x = target_names[0]
+                out_y = target_names[1]
+                out_found = target_names[2]
+                out_build = target_names[3] if len(target_names) == 4 else self.new_temp(loc)
+                self.instructions.append(
+                    IRRaw(opcode="ulocate", args=["ore", "core", "true", ore, out_x, out_y, out_found, out_build], loc=loc)
+                )
+                return
+
+            elif method_name == "spawn":
+                if len(args) != 0 or call.keywords:
+                    self.error("invalid arguments for ulocate.spawn unpacking: expected ulocate.spawn()", call)
+                if len(target_names) not in (3, 4):
+                    self.error(f"ulocate.spawn unpacking expects 3 or 4 target variables (out_x, out_y, out_found[, out_building]), got {len(target_names)}", target)
+                out_x = target_names[0]
+                out_y = target_names[1]
+                out_found = target_names[2]
+                out_build = target_names[3] if len(target_names) == 4 else self.new_temp(loc)
+                self.instructions.append(
+                    IRRaw(opcode="ulocate", args=["spawn", "core", "true", "@copper", out_x, out_y, out_found, out_build], loc=loc)
+                )
+                return
+
+            elif method_name == "damaged":
+                if len(args) != 0 or call.keywords:
+                    self.error("invalid arguments for ulocate.damaged unpacking: expected ulocate.damaged()", call)
+                if len(target_names) not in (3, 4):
+                    self.error(f"ulocate.damaged unpacking expects 3 or 4 target variables (out_x, out_y, out_found[, out_building]), got {len(target_names)}", target)
+                out_x = target_names[0]
+                out_y = target_names[1]
+                out_found = target_names[2]
+                out_build = target_names[3] if len(target_names) == 4 else self.new_temp(loc)
+                self.instructions.append(
+                    IRRaw(opcode="ulocate", args=["damaged", "core", "true", "@copper", out_x, out_y, out_found, out_build], loc=loc)
+                )
+                return
+            else:
+                self.error(f"unknown ulocate method: 'ulocate.{method_name}'", call)
+
+        elif isinstance(call.func, ast.Name) and call.func.id == "ulocate":
+            if not call.args:
+                self.error("ulocate requires at least locate type argument", call)
+            loc_type = str(self.format_intrinsic_arg(call.args[0], is_ident=True))
+            if loc_type == "building":
+                if len(call.args) != 3:
+                    self.error("invalid arguments for ulocate('building', group, enemy)", call)
+                if len(target_names) != 4:
+                    self.error(f"ulocate('building', ...) unpacking expects exactly 4 target variables, got {len(target_names)}", target)
+                group = str(self.format_intrinsic_arg(call.args[1], is_ident=True))
+                enemy = str(self.format_intrinsic_arg(call.args[2], is_ident=False))
+                out_x, out_y, out_found, out_build = target_names
+                self.instructions.append(
+                    IRRaw(opcode="ulocate", args=["building", group, enemy, "@copper", out_x, out_y, out_found, out_build], loc=loc)
+                )
+                return
+            elif loc_type == "ore":
+                if len(call.args) != 2:
+                    self.error("invalid arguments for ulocate('ore', ore)", call)
+                if len(target_names) != 3:
+                    self.error(f"ulocate('ore', ...) unpacking expects exactly 3 target variables, got {len(target_names)}", target)
+                ore = str(self.format_intrinsic_arg(call.args[1], is_ident=True))
+                out_x, out_y, out_found = target_names
+                self.instructions.append(
+                    IRRaw(opcode="ulocate", args=["ore", "core", "true", ore, out_x, out_y, out_found, "building"], loc=loc)
+                )
+                return
+            else:
+                self.error(f"unsupported ulocate type for unpacking: '{loc_type}'", call)
+        else:
+            self.error("tuple unpacking is only supported for 'ulocate' and 'unpackcolor' operations", call)
+
     def compile_assignment(self, node: ast.Assign):
         """Compile an assignment statement: target = value"""
         target = node.targets[0]
         loc = self.loc(node)
+
+        # Case 0: Tuple / List unpacking: core_x, core_y, found_core, core_build = ulocate.building(...)
+        if isinstance(target, (ast.Tuple, ast.List)):
+            self.compile_unpacking_assignment(node, target)
+            return
 
         # Case 1: Array element assignment: a[i] = value
         if isinstance(target, ast.Subscript):
@@ -3096,9 +4201,14 @@ class Compiler:
         elif isinstance(stmt, ast.Continue):
             self.compile_continue(stmt)
         elif isinstance(stmt, ast.Expr):
-            if isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Name) and stmt.value.func.id == "Array":
-                self.error("Array declaration must be assigned to a variable, e.g. 'a = Array(...)'", stmt)
-            self.compile_expr(stmt.value, is_statement=True)
+            if (isinstance(stmt.value, ast.Constant) and stmt.value.value is Ellipsis) or (
+                hasattr(ast, "Ellipsis") and isinstance(stmt.value, ast.Ellipsis)
+            ):
+                pass
+            else:
+                if isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Name) and stmt.value.func.id == "Array":
+                    self.error("Array declaration must be assigned to a variable, e.g. 'a = Array(...)'", stmt)
+                self.compile_expr(stmt.value, is_statement=True)
         elif isinstance(stmt, ast.Pass):
             pass
         elif isinstance(stmt, (ast.Import, ast.ImportFrom)):

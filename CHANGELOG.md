@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Tier 4 World Processor & Map Scripting (25 Privileged Statements)**:
+  - Complete support across Validator, Registry, AST Parser, Compiler, Decompiler, and IDE Stubs for all 25 privileged statements:
+    - **World State Manipulation**: `query`, `getblock`, `setblock`.
+    - **Unit & Combat Spawning**: `spawn`, `bullet`, `status`, `explosion`.
+    - **Rule Management & Entity Queries**: `setrule`, `getflag`, `setflag`, `setprop`, `fetch`, `sync`.
+    - **Weather & World Effects**: `weathersense`, `weatherset`, `spawnwave`, `effect`.
+    - **UI Messaging & Cutscenes**: `message`, `cutscene`, `setrate` (scaling to 1000 IPT on World Processor).
+    - **Audio, Objective Markers & Network Data**: `playsound`, `playmusic`, `makemarker`, `setmarker`, `localeprint`, `clientdata`.
+- **100% Opcode Coverage Verification (53/53 Statements)**: Direct parity with Mindustry v160.7 `LogicIO.allStatements` covering all 28 Standard opcodes and 25 World/Privileged statements with roundtrip decompilation and JVM execution.
+- **JVM-Backed World Processor Test Harness**: Extended `MindustryHarness.java` with mock audio/assets, objective markers state export, dynamic rules, and world processor building configuration.
+- **`unpackcolor` Tuple Unpacking**: `r, g, b, a = unpackcolor(color)` now lowers to the same single Mindustry `unpackcolor r g b a value` instruction as the existing statement form. Exactly 4 targets are required; target count, duplicate target names, keyword arguments, and non-name targets are rejected at parse time. `ColorChannels` (an `r`/`g`/`b`/`a` `NamedTuple`) is exported so the expression form also runs under plain CPython.
+- **CLI `--no-functions` Flag**: Opt-out for function definitions and `return` statements.
+- **`examples/compiler/color_channels.py`**: Paired `.py` / `.mlog` example for `packcolor` + `unpackcolor` unpacking.
+- **Decompiler temporary inlining into raw instructions**: A single-use compiler temporary feeding a plain `OPERAND` position of a raw instruction is now folded into the Python expression, so `print __tmp2` recovers as `print(r + g + b + a)`. Gated by the new `semantics.is_safe_inline_expression` predicate shared with the renderer, so comparisons, booleans, calls, and other non-arithmetic values are never inlined and never re-quoted into strings. Control-flow opcodes (`jump`/`stop`/`end`) and non-`OPERAND` roles (destinations, hardware links, enum selectors) are never rewritten.
+- **`src/decompiler/naming.py`**: Renames preserved compiler temporaries (`__tmpN`) to valid Mindustry Logic DSL identifiers (`tmp_val_N`) with a deterministic, collision-free, 1:1 mapping applied to every read, write, and instruction operand. Temporaries that exist only in an elidable `ulocate` output slot keep their original name so `instruction_to_python` can still drop them.
+
+### Fixed
+- **CLI Could Not Compile Function Definitions**: `mlog-py compile script.py` always ran with `allow_functions=False`, so every `def` statement failed with `unsupported Python feature: function definition` even though the compiler fully supports user-defined functions. The CLI now enables function support by default (matching the documented Python subset and `examples/compiler/functions.py`) and exposes `--no-functions` to restore the strict subset. The Python API default (`compile_py(..., allow_functions=False)`) is unchanged.
+- **Decompiler Emitted Reserved Compiler Temporaries**: Preserved `__tmpN` assignments produced Python the compiler refused to recompile (`variable name '__tmp0' is reserved for compiler temporaries`), so `examples/compiler/array_memory.mlog`, `examples/compiler/aug_assign.mlog`, and `examples/compiler/color_channels.mlog` could not complete an MLog → Python → MLog round-trip. All compiler examples now decompile to valid, recompilable Python, and `color_channels.mlog` round-trips byte-for-byte.
+- **Inlined Operands Silently Quoted Into Strings**: Without the shared predicate, folding a comparison or a boolean-bearing expression into an operand rendered it as a string literal (e.g. `write("i > 5", "cell1", 0)`), changing program semantics.
+- **`src/parser.py` Missing `Union` Import**: `_validate_unpacking_assign` annotated its target with `Union`, which was never imported. This was masked by PEP 649 lazy annotation evaluation on Python 3.14 and would raise `NameError` at import time on Python 3.9-3.13.
+
+### Known Issues
+- `examples/compiler/special_constants.mlog` does not round-trip byte-for-byte: `set copper_name @copper` recovers as `copper_name = '@copper'` and recompiles to `set copper_name "@copper"`, a quoted string. At runtime the variable then holds `copper` instead of `@copper`. This is a pre-existing `@`-token quoting limitation, unrelated to compiler temporaries.
+
 ## [0.5.0] - 2026-10-12
 
 ### Added

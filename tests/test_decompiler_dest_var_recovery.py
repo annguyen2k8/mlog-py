@@ -228,8 +228,8 @@ ucontrol flag 1 0 0 0 0
 ulocate building core 0 @copper kx ky kfound kblock
 """
         py = decompile(mlog)
-        self.assertIn('ulocate("building", "container", 0, "@copper", cx, cy, found, cblock)', py)
-        self.assertIn('ulocate("building", "core", 0, "@copper", kx, ky, kfound, kblock)', py)
+        self.assertIn('ulocate.building("container", 0)', py)
+        self.assertIn('ulocate.building("core", 0)', py)
         recompiled = compile_py(py).mlog.strip()
         self.assertIn("ulocate building container 0 @copper cx cy found cblock", recompiled)
         self.assertIn("ulocate building core 0 @copper kx ky kfound kblock", recompiled)

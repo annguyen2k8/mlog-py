@@ -17,8 +17,10 @@ from src.mlog_registry import (
     Teams,
     UnitControl,
     Units,
+    REG_OPCODES,
 )
-from src.validator import MlogValidator
+from src.metadata import INTRINSICS
+from src.validator import MlogValidator, OPCODE_ARG_COUNTS
 
 
 class TestRegistryAndEnums(unittest.TestCase):
@@ -346,6 +348,47 @@ class TestRegistryAndEnums(unittest.TestCase):
         with self.assertRaises(CompileError) as ctx:
             compile_py(source, filename="test.py")
         self.assertIn("unsupported Python feature: from ... import statement", str(ctx.exception))
+
+    # -----------------------------------------------------------------------
+    # 6. Opcode Registry Alignment & Metadata Synchronization
+    # -----------------------------------------------------------------------
+
+    def test_opcode_registry_matches_standard_opcodes(self):
+        """Verify REG_OPCODES contains exactly 28 standard opcodes and verified Tier 4 world opcodes."""
+        raw_tokens = [entry.mlog_token for entry in REG_OPCODES.entries]
+
+        # 1. No duplicates in registry
+        self.assertEqual(len(raw_tokens), len(set(raw_tokens)), "Opcode registry contains duplicate opcodes")
+
+        # 2. Exactly 28 standard opcodes
+        std_tokens = [entry.mlog_token for entry in REG_OPCODES.entries if entry.category == "standard"]
+        self.assertEqual(len(std_tokens), 28, f"Expected exactly 28 standard opcodes, got {len(std_tokens)}")
+        self.assertEqual(set(std_tokens), REG_OPCODES.standard_opcodes)
+
+        # 3. Verified Tier 4 World opcodes (Complete Mindustry v160.7 set)
+        world_tokens = [entry.mlog_token for entry in REG_OPCODES.entries if entry.category == "world"]
+        self.assertEqual(
+            set(world_tokens),
+            {
+                "query", "getblock", "setblock",
+                "spawn", "bullet", "status", "explosion",
+                "getflag", "setflag", "setprop", "fetch", "sync", "setrule",
+                "weathersense", "weatherset", "spawnwave", "effect",
+                "message", "cutscene",
+                "playsound", "playmusic", "makemarker", "setmarker", "localeprint", "clientdata",
+            },
+        )
+
+        # 4. Exact 1:1 match with validator OPCODE_ARG_COUNTS
+        self.assertEqual(set(raw_tokens), set(OPCODE_ARG_COUNTS.keys()), "REG_OPCODES does not match OPCODE_ARG_COUNTS")
+
+        # 5. Check presence of select and noop specifically
+        self.assertIn("select", raw_tokens)
+        self.assertIn("noop", raw_tokens)
+
+        # 6. All opcodes have metadata in INTRINSICS
+        for op in raw_tokens:
+            self.assertIn(op, INTRINSICS, f"Opcode '{op}' missing from INTRINSICS metadata")
 
 
 if __name__ == "__main__":

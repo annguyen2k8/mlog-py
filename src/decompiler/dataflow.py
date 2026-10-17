@@ -26,7 +26,9 @@ from .semantics import (
     get_argument_semantic_role,
     get_instruction_dest_vars,
     get_instruction_read_vars,
+    is_safe_inline_expression,
 )
+from .instruction import MlogInstruction
 from .structured_ir import (
     AssignNode,
     ExprStmtNode,
@@ -35,19 +37,9 @@ from .structured_ir import (
     StructuredNode,
     StructuredProgram,
     WhileNode,
+    is_compiler_temporary,
 )
 from .function_ir import CallNode, ReturnNode
-
-
-def is_compiler_temporary(name: str) -> bool:
-    """Return True if variable name matches standard compiler temporary conventions."""
-    if name.startswith("__tmp"):
-        return True
-    if name.startswith("*tmp"):
-        return True
-    if name.startswith("_tmp") and (len(name) <= 5 or name[4:].isdigit()):
-        return True
-    return False
 
 
 def condition_to_expr(cond: str, a: str, b: str, invert: bool = False) -> Expr:
@@ -254,6 +246,66 @@ def get_node_uses(node: StructuredNode) -> Set[str]:
         return set(get_instruction_read_vars(node.instruction, getattr(node, "defined_variables", None)))
 
     return set()
+
+
+# Opcodes that must never receive an inlined expression operand: their operands are
+# instruction addresses or explicit control-flow tokens, not plain values.
+_CONTROL_FLOW_OPCODES = frozenset({"jump", "stop", "end"})
+
+
+def inline_temporary_into_instruction(
+    instr: MlogInstruction,
+    target: str,
+    value: Expr,
+) -> Optional[MlogInstruction]:
+    """Substitute a single-use temporary into a raw instruction operand.
+
+    Returns a new ``MlogInstruction`` when every occurrence of ``target`` in the
+    operand list sits in a substitutable position, otherwise ``None``.
+
+    Safety rules (Zero Guessing principle -- no speculative rewriting):
+      * Control-flow opcodes are never touched.
+      * Only ``OPERAND``-role positions qualify. Destinations (``VARIABLE_DEF``),
+        hardware links (``BLOCK_OR_DEVICE``), enum/token selectors
+        (``KEYWORD_OR_ENUM``) and ``@``-constants are never rewritten, because
+        substituting an expression there would change semantics or produce
+        uncompilable DSL.
+      * The rendered value must satisfy ``is_safe_inline_expression`` (pure
+        arithmetic/bitwise over identifiers and numbers). This is the exact same
+        SSOT predicate the Python renderer uses to decide whether an operand is an
+        expression or a string literal, so the inliner can never emit an operand the
+        renderer would silently quote back into a string.
+      * The value must be side-effect free; re-evaluation is only safe then.
+    """
+    if instr.opcode in _CONTROL_FLOW_OPCODES:
+        return None
+    if target not in instr.args:
+        return None
+    if value.has_side_effects:
+        return None
+    if not isinstance(value, (BinaryExpr, UnaryExpr, VariableExpr, IfExpExpr)):
+        return None
+
+    rendered = value.to_python()
+    if not is_safe_inline_expression(rendered):
+        return None
+
+    args = list(instr.args)
+    for idx, arg in enumerate(args):
+        if arg != target:
+            continue
+        role = get_argument_semantic_role(instr.opcode, idx, instr.args)
+        if role is not ArgumentSemanticRole.OPERAND:
+            return None
+        args[idx] = rendered
+
+    return MlogInstruction(
+        address=instr.address,
+        opcode=instr.opcode,
+        args=tuple(args),
+        loc=instr.loc,
+        raw_text=instr.raw_text,
+    )
 
 
 class DataflowTransformer:
@@ -605,6 +657,18 @@ class DataflowTransformer:
                 elif isinstance(target_node, CallNode):
                     new_args = [substitute_variable(a, target, val) for a in target_node.args]
                     target_node.args = new_args
+                    target_node.source_addresses = merged_addrs
+                    current_nodes.pop(i)
+                    changed = True
+                    break
+
+                elif isinstance(target_node, InstructionNode):
+                    new_instr = inline_temporary_into_instruction(
+                        target_node.instruction, target, val
+                    )
+                    if new_instr is None:
+                        continue
+                    target_node.instruction = new_instr
                     target_node.source_addresses = merged_addrs
                     current_nodes.pop(i)
                     changed = True
