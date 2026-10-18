@@ -297,22 +297,72 @@ def _cli_decompile(args: argparse.Namespace) -> int:
     from .decompiler import decompile
     from .decompiler.errors import DecompileError
 
-    try:
-        with open(args.input_file, "r", encoding="utf-8") as f:
-            mlog_source = f.read()
-    except OSError as e:
-        _cli_print(f"Error reading file '{args.input_file}': {e}", file=sys.stderr)
+    input_source = args.input_file
+    is_stdin = (input_source is None or input_source == "-")
+
+    if is_stdin:
+        filename = "<stdin>"
+        is_tty = hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
+        if is_tty:
+            _cli_print(
+                "[mlog-py] Paste or enter mlog code below.\n"
+                "[mlog-py] Finish input with EOF (Ctrl+D / Ctrl+Z) or type 'EOF' on an empty line:",
+                file=sys.stderr,
+            )
+            lines: List[str] = []
+            try:
+                while True:
+                    line = sys.stdin.readline()
+                    if not line:  # Stream EOF
+                        break
+                    stripped = line.rstrip("\r\n")
+                    if stripped in ("EOF", "__EOF__"):
+                        break
+                    lines.append(line)
+                mlog_source = "".join(lines)
+            except KeyboardInterrupt:
+                _cli_print("\n[mlog-py] Decompilation aborted by user.", file=sys.stderr)
+                return 130
+        else:
+            try:
+                raw_input = sys.stdin.read()
+                clean_lines = []
+                for line in raw_input.splitlines(True):
+                    if line.rstrip("\r\n") in ("EOF", "__EOF__"):
+                        break
+                    clean_lines.append(line)
+                mlog_source = "".join(clean_lines)
+            except KeyboardInterrupt:
+                _cli_print("\n[mlog-py] Decompilation aborted by user.", file=sys.stderr)
+                return 130
+    else:
+        filename = input_source
+        try:
+            with open(input_source, "r", encoding="utf-8") as f:
+                mlog_source = f.read()
+        except OSError as e:
+            _cli_print(f"Error reading file '{input_source}': {e}", file=sys.stderr)
+            return 1
+        except KeyboardInterrupt:
+            _cli_print("\n[mlog-py] Decompilation aborted by user.", file=sys.stderr)
+            return 130
+
+    if not mlog_source.strip():
+        _cli_print("Decompilation error: input is empty", file=sys.stderr)
         return 1
 
     try:
         python_code = decompile(
             mlog_source,
-            filename=args.input_file,
+            filename=filename,
             debug=args.debug,
         )
     except DecompileError as e:
         _cli_print(f"Decompilation error: {e}", file=sys.stderr)
         return 1
+    except KeyboardInterrupt:
+        _cli_print("\n[mlog-py] Decompilation aborted by user.", file=sys.stderr)
+        return 130
 
     if args.output_file:
         try:
@@ -322,9 +372,14 @@ def _cli_decompile(args: argparse.Namespace) -> int:
             _cli_print(f"Error writing output file '{args.output_file}': {e}", file=sys.stderr)
             return 1
     else:
-        sys.stdout.write(python_code)
+        try:
+            sys.stdout.write(python_code)
+            sys.stdout.flush()
+        except BrokenPipeError:
+            pass
 
     return 0
+
 
 
 def _build_cli_parser() -> argparse.ArgumentParser:
@@ -401,7 +456,12 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         help="Decompile MLog -> Python DSL",
         description="Decompile Mindustry Logic (mlog) into structured Python DSL.",
     )
-    decompile_p.add_argument("input_file", help="Input Mindustry Logic file (.mlog)")
+    decompile_p.add_argument(
+        "input_file",
+        nargs="?",
+        default=None,
+        help="Input Mindustry Logic file (.mlog) or '-' / omitted to read from stdin",
+    )
     decompile_p.add_argument(
         "-o", "--output", dest="output_file", help="Output file path (.py)"
     )

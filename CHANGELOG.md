@@ -23,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`examples/compiler/color_channels.py`**: Paired `.py` / `.mlog` example for `packcolor` + `unpackcolor` unpacking.
 - **Decompiler temporary inlining into raw instructions**: A single-use compiler temporary feeding a plain `OPERAND` position of a raw instruction is now folded into the Python expression, so `print __tmp2` recovers as `print(r + g + b + a)`. Gated by the new `semantics.is_safe_inline_expression` predicate shared with the renderer, so comparisons, booleans, calls, and other non-arithmetic values are never inlined and never re-quoted into strings. Control-flow opcodes (`jump`/`stop`/`end`) and non-`OPERAND` roles (destinations, hardware links, enum selectors) are never rewritten.
 - **`src/decompiler/naming.py`**: Renames preserved compiler temporaries (`__tmpN`) to valid Mindustry Logic DSL identifiers (`tmp_val_N`) with a deterministic, collision-free, 1:1 mapping applied to every read, write, and instruction operand. Temporaries that exist only in an elidable `ulocate` output slot keep their original name so `instruction_to_python` can still drop them.
+- **CLI Stdin & Copy-Paste Decompilation**:
+  - `mlog-py decompile` without positional arguments or with `-` now reads MLog directly from `sys.stdin`.
+  - Full support for piped streams (`cat code.mlog | mlog-py decompile`) and interactive terminal paste with guidance printed to `sys.stderr` and sentinel termination (`EOF` or `__EOF__`).
+  - Standard exit codes: `0` on success, `1` on empty input or syntax error, `130` on `KeyboardInterrupt` (Ctrl+C).
+  - Safe `-o` flag support when reading from stdin, and graceful `BrokenPipeError` handling.
+- **Decompiler 53/53 Opcode Parity & Regression Suite**:
+  - Comprehensive coverage test suite (`tests/test_decompiler_full_coverage.py`) verifying round-trip semantic equivalence across all 53 Mindustry v160.7 opcodes, structured control flow recovery, and parser error boundaries.
+  - Automated CLI test suite (`tests/test_cli_decompile_stdin.py`) covering all stdin, piped, interactive, sentinel, and error scenarios.
 
 ### Fixed
 - **CLI Could Not Compile Function Definitions**: `mlog-py compile script.py` always ran with `allow_functions=False`, so every `def` statement failed with `unsupported Python feature: function definition` even though the compiler fully supports user-defined functions. The CLI now enables function support by default (matching the documented Python subset and `examples/compiler/functions.py`) and exposes `--no-functions` to restore the strict subset. The Python API default (`compile_py(..., allow_functions=False)`) is unchanged.

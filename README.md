@@ -61,11 +61,18 @@ mlog-py compile input.py --no-functions
 Use the `mlog-py decompile` CLI:
 
 ```bash
-# Decompile to stdout
+# Decompile from file to stdout
 mlog-py decompile input.mlog
 
 # Decompile and save to file
 mlog-py decompile input.mlog -o output.py
+
+# Piped / stream input from stdin
+cat input.mlog | mlog-py decompile
+mlog-py decompile - < input.mlog
+
+# Interactive copy-paste in terminal (finish with Ctrl+D or 'EOF' line)
+mlog-py decompile
 
 # Include instruction addresses in comments (# mlog[<addr>])
 mlog-py decompile input.mlog --debug
@@ -222,9 +229,9 @@ python3 -m unittest discover -s tests -p "test_*.py"
 python3 -m unittest tests/test_tier3_runtime.py
 ```
 
-- **987 Automated Tests**: 100% passing baseline across compiler, decompiler, registry, CFG, structuring, dataflow, function recovery, bitwise operators, min/max, for loops, memory arrays (int, float, bool), Memory Bank Header Protocol (inter-processor communication layout), Callable Namespace Objects (`draw.<method>`, `ucontrol.<method>`, `ulocate.<method>`, `op.<method>`), augmented assignment, constant folding, system clipboard, built-in variables (Vars API), Mindustry v8 modulo semantics, color packing/unpacking, printchar, format & f-strings, setrate, select & ternary expressions, comprehensive `is`/`is not` semantics, source mapping, and real JVM runtime verification.
+- **1,147 Automated Tests**: 100% passing baseline across compiler, decompiler, registry, CFG, structuring, dataflow, function recovery, bitwise operators, min/max, for loops, memory arrays (int, float, bool), Memory Bank Header Protocol (inter-processor communication layout), Callable Namespace Objects (`draw.<method>`, `ucontrol.<method>`, `ulocate.<method>`, `op.<method>`), augmented assignment, constant folding, system clipboard, built-in variables (Vars API), Mindustry v8 modulo semantics, color packing/unpacking, printchar, format & f-strings, setrate, select & ternary expressions, comprehensive `is`/`is not` semantics, all 25 World Processor privileged statements, CLI stdin/paste decompile, source mapping, and real JVM runtime verification.
 - **Real-World Test Corpus**: 32 representative programs across handwritten scripts, compiler-generated programs, control flow patterns, and pathological edge cases.
-- **Round-Trip Verification**: Guarantees that `MLog → Decompiler → Compiler` produces valid, identical instructions.
+- **Round-Trip Verification**: Guarantees that `MLog → Decompiler → Compiler` produces valid, functionally equivalent instructions.
 
 ### Mindustry v160.7 Tier 3 Runtime Scorecard (28/28 Opcodes — 100%)
 
@@ -244,7 +251,7 @@ python3 -m unittest tests/test_tier3_runtime.py
 - **Irreducible Control Flow**: Non-natural loops and indirect jumps (`set @counter ...`) are preserved as fallback comments and raw jumps instead of synthetic loops.
 - **Flat Memory Model**: Mindustry Logic has no heap or object system; object-oriented constructs, classes, and Python collections (`list`, `dict`) are not reconstructed.
 - **Multi-Use Temporaries**: Temporaries read multiple times or modified across basic blocks are preserved as explicit assignments to ensure semantic correctness.
-- **Privileged Opcodes**: Custom map / world processor opcodes (`setblock`, `spawnunit`, `applystatus`, etc.) require privileged world permissions and are not part of the standard 28 survival player opcodes.
+- **World Processor / Privileged Opcodes**: All 25 World Processor privileged statements (`query`, `getblock`, `setblock`, `spawn`, `bullet`, `status`, `explosion`, `setrule`, `getflag`, `setflag`, `setprop`, `fetch`, `sync`, `weathersense`, `weatherset`, `spawnwave`, `effect`, `message`, `cutscene`, `playsound`, `playmusic`, `makemarker`, `setmarker`, `localeprint`, `clientdata`) are fully supported by `mlog-py` for custom map scripting. At in-game runtime, Mindustry requires a World Processor (`#processor: world`); executing privileged opcodes on standard survival processors (Micro, Logic, Hyper) will be rejected by the engine as `InvalidStatement`.
 
 ---
 
