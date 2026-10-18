@@ -147,5 +147,98 @@ class TestCliDecompileStdin(unittest.TestCase):
         self.assertIn("Decompilation aborted by user", stderr_buf.getvalue())
 
 
+    def test_tty_prompt_shows_correct_platform_eof_key(self):
+        """Prompt instructs Ctrl+D on Linux/Android/Termux and omits Ctrl+Z unless on Windows."""
+        mlog = "set count 1\n"
+        code, stdout, stderr = self._run_cli_capture(["decompile"], stdin_data=mlog, is_tty=True)
+        self.assertEqual(code, 0)
+        if sys.platform == "win32":
+            self.assertIn("Ctrl+Z", stderr)
+        else:
+            self.assertIn("Ctrl+D", stderr)
+            self.assertNotIn("Ctrl+Z", stderr)
+
+    def test_interactive_save_to_file(self):
+        """Providing a valid file path at the interactive save prompt writes the file and notifies user."""
+        from src import mlog as mlog_module
+        mlog = "set score 10\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            target_py = os.path.join(tmp, "out_saved.py")
+            mlog_module._interactive_prompt_hook = lambda prompt: target_py
+            try:
+                code, stdout, stderr = self._run_cli_capture(["decompile"], stdin_data=mlog, is_tty=True)
+            finally:
+                mlog_module._interactive_prompt_hook = None
+
+            self.assertEqual(code, 0)
+            self.assertEqual(stdout, "")
+            self.assertIn(f"Saved decompiled code to '{target_py}'", stderr)
+            self.assertTrue(os.path.exists(target_py))
+            with open(target_py, "r", encoding="utf-8") as f:
+                content = f.read()
+            self.assertIn("score = 10", content)
+
+    def test_interactive_save_empty_path_prints_to_stdout(self):
+        """Pressing Enter (empty path) at the save prompt prints decompiled code to stdout."""
+        from src import mlog as mlog_module
+        mlog = "set score 20\n"
+        mlog_module._interactive_prompt_hook = lambda prompt: ""
+        try:
+            code, stdout, stderr = self._run_cli_capture(["decompile"], stdin_data=mlog, is_tty=True)
+        finally:
+            mlog_module._interactive_prompt_hook = None
+
+        self.assertEqual(code, 0)
+        self.assertIn("score = 20", stdout)
+        self.assertIn("Enter output file path (.py) [press Enter to print to stdout]:", stderr)
+
+    def test_interactive_save_prompt_skipped_when_output_flag_provided(self):
+        """When -o is already passed, the interactive prompt is not displayed and file is saved."""
+        from src import mlog as mlog_module
+        mlog = "set score 30\n"
+        hook_called = []
+        mlog_module._interactive_prompt_hook = lambda prompt: hook_called.append(True) or ""
+        with tempfile.TemporaryDirectory() as tmp:
+            target_py = os.path.join(tmp, "flag_saved.py")
+            try:
+                code, stdout, stderr = self._run_cli_capture(["decompile", "-o", target_py], stdin_data=mlog, is_tty=True)
+            finally:
+                mlog_module._interactive_prompt_hook = None
+
+            self.assertEqual(code, 0)
+            self.assertEqual(hook_called, [])
+            self.assertNotIn("Enter output file path", stderr)
+            self.assertTrue(os.path.exists(target_py))
+
+    def test_interactive_save_keyboard_interrupt_returns_130(self):
+        """Pressing Ctrl+C at the save prompt aborts decompilation cleanly with exit code 130."""
+        from src import mlog as mlog_module
+        mlog = "set score 40\n"
+        def interrupt_hook(prompt):
+            raise KeyboardInterrupt()
+        mlog_module._interactive_prompt_hook = interrupt_hook
+        try:
+            code, stdout, stderr = self._run_cli_capture(["decompile"], stdin_data=mlog, is_tty=True)
+        finally:
+            mlog_module._interactive_prompt_hook = None
+
+        self.assertEqual(code, 130)
+        self.assertIn("Decompilation aborted by user", stderr)
+
+    def test_interactive_save_os_error_reports_error_and_returns_1(self):
+        """Invalid path or permission error at save prompt reports error and returns code 1."""
+        from src import mlog as mlog_module
+        mlog = "set score 50\n"
+        mlog_module._interactive_prompt_hook = lambda prompt: "/root/forbidden/cannot_write_here.py"
+        try:
+            code, stdout, stderr = self._run_cli_capture(["decompile"], stdin_data=mlog, is_tty=True)
+        finally:
+            mlog_module._interactive_prompt_hook = None
+
+        self.assertEqual(code, 1)
+        self.assertIn("Error writing output file", stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
+

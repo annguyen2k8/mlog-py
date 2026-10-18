@@ -292,6 +292,39 @@ def _cli_compile(args: argparse.Namespace) -> int:
     return 0
 
 
+_interactive_prompt_hook: Optional[Callable[[str], str]] = None
+
+
+def _read_interactive_line(prompt: str) -> str:
+    """Prompt user interactively for a single line on stderr, handling TTY and test hooks."""
+    _cli_print(prompt, file=sys.stderr, end="", flush=True)
+
+    # 1. Testing hook takes priority if configured
+    global _interactive_prompt_hook
+    if _interactive_prompt_hook is not None:
+        return _interactive_prompt_hook(prompt)
+
+    # 2. If sys.stdin is not the real system stdin (e.g. redirected or mocked in test without hook)
+    if sys.stdin is not getattr(sys, "__stdin__", sys.stdin):
+        return ""
+
+    # 3. Real interactive terminal: read from controlling terminal device
+    try:
+        tty_path = "CONIN$" if sys.platform == "win32" else "/dev/tty"
+        with open(tty_path, "r", encoding="utf-8", errors="replace") as tty_in:
+            line = tty_in.readline()
+            return line.strip() if line else ""
+    except (KeyboardInterrupt, EOFError):
+        raise
+    except Exception:
+        # Fallback to sys.stdin if terminal device cannot be opened
+        try:
+            line = sys.stdin.readline()
+            return line.strip() if line else ""
+        except Exception:
+            return ""
+
+
 def _cli_decompile(args: argparse.Namespace) -> int:
     """Handle decompile subcommand: MLog -> Python DSL."""
     from .decompiler import decompile
@@ -304,9 +337,10 @@ def _cli_decompile(args: argparse.Namespace) -> int:
         filename = "<stdin>"
         is_tty = hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
         if is_tty:
+            eof_key = "Ctrl+Z (Enter)" if sys.platform == "win32" else "Ctrl+D"
             _cli_print(
                 "[mlog-py] Paste or enter mlog code below.\n"
-                "[mlog-py] Finish input with EOF (Ctrl+D / Ctrl+Z) or type 'EOF' on an empty line:",
+                f"[mlog-py] Finish input with EOF ({eof_key}) or type 'EOF' on an empty line:",
                 file=sys.stderr,
             )
             lines: List[str] = []
@@ -364,12 +398,30 @@ def _cli_decompile(args: argparse.Namespace) -> int:
         _cli_print("\n[mlog-py] Decompilation aborted by user.", file=sys.stderr)
         return 130
 
-    if args.output_file:
+    output_target = args.output_file
+
+    if not output_target and is_stdin and is_tty:
         try:
-            with open(args.output_file, "w", encoding="utf-8") as f:
+            save_path = _read_interactive_line(
+                "[mlog-py] Enter output file path (.py) [press Enter to print to stdout]: "
+            )
+            if save_path:
+                output_target = save_path
+        except KeyboardInterrupt:
+            _cli_print("\n[mlog-py] Decompilation aborted by user.", file=sys.stderr)
+            return 130
+
+    if output_target:
+        try:
+            parent_dir = os.path.dirname(output_target)
+            if parent_dir and not os.path.exists(parent_dir):
+                os.makedirs(parent_dir, exist_ok=True)
+            with open(output_target, "w", encoding="utf-8") as f:
                 f.write(python_code)
+            if not args.output_file:
+                _cli_print(f"[mlog-py] Saved decompiled code to '{output_target}'.", file=sys.stderr)
         except OSError as e:
-            _cli_print(f"Error writing output file '{args.output_file}': {e}", file=sys.stderr)
+            _cli_print(f"Error writing output file '{output_target}': {e}", file=sys.stderr)
             return 1
     else:
         try:

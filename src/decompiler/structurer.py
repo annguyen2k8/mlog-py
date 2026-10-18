@@ -180,11 +180,21 @@ class CFGStructurer:
 
             max_body_addr = max(b.end_address for b in loop_nodes)
             if not primary_exit:
-                # Natural exit is block immediately following max body address
-                next_addr = max_body_addr + 1
-                primary_exit = self.block_by_address.get(next_addr)
-
-            exit_addr = primary_exit.start_address if primary_exit else (max_body_addr + 1)
+                # If header jump targets >= n_instructions, it is an exit to program end
+                if (
+                    last_h
+                    and last_h.is_conditional_jump
+                    and last_h.jump_target is not None
+                    and last_h.jump_target >= self.n_instructions
+                ):
+                    exit_addr = last_h.jump_target
+                else:
+                    # Natural exit is block immediately following max body address
+                    next_addr = max_body_addr + 1
+                    primary_exit = self.block_by_address.get(next_addr)
+                    exit_addr = primary_exit.start_address if primary_exit else (max_body_addr + 1)
+            else:
+                exit_addr = primary_exit.start_address
 
             loop_info = LoopInfo(
                 id=loop_counter,
@@ -318,7 +328,14 @@ class CFGStructurer:
                 has_exit_jump = (
                     header_instr
                     and header_instr.is_conditional_jump
-                    and header_instr.jump_target == loop.exit_address
+                    and (
+                        header_instr.jump_target == loop.exit_address
+                        or (
+                            header_instr.jump_target is not None
+                            and header_instr.jump_target >= self.n_instructions
+                            and loop.exit_address >= self.n_instructions
+                        )
+                    )
                 )
 
                 if has_exit_jump:
@@ -402,6 +419,40 @@ class CFGStructurer:
                 )
                 if unhandled_pre_nodes:
                     body_nodes = unhandled_pre_nodes + body_nodes
+
+                # Bottom-tested loop (do-while) support:
+                # If loop has no header exit jump and its latch is conditional (jump header cond),
+                # the loop repeats while latch condition is TRUE.
+                # When latch condition is FALSE, loop exits (falls through to loop.exit_address).
+                # In Python while True:, this is represented as: if not (latch_cond): break
+                latch_instr = getattr(latch_block, "last_instruction", None)
+                if (
+                    not has_exit_jump
+                    and latch_instr
+                    and latch_instr.is_conditional_jump
+                    and latch_instr.jump_target == loop.header_address
+                ):
+                    cond_str_break = condition_to_python(
+                        latch_instr.jump_condition or "always",
+                        latch_instr.args[2] if len(latch_instr.args) > 2 else "0",
+                        latch_instr.args[3] if len(latch_instr.args) > 3 else "0",
+                        invert=True,
+                    )
+                    cond_expr_break = condition_to_expr(
+                        latch_instr.jump_condition or "always",
+                        latch_instr.args[2] if len(latch_instr.args) > 2 else "0",
+                        latch_instr.args[3] if len(latch_instr.args) > 3 else "0",
+                        invert=True,
+                    )
+                    break_if = IfNode(
+                        condition_str=cond_str_break,
+                        then_body=[BreakNode(loop_id=loop.id, source_addresses=[latch_instr.address])],
+                        else_body=[],
+                        condition_expr=cond_expr_break,
+                        source_addresses=[latch_instr.address],
+                    )
+                    body_nodes.append(break_if)
+
                 if not body_nodes:
                     body_nodes = [PassNode()]
 
@@ -426,7 +477,7 @@ class CFGStructurer:
                 continue
 
             # ---------------------------------------------------------------
-            # Pattern B: Break & Continue
+            # Pattern B: Break & Continue (Unconditional)
             # ---------------------------------------------------------------
             if instr.is_unconditional_jump and instr.jump_target is not None:
                 target = instr.jump_target
@@ -439,15 +490,19 @@ class CFGStructurer:
                         curr_addr += 1
                         continue
 
-                    # Break: targets innermost loop exit
-                    if target == innermost_loop.exit_address:
+                    # Break: targets innermost loop exit or program end
+                    if target == innermost_loop.exit_address or (
+                        target >= self.n_instructions and innermost_loop.exit_address >= self.n_instructions
+                    ):
                         nodes.append(BreakNode(loop_id=innermost_loop.id, source_addresses=[instr.address]))
                         curr_addr += 1
                         continue
 
                     # Target outer loop? Multi-level break/continue not supported in Python
                     for outer_loop in loop_stack[:-1]:
-                        if target in (outer_loop.header_address, outer_loop.exit_address):
+                        if target in (outer_loop.header_address, outer_loop.exit_address) or (
+                            target >= self.n_instructions and outer_loop.exit_address >= self.n_instructions
+                        ):
                             nodes.append(
                                 UnstructuredNode(
                                     reason=f"Multi-level jump to outer loop at address {target}",
@@ -475,11 +530,87 @@ class CFGStructurer:
                 continue
 
             # ---------------------------------------------------------------
-            # Pattern C: Conditional Branch (If / If-Else / Elif)
+            # Pattern C: Conditional Branch (If / If-Else / Elif) & Conditional Break/Continue
             # ---------------------------------------------------------------
             if instr.is_conditional_jump and instr.jump_target is not None:
                 jump_target = instr.jump_target
                 fallthrough = curr_addr + 1
+
+                # Check if this conditional jump is a loop continue or break statement
+                if loop_stack:
+                    innermost_loop = loop_stack[-1]
+                    if jump_target == innermost_loop.header_address:
+                        # Conditional continue: if condition: continue
+                        cond_str = condition_to_python(
+                            instr.jump_condition or "always",
+                            instr.args[2] if len(instr.args) > 2 else "0",
+                            instr.args[3] if len(instr.args) > 3 else "0",
+                            invert=False,
+                        )
+                        cond_expr = condition_to_expr(
+                            instr.jump_condition or "always",
+                            instr.args[2] if len(instr.args) > 2 else "0",
+                            instr.args[3] if len(instr.args) > 3 else "0",
+                            invert=False,
+                        )
+                        nodes.append(
+                            IfNode(
+                                condition_str=cond_str,
+                                then_body=[ContinueNode(loop_id=innermost_loop.id, source_addresses=[instr.address])],
+                                else_body=[],
+                                condition_expr=cond_expr,
+                                source_addresses=[instr.address],
+                            )
+                        )
+                        curr_addr += 1
+                        continue
+
+                    if jump_target == innermost_loop.exit_address or (
+                        jump_target >= self.n_instructions and innermost_loop.exit_address >= self.n_instructions
+                    ):
+                        # Conditional break: if condition: break
+                        cond_str = condition_to_python(
+                            instr.jump_condition or "always",
+                            instr.args[2] if len(instr.args) > 2 else "0",
+                            instr.args[3] if len(instr.args) > 3 else "0",
+                            invert=False,
+                        )
+                        cond_expr = condition_to_expr(
+                            instr.jump_condition or "always",
+                            instr.args[2] if len(instr.args) > 2 else "0",
+                            instr.args[3] if len(instr.args) > 3 else "0",
+                            invert=False,
+                        )
+                        nodes.append(
+                            IfNode(
+                                condition_str=cond_str,
+                                then_body=[BreakNode(loop_id=innermost_loop.id, source_addresses=[instr.address])],
+                                else_body=[],
+                                condition_expr=cond_expr,
+                                source_addresses=[instr.address],
+                            )
+                        )
+                        curr_addr += 1
+                        continue
+
+                    # Check outer loop targets
+                    is_outer_jump = False
+                    for outer_loop in loop_stack[:-1]:
+                        if jump_target in (outer_loop.header_address, outer_loop.exit_address) or (
+                            jump_target >= self.n_instructions and outer_loop.exit_address >= self.n_instructions
+                        ):
+                            nodes.append(
+                                UnstructuredNode(
+                                    reason=f"Multi-level conditional jump to outer loop at address {jump_target}",
+                                    instructions=[instr],
+                                    defined_variables=self.defined_variables,
+                                )
+                            )
+                            curr_addr += 1
+                            is_outer_jump = True
+                            break
+                    if is_outer_jump:
+                        continue
 
                 # Backward jump not handled as a loop -> Unstructured
                 if jump_target <= curr_addr:
@@ -492,6 +623,78 @@ class CFGStructurer:
                     )
                     curr_addr += 1
                     continue
+
+                # If jump_target is outside the current scope boundary [start_address, stop_address):
+                if jump_target > stop_address:
+                    if jump_target <= stop_address + 1:
+                        # Exiting to enclosing branch boundary/else entry (e.g. short-circuit AND)
+                        cond_str = condition_to_python(
+                            instr.jump_condition or "always",
+                            instr.args[2] if len(instr.args) > 2 else "0",
+                            instr.args[3] if len(instr.args) > 3 else "0",
+                            invert=True,
+                        )
+                        cond_expr = condition_to_expr(
+                            instr.jump_condition or "always",
+                            instr.args[2] if len(instr.args) > 2 else "0",
+                            instr.args[3] if len(instr.args) > 3 else "0",
+                            invert=True,
+                        )
+                        sub_then = self._structure_range(
+                            start_address=fallthrough,
+                            stop_address=stop_address,
+                            loop_stack=loop_stack,
+                        )
+                        if not sub_then:
+                            sub_then = [PassNode()]
+                        nodes.append(
+                            IfNode(
+                                condition_str=cond_str,
+                                then_body=sub_then,
+                                else_body=[],
+                                condition_expr=cond_expr,
+                                source_addresses=[instr.address],
+                            )
+                        )
+                        curr_addr = stop_address
+                        continue
+
+                    if jump_target >= self.n_instructions and not loop_stack:
+                        # Top-level jump to end of program: if cond: end()
+                        cond_str = condition_to_python(
+                            instr.jump_condition or "always",
+                            instr.args[2] if len(instr.args) > 2 else "0",
+                            instr.args[3] if len(instr.args) > 3 else "0",
+                            invert=False,
+                        )
+                        cond_expr = condition_to_expr(
+                            instr.jump_condition or "always",
+                            instr.args[2] if len(instr.args) > 2 else "0",
+                            instr.args[3] if len(instr.args) > 3 else "0",
+                            invert=False,
+                        )
+                        nodes.append(
+                            IfNode(
+                                condition_str=cond_str,
+                                then_body=[InstructionNode(MlogInstruction(address=instr.address, opcode="end", args=[]), defined_variables=self.defined_variables)],
+                                else_body=[],
+                                condition_expr=cond_expr,
+                                source_addresses=[instr.address],
+                            )
+                        )
+                        curr_addr += 1
+                        continue
+                    else:
+                        # Cannot safely structure forward jump exceeding enclosing scope boundary without duplicating blocks
+                        nodes.append(
+                            UnstructuredNode(
+                                reason=f"Conditional jump to address {jump_target} outside enclosing scope (stop_address={stop_address})",
+                                instructions=[instr],
+                                defined_variables=self.defined_variables,
+                            )
+                        )
+                        curr_addr += 1
+                        continue
 
                 # C.1: Empty Branch (jump_target == fallthrough)
                 if jump_target == fallthrough:
@@ -532,6 +735,7 @@ class CFGStructurer:
                     last_then_instr.is_unconditional_jump
                     and last_then_instr.jump_target is not None
                     and last_then_instr.jump_target > jump_target
+                    and last_then_instr.jump_target <= stop_address
                 )
                 if has_else and loop_stack:
                     innermost = loop_stack[-1]
@@ -598,6 +802,7 @@ class CFGStructurer:
                     )
                     curr_addr = jump_target
                     continue
+
 
             # ---------------------------------------------------------------
             # Pattern D: Linear Instruction (set, op, wait, stop, end, etc.)
