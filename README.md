@@ -43,47 +43,37 @@ Use the `mlog-py compile` CLI:
 # Compile to stdout (auto-copies to clipboard by default)
 mlog-py compile input.py
 
-# Compile and save to file (also copies to clipboard)
+# Compile and save to file
 mlog-py compile input.py -o output.mlog
-
-# Compile without clipboard copy
-mlog-py compile input.py --no-clipboard
-
-# Convert Python '# comments' into Mindustry 'print' statements
-mlog-py compile input.py --comments-to-print
-
-# Debug mode: view IR instructions and resolved label addresses
-mlog-py compile input.py --debug
-
-# Reject 'def' definitions and 'return' statements (functions allowed by default)
-mlog-py compile input.py --no-functions
 ```
+
+**Common Compiler Flags**:
+- `-o, --output <file>`: Save compiled bytecode to a file instead of stdout.
+- `--no-clipboard`: Disable automatic copying of compiled MLog to clipboard (auto-copy is enabled by default; overridable via `MLOG_NO_CLIPBOARD=1`).
+- `--comments-to-print`: Convert Python `# comments` into runtime Mindustry `print` instructions.
+- `--no-functions`: Reject `def` function definitions and `return` statements (functions are allowed by default).
+- `--debug`: Print IR instructions, source locations, and resolved label addresses.
 
 ### 2. Decompile MLog to Python DSL
 
 Use the `mlog-py decompile` CLI:
 
 ```bash
-# Decompile from file to stdout
-mlog-py decompile input.mlog
-
-# Decompile and save to file
+# Decompile from file (prints to stdout, or use -o to save)
 mlog-py decompile input.mlog -o output.py
 
-# Simplify expressions & fold single-use temporaries via Dataflow analysis
-mlog-py decompile input.mlog --simplify-expressions
-
-# Piped / stream input from stdin
+# Stream / piped input from stdin
 cat input.mlog | mlog-py decompile
 mlog-py decompile - < input.mlog
 
-# Interactive paste in terminal (press Ctrl+D or type 'EOF' on an empty line)
-# Offers an interactive prompt to save to a custom file or print to stdout
+# Interactive paste in terminal (finish with Ctrl+D or type 'EOF' on an empty line)
 mlog-py decompile
-
-# Include instruction addresses in comments (# mlog[<addr>])
-mlog-py decompile input.mlog --debug
 ```
+
+**Common Decompiler Flags**:
+- `-o, --output <file>`: Output Python file path (`.py`). Prints to stdout if omitted (or prompts interactively in paste mode).
+- `--debug`: Include instruction provenance comments (`# mlog[<addr>]`).
+- **Dataflow Simplification** *(built-in)*: Expression inlining, constant folding, and alias elimination (previously noted as `--simplify-expressions`) are performed automatically by default.
 
 Or via Python API:
 
