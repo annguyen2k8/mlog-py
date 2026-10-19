@@ -142,7 +142,10 @@ def get_argument_semantic_role(
             return ArgumentSemanticRole.KEYWORD_OR_ENUM
         if action == "getBlock" and arg_idx in (3, 4, 5):
             return ArgumentSemanticRole.VARIABLE_DEF
+        if action == "within" and arg_idx == 4:
+            return ArgumentSemanticRole.VARIABLE_DEF
         return ArgumentSemanticRole.OPERAND
+
 
     # Polymorphic opcode: cutscene
     if opcode == "cutscene":
@@ -235,7 +238,10 @@ def get_instruction_dest_vars(instr: MlogInstruction) -> List[str]:
         return [args[4], args[5], args[6], args[7]]
     if op == "ucontrol" and len(args) >= 6 and args[0] == "getBlock":
         return [args[3], args[4], args[5]]
+    if op == "ucontrol" and len(args) >= 5 and args[0] == "within":
+        return [args[4]]
     if op == "unpackcolor" and len(args) >= 4:
+
         return [args[0], args[1], args[2], args[3]]
     return []
 
@@ -370,19 +376,18 @@ def format_semantic_argument(
         return "None"
 
     # 5. Determine semantic role from metadata SSOT
+    if defined_variables is not None and arg in defined_variables:
+        return arg
+
     role = get_argument_semantic_role(opcode, arg_idx, args)
 
     if role == ArgumentSemanticRole.BLOCK_OR_DEVICE:
-        # If the argument is defined as a variable in the program,
-        # emit as unquoted identifier.
-        # Otherwise, it is a named hardware link / device reference -> emit as string literal!
-        if defined_variables is not None and arg in defined_variables:
-            return arg
         return quote_string_literal(arg)
 
     if role == ArgumentSemanticRole.KEYWORD_OR_ENUM:
         # Keywords, operations, modes, and enum literals must always be string literals in Python DSL
         return quote_string_literal(arg)
+
 
     # For general OPERAND:
     if arg.isidentifier() and not arg.startswith("@"):

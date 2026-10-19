@@ -216,8 +216,9 @@ drawflush display1
         lines = code.splitlines()
         self.assertEqual(lines[0], "from mlog import draw, drawflush")
         self.assertEqual(lines[1], "")
-        self.assertEqual(lines[2], 'draw("clear", 0, 0, 0, 0, 0, 0)')
+        self.assertEqual(lines[2], "draw.clear(0, 0, 0)")
         self.assertEqual(lines[3], 'drawflush("display1")')
+
 
         # Instruction 0 (draw clear) must map to line 3
         draw_line = sm.mlog_to_python(0)

@@ -25,12 +25,13 @@ The compiler targets a strict, strongly-typed subset of Python designed for Mind
 | **Intrinsics** | `sensor()`, `control()`, `draw()`, `read()`, `write()`, etc. | Canonical Mindustry Logic instructions |
 | **Memory Arrays** | `arr = Array("cell1", size=10)`, `arr[i]`, `arr[i] = val`, `len(arr)` | Contiguous static allocation, `read`, `write` |
 | **Augmented Assignments** | `x += 1`, `arr[i] += 5`, `x *= 2`, `flags[i] &= True` | In-place update `op add x x 1`, single-offset `read -> op -> write` |
+| **Named Constants (`IntEnum`)** | `from enum import IntEnum; class State(IntEnum): ...` | Compile-time constant substitution (zero runtime overhead) |
 
 ### Explicitly Rejected Constructs
 
 Features incompatible with Mindustry's flat processor memory model are rejected during AST validation:
 
-- **Classes & Objects**: `class`, inheritance, methods
+- **Classes & Objects**: `class` (except `class MyEnum(IntEnum)` for compile-time integer constants), inheritance, methods
 - **Data Collections**: Lists (`[]`), Dictionaries (`{}`), Sets, Tuples (Dynamic collections are unsupported; use fixed-size `Array` mapped to hardware memory blocks instead)
 - **Container Iteration**: `for ... in <collection>` (only `range(...)` is supported), list comprehensions, generator expressions
 - **Exceptions**: `try/except`, `raise`, `finally`
@@ -410,7 +411,9 @@ The compiler implements a **Callable Namespace Object** pattern for logic displa
 from mlog import draw
 
 # 1. Modern method syntax with IDE autocomplete
+draw.clear()                                # Emits: draw clear 0 0 0 0 0 0 (default black: r=0, g=0, b=0)
 draw.clear(0, 0, 0)                          # Emits: draw clear 0 0 0 0 0 0
+draw.clear(255, 0, 0, 255)                   # Emits: draw clear 255 0 0 0 0 0 (DSL accepts 'a' for RGBA convenience; opcode is RGB only)
 draw.color(255, 128, 0)                      # Emits: draw color 255 128 0 255 0 0 (default alpha=255)
 draw.color(255, 128, 0, a=128)               # Emits: draw color 255 128 0 128 0 0
 draw.stroke(2)                               # Emits: draw stroke 2 0 0 0 0
@@ -437,7 +440,7 @@ draw("line", 0, 0, 80, 80)
 
 | Method | Parameters & Defaults | Emitted MLog Opcode | Notes |
 | :--- | :--- | :--- | :--- |
-| `draw.clear(r, g, b)` | `r, g, b` | `draw clear r g b 0 0 0` | Clears canvas |
+| `draw.clear(r=0, g=0, b=0, a=0)` | `[r=0], [g=0], [b=0], [a=0]` | `draw clear r g b 0 0 0` | Clears canvas. DSL accepts RGBA (0..4 args) for color tuple compatibility; the compiled Mindustry opcode operates strictly on RGB without a separate alpha channel. |
 | `draw.color(r, g, b, a=255)` | `r, g, b, [a=255]` | `draw color r g b a 0 0` | RGBA color (0..255) |
 | `draw.col(color)` | `color` | `draw col color 0 0 0 0` | Packed color number |
 | `draw.stroke(width)` | `width` | `draw stroke width 0 0 0 0` | Stroke line width |
@@ -572,6 +575,36 @@ from mlog import setrate
 setrate(120)                                 # Emits: setrate 120
 ```
 
+### Named Constants (`enum.IntEnum`)
+
+The compiler supports declaring typed integer named constants via Python's standard `enum.IntEnum`:
+
+```python
+from enum import IntEnum
+
+class State(IntEnum):
+    IDLE = 0
+    SEARCHING = 1
+    MINING = 2
+
+state = State.IDLE
+if state == State.MINING:
+    print("Mining active")
+```
+
+- **Compile-Time Substitution**:
+  - Member accesses like `State.MINING` are resolved statically during AST validation and substituted with integer literal values (`2`).
+  - No runtime enum objects, classes, or helper functions are emitted into MLog bytecode, incurring **zero execution or instruction overhead**.
+- **Supported Declaration Formats**:
+  - `from enum import IntEnum` or `import enum` (with `class MyEnum(enum.IntEnum)`).
+  - Explicit integer values (`IDLE = 0`, `ERROR = -1`).
+  - Static compile-time constant expressions (`NEXT = BASE + 1`, bitwise flags `FLAG_A = 1 << 0`).
+- **Validation & Safety Invariants**:
+  - Only `IntEnum` subclasses are permitted; general classes, `enum.Enum`, `Flag`, `StrEnum`, or custom methods/attributes are strictly rejected at compile time.
+  - Member values must evaluate statically to integers (floats, strings, or dynamic expressions are rejected).
+  - Undefined member references (e.g. `State.UNKNOWN`) trigger compile-time `CompileError`.
+  - Duplicate member names within the same enum raise compile-time validation errors.
+
 ---
 
 ## 2. Compilation Pipeline Passes
@@ -688,6 +721,9 @@ mlog-py compile input.py --debug
 # Disable compile-time constant folding
 mlog-py compile input.py -o output.mlog --no-fold-constants
 
+# Convert Python '# comments' into Mindustry 'print' statements
+mlog-py compile input.py --comments-to-print
+
 # Reject 'def' definitions and 'return' statements (functions are allowed by default)
 mlog-py compile input.py --no-functions
 
@@ -715,6 +751,7 @@ from src.mlog import compile_py
 
 python_source = """
 from mlog import printflush
+# Compute and print message
 x = (10 + 20) * 2
 print(x)
 printflush("message1")
@@ -733,4 +770,7 @@ result_unfolded = compile_py(python_source, fold_constants=False)
 
 # Compilation with functions enabled
 result_fn = compile_py(python_source, allow_functions=True)
+
+# Compilation with comments translated to print instructions
+result_comments = compile_py(python_source, comments_to_print=True)
 ```

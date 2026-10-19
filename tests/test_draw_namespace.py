@@ -190,8 +190,9 @@ class TestDrawErrorHandling(unittest.TestCase):
 
     def test_clear_invalid_arity(self):
         with self.assertRaises(CompileError) as ctx:
-            compile_py("from mlog import draw\ndraw.clear(1, 2)\n")
-        self.assertIn("expected draw.clear(r, g, b)", str(ctx.exception))
+            compile_py("from mlog import draw\ndraw.clear(1, 2, 3, 4, 5)\n")
+        self.assertIn("invalid arguments for draw.clear", str(ctx.exception))
+
 
     def test_line_invalid_arity(self):
         with self.assertRaises(CompileError) as ctx:

@@ -68,17 +68,30 @@ class ASTValidator(ast.NodeVisitor):
         self.filename = filename
         self.allow_functions = allow_functions
         self.defined_functions: Set[str] = set()
+        from .constants import NamedConstantRegistry
+        self.constant_registry = NamedConstantRegistry()
+        self._module_classes: Set[ast.ClassDef] = set()
 
     def error(self, msg: str, node: ast.AST):
         loc = get_loc(node, self.filename)
         raise CompileError(msg, loc)
 
     def visit_Module(self, node: ast.Module):
+        from .constants import extract_int_enums
+        for stmt in node.body:
+            if isinstance(stmt, ast.ClassDef):
+                self._module_classes.add(stmt)
+        extract_int_enums(node, self.filename, registry=self.constant_registry)
         if self.allow_functions:
             for stmt in node.body:
                 if isinstance(stmt, ast.FunctionDef):
                     self.defined_functions.add(stmt.name)
         self.generic_visit(node)
+
+    def visit_ClassDef(self, node: ast.ClassDef):
+        if node not in self._module_classes:
+            self.error("IntEnum class definitions are only allowed at module level", node)
+        # ClassDef has already been validated and registered by extract_int_enums at module level
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         if not self.allow_functions:
@@ -105,6 +118,8 @@ class ASTValidator(ast.NodeVisitor):
         if node_type in UNSUPPORTED_NAMES:
             if self.allow_functions and node_type in (ast.FunctionDef, ast.Return):
                 pass
+            elif node_type is ast.ClassDef:
+                pass
             else:
                 name = UNSUPPORTED_NAMES[node_type]
                 self.error(f"unsupported Python feature: {name}", node)
@@ -124,6 +139,7 @@ class ASTValidator(ast.NodeVisitor):
             ast.Import,
             ast.ImportFrom,
             ast.alias,
+            ast.ClassDef,
             # Expressions
             ast.Constant,
             ast.Name,
@@ -159,10 +175,22 @@ class ASTValidator(ast.NodeVisitor):
 
     def visit_Import(self, node: ast.Import):
         for alias in node.names:
+            if alias.name == "enum":
+                if alias.asname is not None and alias.asname != alias.name:
+                    self.error(f"import aliasing ('as {alias.asname}') is not supported", node)
+                continue
             if alias.name not in ("mlog", "src.mlog", "mlog_registry", "src.mlog_registry"):
                 self.error("unsupported Python feature: import statement", node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom):
+        if node.module == "enum":
+            for alias in node.names:
+                if alias.name not in ("IntEnum", "*"):
+                    self.error(f"cannot import name '{alias.name}' from 'enum': only 'IntEnum' is supported in MVP", node)
+                if alias.asname is not None and alias.asname != alias.name:
+                    self.error(f"import aliasing ('as {alias.asname}') is not supported", node)
+            return
+
         if node.module not in ("mlog", "src.mlog", "mlog_registry", "src.mlog_registry"):
             self.error("unsupported Python feature: from ... import statement", node)
 
@@ -257,10 +285,19 @@ class ASTValidator(ast.NodeVisitor):
                 return
             if node.value.id in ENUM_CLASS_TO_REGISTRY:
                 return
+            if self.constant_registry.has_namespace(node.value.id):
+                if not self.constant_registry.has_member(node.value.id, node.attr):
+                    self.error(f"enum '{node.value.id}' has no member '{node.attr}'", node)
+                return
         self.error(
-            f"attribute access is only supported on DSL enum types ({', '.join(sorted(ENUM_CLASS_TO_REGISTRY.keys()))}), 'Vars', 'draw', 'ucontrol', 'ulocate', 'cutscene', 'sound', 'music', 'marker', and 'op'",
+            f"attribute access is only supported on DSL enum types ({', '.join(sorted(ENUM_CLASS_TO_REGISTRY.keys()))}), user-defined IntEnums, 'Vars', 'draw', 'ucontrol', 'ulocate', 'cutscene', 'sound', 'music', 'marker', and 'op'",
             node,
         )
+
+    def visit_Name(self, node: ast.Name):
+        if self.constant_registry.has_namespace(node.id):
+            self.error(f"enum '{node.id}' cannot be used as a standalone value", node)
+        self.generic_visit(node)
 
     def _check_single_target_ulocate_call(self, node: ast.Assign, target: ast.Name) -> None:
         call = node.value
@@ -368,6 +405,8 @@ class ASTValidator(ast.NodeVisitor):
                 self.error(f"unknown Mindustry built-in variable: 'Vars.{target.attr}'", target)
             if token.readonly:
                 self.error(f"cannot assign to read-only built-in variable 'Vars.{target.attr}' ('{token.token}')", target)
+        elif isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and self.constant_registry.has_namespace(target.value.id):
+            self.error(f"cannot assign to enum member '{target.value.id}.{target.attr}'", target)
         elif isinstance(target, (ast.Tuple, ast.List)):
             self._validate_unpacking_assign(node, target)
         else:
@@ -388,6 +427,8 @@ class ASTValidator(ast.NodeVisitor):
                 self.error(f"unknown Mindustry built-in variable: 'Vars.{node.target.attr}'", node.target)
             if token.readonly:
                 self.error(f"cannot assign to read-only built-in variable 'Vars.{node.target.attr}' ('{token.token}')", node.target)
+        elif isinstance(node.target, ast.Attribute) and isinstance(node.target.value, ast.Name) and self.constant_registry.has_namespace(node.target.value.id):
+            self.error(f"cannot assign to enum member '{node.target.value.id}.{node.target.attr}'", node.target)
         else:
             self.error(
                 "augmented assignment target must be a simple variable name or array index (unpacking not supported)",
@@ -561,4 +602,5 @@ def parse_and_validate(
 
     validator = ASTValidator(filename, allow_functions=allow_functions)
     validator.visit(tree)
+    tree.constant_registry = validator.constant_registry
     return tree

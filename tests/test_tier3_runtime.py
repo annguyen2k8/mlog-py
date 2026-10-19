@@ -2014,8 +2014,8 @@ control(ControlProperty.ENABLED, switch1, 0)
 
         # Roundtrip back via decompiler
         decompiled = decompile(compile_res.mlog)
-        self.assertIn('draw("clear", 0, 0, 0, 0, 0, 0)', decompiled)
-        self.assertIn('draw("color", 255, 255, 255, 128, 0, 0)', decompiled)
+        self.assertIn("draw.clear(0, 0, 0)", decompiled)
+        self.assertIn("draw.color(255, 255, 255, 128)", decompiled)
         self.assertIn('drawflush("display1")', decompiled)
         self.assertIn('control("enabled", "switch1", 0, 0, 0, 0)', decompiled)
 
@@ -2430,12 +2430,12 @@ ucontrol.unbind()
         # Decompile back and verify roundtrip fidelity
         decompiled = decompile(compile_res.mlog)
         self.assertIn('ubind("@flare")', decompiled)
-        self.assertIn('ucontrol("move", 50, 50, 0, 0, 0)', decompiled)
-        self.assertIn('ucontrol("boost", True, 0, 0, 0, 0)', decompiled)
-        self.assertIn('ucontrol("flag", 12345, 0, 0, 0, 0)', decompiled)
+        self.assertIn("ucontrol.move(50, 50)", decompiled)
+        self.assertIn("ucontrol.boost(True)", decompiled)
+        self.assertIn("ucontrol.flag(12345)", decompiled)
         self.assertIn('target = radar("enemy", "any", "any", "distance", "duo1", 1)', decompiled)
-        self.assertIn('ucontrol("targetp", target, 1, 0, 0, 0)', decompiled)
-        self.assertIn('ucontrol("unbind", 0, 0, 0, 0, 0)', decompiled)
+        self.assertIn("ucontrol.targetp(target, 1)", decompiled)
+        self.assertIn("ucontrol.unbind()", decompiled)
 
 
     def test_ucontrol_item_take_transfers_items(self):

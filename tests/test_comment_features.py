@@ -347,7 +347,7 @@ class TestDrawPrintDecompilerRoundtrip(unittest.TestCase):
         from src.decompiler import decompile
         mlog_in = "draw line 0 0 10 10 0 0\n"
         py_code = decompile(mlog_in)
-        self.assertIn('draw("line", 0, 0, 10, 10, 0, 0)', py_code)
+        self.assertIn("draw.line(0, 0, 10, 10)", py_code)
         recompiled = compile_py(py_code).mlog
         self.assertEqual(recompiled, mlog_in)
 

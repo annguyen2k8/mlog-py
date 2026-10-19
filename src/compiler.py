@@ -38,6 +38,7 @@ from .mlog_registry import (
 )
 from .mlog_registry_data import BUILTIN_CONSTANTS
 from .allocator import ArraySymbol, MemoryBlockAllocator
+from .constants import NamedConstantRegistry
 from .parser import get_loc, parse_and_validate
 
 
@@ -316,9 +317,19 @@ class ConstantFolder(ast.NodeTransformer):
     - Never modifies control flow or performs dead code elimination.
     """
 
-    def __init__(self, filename: str = "<stdin>"):
+    def __init__(self, filename: str = "<stdin>", constant_registry: Optional[NamedConstantRegistry] = None):
         super().__init__()
         self.filename = filename
+        self.constant_registry = constant_registry
+
+    def visit_Attribute(self, node: ast.Attribute):
+        self.generic_visit(node)
+        if isinstance(node.value, ast.Name) and self.constant_registry is not None:
+            if self.constant_registry.has_namespace(node.value.id):
+                val = self.constant_registry.get_value(node.value.id, node.attr)
+                if val is not None:
+                    return ast.copy_location(ast.Constant(value=val), node)
+        return node
 
     def visit_UnaryOp(self, node: ast.UnaryOp):
         self.generic_visit(node)
@@ -518,9 +529,13 @@ class ConstantFolder(ast.NodeTransformer):
         return node
 
 
-def fold_constants(tree: ast.AST, filename: str = "<stdin>") -> ast.AST:
+def fold_constants(
+    tree: ast.AST,
+    filename: str = "<stdin>",
+    constant_registry: Optional[NamedConstantRegistry] = None,
+) -> ast.AST:
     """Fold pure compile-time constant expressions in an AST."""
-    return ConstantFolder(filename).visit(tree)
+    return ConstantFolder(filename, constant_registry=constant_registry).visit(tree)
 
 
 class Compiler:
@@ -531,11 +546,14 @@ class Compiler:
         filename: str = "<stdin>",
         allow_functions: bool = False,
         fold_constants: bool = True,
+        comments_to_print: bool = False,
     ):
         self.filename = filename
         self.allow_functions = allow_functions
         self.fold_constants = fold_constants
+        self.comments_to_print = comments_to_print
         self.instructions: List[IRNode] = []
+
         self._temp_counter = 0
         self._label_counter = 0
         self._loop_stack: List[Tuple[str, str]] = []  # (start_label, end_label)
@@ -543,6 +561,7 @@ class Compiler:
         self._current_function: Optional[str] = None
         self.allocator = MemoryBlockAllocator()
         self._pre_allocated_arrays: Set[str] = set()
+        self.constant_registry = NamedConstantRegistry()
 
     def new_temp(self, loc: Optional[SourceLocation] = None) -> str:
         """Allocate a new deterministic temporary variable name."""
@@ -915,7 +934,7 @@ class Compiler:
         return dest
 
     def compile_attribute(self, node: ast.Attribute) -> str:
-        """Compile a DSL Enum or Vars attribute access, e.g. SensorProperty.HEALTH or Vars.tick."""
+        """Compile a DSL Enum, user-defined IntEnum, or Vars attribute access, e.g. SensorProperty.HEALTH, State.MINING, or Vars.tick."""
         loc = self.loc(node)
         if isinstance(node.value, ast.Name):
             cls_name = node.value.id
@@ -930,6 +949,11 @@ class Compiler:
                 if entry is None:
                     self.error(f"unknown {cls_name} attribute '{node.attr}'", node)
                 return entry.mlog_token
+            if self.constant_registry.has_namespace(cls_name):
+                val = self.constant_registry.get_value(cls_name, node.attr)
+                if val is not None:
+                    return str(val)
+                self.error(f"enum '{cls_name}' has no member '{node.attr}'", node)
         self.error(f"unsupported attribute access '{node.attr}'", node)
 
     def validate_arg(
@@ -1373,11 +1397,18 @@ class Compiler:
             if len(args) != 1:
                 self.error("invalid arguments for ubind: expected ubind(unit_type)", call)
             unit_arg = self.format_intrinsic_arg(args[0], is_ident=True)
-            unit_str = self.validate_arg(unit_arg, REG_UNIT_TYPES, self.loc(args[0]))
+            arg0 = args[0]
+            if isinstance(arg0, ast.Constant) or (isinstance(arg0, ast.Attribute) and isinstance(arg0.value, ast.Name) and arg0.value.id == "Units"):
+                unit_str = self.validate_arg(unit_arg, REG_UNIT_TYPES, self.loc(args[0]))
+            elif isinstance(unit_arg, str) and (unit_arg.startswith("@") or unit_arg in REG_UNIT_TYPES.by_token or unit_arg.upper().replace("-", "_") in REG_UNIT_TYPES.by_source_name):
+                unit_str = self.validate_arg(unit_arg, REG_UNIT_TYPES, self.loc(args[0]))
+            else:
+                unit_str = str(unit_arg)
             self.instructions.append(
                 IRRaw(opcode="ubind", args=[unit_str], loc=loc)
             )
             return "0"
+
 
         elif func_name == "ucontrol":
             if len(args) < 1 or len(args) > 6:
@@ -2309,15 +2340,44 @@ class Compiler:
 
         # Mindustry v160.7 Draw sub-commands mapping
         if method_name == "clear":
-            if len(args) != 3 or call.keywords:
-                self.error("invalid arguments for draw.clear: expected draw.clear(r, g, b)", call)
-            r = str(self.format_intrinsic_arg(args[0], is_ident=False))
-            g = str(self.format_intrinsic_arg(args[1], is_ident=False))
-            b = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            # draw.clear(r=0, g=0, b=0, a=0)
+            kw_map = {}
+            for kw in call.keywords:
+                if kw.arg in ("r", "g", "b", "a"):
+                    kw_map[kw.arg] = kw.value
+                else:
+                    self.error(f"invalid arguments for draw.clear: unexpected keyword argument '{kw.arg}'", kw)
+
+            if len(args) > 4:
+                self.error("invalid arguments for draw.clear: expected draw.clear([r=0, g=0, b=0, a=0])", call)
+
+            param_names = ("r", "g", "b", "a")
+            resolved_args = {}
+            for i, arg in enumerate(args):
+                p_name = param_names[i]
+                if p_name in kw_map:
+                    self.error(f"invalid arguments for draw.clear: duplicate argument '{p_name}'", call)
+                resolved_args[p_name] = arg
+
+            for p_name, val in kw_map.items():
+                resolved_args[p_name] = val
+
+            r_node = resolved_args.get("r")
+            g_node = resolved_args.get("g")
+            b_node = resolved_args.get("b")
+            a_node = resolved_args.get("a")
+
+            r = str(self.format_intrinsic_arg(r_node, is_ident=False)) if r_node is not None else "0"
+            g = str(self.format_intrinsic_arg(g_node, is_ident=False)) if g_node is not None else "0"
+            b = str(self.format_intrinsic_arg(b_node, is_ident=False)) if b_node is not None else "0"
+            if a_node is not None:
+                self.format_intrinsic_arg(a_node, is_ident=False)
+
             self.instructions.append(
                 IRRaw(opcode="draw", args=["clear", r, g, b, "0", "0", "0"], loc=loc)
             )
             return "0"
+
 
         elif method_name == "color":
             # color(r, g, b, a=255)
@@ -3516,6 +3576,9 @@ class Compiler:
             self.compile_expr(node.value, target_dest=token.token)
             return
 
+        if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and self.constant_registry.has_namespace(target.value.id):
+            self.error(f"cannot assign to enum member '{target.value.id}.{target.attr}'", target)
+
         # Case 3: Target is a simple Name
         assert isinstance(target, ast.Name)
         target_name = target.id
@@ -4205,13 +4268,31 @@ class Compiler:
                 hasattr(ast, "Ellipsis") and isinstance(stmt.value, ast.Ellipsis)
             ):
                 pass
+            elif isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
+                if self.comments_to_print:
+                    text = stmt.value.value
+                    chunks = [text[k : k + 400] for k in range(0, max(1, len(text)), 400)] if text else [""]
+                    for chunk in chunks:
+                        self.compile_expr(
+                            ast.Call(
+                                func=ast.Name(id="print", ctx=ast.Load()),
+                                args=[ast.Constant(value=chunk)],
+                                keywords=[],
+                            ),
+                            is_statement=True,
+                        )
+                else:
+                    pass
             else:
                 if isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Name) and stmt.value.func.id == "Array":
                     self.error("Array declaration must be assigned to a variable, e.g. 'a = Array(...)'", stmt)
                 self.compile_expr(stmt.value, is_statement=True)
+
         elif isinstance(stmt, ast.Pass):
             pass
         elif isinstance(stmt, (ast.Import, ast.ImportFrom)):
+            pass
+        elif isinstance(stmt, ast.ClassDef):
             pass
         elif isinstance(stmt, ast.FunctionDef):
             if not self.allow_functions:
@@ -4230,8 +4311,11 @@ class Compiler:
 
     def compile(self, tree: ast.Module) -> List[IRNode]:
         """Compile an AST module into a list of IR nodes."""
+        from .constants import extract_int_enums
+        extract_int_enums(tree, self.filename, registry=self.constant_registry)
+
         if self.fold_constants:
-            tree = fold_constants(tree, self.filename)
+            tree = fold_constants(tree, self.filename, constant_registry=self.constant_registry)
 
         self.instructions.clear()
         self._temp_counter = 0

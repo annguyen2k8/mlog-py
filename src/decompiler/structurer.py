@@ -23,7 +23,11 @@ from .expression import (
     UnaryExpr,
     parse_operand_to_expr,
 )
-from .semantics import UNARY_LOGIC_OPS, collect_program_defined_variables
+from .semantics import (
+    UNARY_LOGIC_OPS,
+    collect_program_defined_variables,
+    get_instruction_read_vars,
+)
 from .structured_ir import (
     BreakNode,
     ContinueNode,
@@ -338,6 +342,12 @@ class CFGStructurer:
                     )
                 )
 
+                # Body range: from body_start up to loop.max_body_address + 1
+                # The final instruction of the loop is the latch back-edge jump (jump header always)
+                # It is excluded from the body statements.
+                latch_block = max(loop.latches, key=lambda b: b.end_address)
+                body_stop = latch_block.end_address  # excludes latch jump at latch_block.end_address
+
                 if has_exit_jump:
                     # Inverted condition: loop executes while NOT (jump_to_exit)
                     cond_str = condition_to_python(
@@ -355,11 +365,19 @@ class CFGStructurer:
                     # Check for pre-jump instructions inside loop header (e.g. temp calculations for condition)
                     pre_instrs = loop.header.instructions[:-1]
                     unhandled_pre_nodes = []
-                    for p_instr in pre_instrs:
+
+                    # Check variables read in the loop body outside the header
+                    body_reads = set()
+                    for b in loop.blocks:
+                        for bi in b.instructions:
+                            if bi.address != header_instr.address and bi.address not in [p.address for p in pre_instrs]:
+                                body_reads.update(get_instruction_read_vars(bi, self.defined_variables))
+
+                    for p_instr in reversed(pre_instrs):
                         inlined = False
                         if p_instr.opcode == "op" and len(p_instr.args) >= 3:
                             dest = p_instr.args[1]
-                            if dest in cond_expr.variables_used and is_compiler_temporary(dest):
+                            if dest in cond_expr.variables_used and is_compiler_temporary(dest) and dest not in body_reads:
                                 op_name = p_instr.args[0]
                                 a_expr = parse_operand_to_expr(p_instr.args[2])
                                 b_expr = parse_operand_to_expr(p_instr.args[3]) if len(p_instr.args) > 3 else ConstantExpr(0)
@@ -389,36 +407,64 @@ class CFGStructurer:
                                     inlined = True
                         elif p_instr.opcode == "set" and len(p_instr.args) == 2:
                             dest = p_instr.args[0]
-                            if dest in cond_expr.variables_used and is_compiler_temporary(dest):
+                            if dest in cond_expr.variables_used and is_compiler_temporary(dest) and dest not in body_reads:
                                 src_expr = parse_operand_to_expr(p_instr.args[1])
                                 cond_expr = substitute_variable(cond_expr, dest, src_expr)
                                 cond_str = cond_expr.to_python()
                                 inlined = True
                         if not inlined:
-                            unhandled_pre_nodes.append(InstructionNode(p_instr, defined_variables=self.defined_variables))
+                            unhandled_pre_nodes.insert(0, InstructionNode(p_instr, defined_variables=self.defined_variables))
 
-                    # Loop body starts right after the header block
                     body_start = loop.header.end_address + 1
+
+                    if not unhandled_pre_nodes:
+                        # Clean top-tested while loop: while not (exit_cond):
+                        body_nodes = self._structure_range(
+                            start_address=body_start,
+                            stop_address=body_stop,
+                            loop_stack=loop_stack + [loop],
+                        )
+                    else:
+                        # Pre-instructions run before condition check on each iteration.
+                        # Represent as while True: with break on exit condition to guarantee
+                        # correct evaluation order and prevent undefined variable access.
+                        cond_str = "True"
+                        cond_expr = ConstantExpr(True)
+                        exit_cond_str = condition_to_python(
+                            header_instr.jump_condition or "always",
+                            header_instr.args[2] if len(header_instr.args) > 2 else "0",
+                            header_instr.args[3] if len(header_instr.args) > 3 else "0",
+                            invert=False,
+                        )
+                        exit_cond_expr = condition_to_expr(
+                            header_instr.jump_condition or "always",
+                            header_instr.args[2] if len(header_instr.args) > 2 else "0",
+                            header_instr.args[3] if len(header_instr.args) > 3 else "0",
+                            invert=False,
+                        )
+                        break_node = IfNode(
+                            condition_str=exit_cond_str,
+                            then_body=[BreakNode(loop_id=loop.id, source_addresses=[header_instr.address])],
+                            else_body=[],
+                            condition_expr=exit_cond_expr,
+                            source_addresses=[header_instr.address],
+                        )
+                        rest_body = self._structure_range(
+                            start_address=body_start,
+                            stop_address=body_stop,
+                            loop_stack=loop_stack + [loop],
+                        )
+                        body_nodes = unhandled_pre_nodes + [break_node] + rest_body
                 else:
-                    # Infinite loop (while True:) or loop with condition at latch
+                    # Infinite loop (while True:) or bottom-tested loop with condition at latch
                     cond_str = "True"
                     cond_expr = ConstantExpr(True)
                     body_start = curr_addr
-                    unhandled_pre_nodes = []
-
-                # Body range: from body_start up to loop.max_body_address + 1
-                # The final instruction of the loop is the latch back-edge jump (jump header always)
-                # It is excluded from the body statements.
-                latch_block = max(loop.latches, key=lambda b: b.end_address)
-                body_stop = latch_block.end_address  # excludes latch jump at latch_block.end_address
-
-                body_nodes = self._structure_range(
-                    start_address=body_start,
-                    stop_address=body_stop,
-                    loop_stack=loop_stack + [loop],
-                )
-                if unhandled_pre_nodes:
-                    body_nodes = unhandled_pre_nodes + body_nodes
+                    body_nodes = self._structure_range(
+                        start_address=body_start,
+                        stop_address=body_stop,
+                        loop_stack=loop_stack + [loop],
+                    )
 
                 # Bottom-tested loop (do-while) support:
                 # If loop has no header exit jump and its latch is conditional (jump header cond),

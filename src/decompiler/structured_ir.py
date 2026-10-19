@@ -123,17 +123,188 @@ def instruction_to_python(
     op = instr.opcode
     args = instr.args
 
-    if op == "draw" and len(args) >= 4 and args[0] == "print":
-        x = format_semantic_argument("draw", 1, args[1], defined_variables, args)
-        y = format_semantic_argument("draw", 2, args[2], defined_variables, args)
-        align_token = args[3]
-        if align_token in ALIGN_TOKEN_TO_ENUM:
-            return f"draw.print({x}, {y}, {ALIGN_TOKEN_TO_ENUM[align_token]})"
-        elif align_token in ("0", "0.0"):
-            return f"draw.print({x}, {y})"
-        else:
-            align_arg = format_semantic_argument("draw", 3, align_token, defined_variables, args)
-            return f"draw.print({x}, {y}, {align_arg})"
+    if op == "draw" and len(args) >= 1:
+        cmd = args[0]
+        if cmd == "clear" and len(args) >= 4:
+            r = format_semantic_argument("draw", 1, args[1], defined_variables, args)
+            g = format_semantic_argument("draw", 2, args[2], defined_variables, args)
+            b = format_semantic_argument("draw", 3, args[3], defined_variables, args)
+            return f"draw.clear({r}, {g}, {b})"
+        elif cmd == "color" and len(args) >= 5:
+            r = format_semantic_argument("draw", 1, args[1], defined_variables, args)
+            g = format_semantic_argument("draw", 2, args[2], defined_variables, args)
+            b = format_semantic_argument("draw", 3, args[3], defined_variables, args)
+            a = format_semantic_argument("draw", 4, args[4], defined_variables, args)
+            if a == "255":
+                return f"draw.color({r}, {g}, {b})"
+            return f"draw.color({r}, {g}, {b}, {a})"
+        elif cmd == "col" and len(args) >= 2:
+            color = format_semantic_argument("draw", 1, args[1], defined_variables, args)
+            return f"draw.col({color})"
+        elif cmd == "stroke" and len(args) >= 2:
+            width = format_semantic_argument("draw", 1, args[1], defined_variables, args)
+            return f"draw.stroke({width})"
+        elif cmd == "line" and len(args) >= 5:
+            x1 = format_semantic_argument("draw", 1, args[1], defined_variables, args)
+            y1 = format_semantic_argument("draw", 2, args[2], defined_variables, args)
+            x2 = format_semantic_argument("draw", 3, args[3], defined_variables, args)
+            y2 = format_semantic_argument("draw", 4, args[4], defined_variables, args)
+            return f"draw.line({x1}, {y1}, {x2}, {y2})"
+        elif cmd == "rect" and len(args) >= 5:
+            x = format_semantic_argument("draw", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("draw", 2, args[2], defined_variables, args)
+            w = format_semantic_argument("draw", 3, args[3], defined_variables, args)
+            h = format_semantic_argument("draw", 4, args[4], defined_variables, args)
+            return f"draw.rect({x}, {y}, {w}, {h})"
+        elif cmd in ("lineRect", "line_rect") and len(args) >= 5:
+            x = format_semantic_argument("draw", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("draw", 2, args[2], defined_variables, args)
+            w = format_semantic_argument("draw", 3, args[3], defined_variables, args)
+            h = format_semantic_argument("draw", 4, args[4], defined_variables, args)
+            return f"draw.line_rect({x}, {y}, {w}, {h})"
+        elif cmd == "poly" and len(args) >= 6:
+            x = format_semantic_argument("draw", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("draw", 2, args[2], defined_variables, args)
+            sides = format_semantic_argument("draw", 3, args[3], defined_variables, args)
+            radius = format_semantic_argument("draw", 4, args[4], defined_variables, args)
+            rot = format_semantic_argument("draw", 5, args[5], defined_variables, args)
+            if rot in ("0", "0.0"):
+                return f"draw.poly({x}, {y}, {sides}, {radius})"
+            return f"draw.poly({x}, {y}, {sides}, {radius}, {rot})"
+        elif cmd in ("linePoly", "line_poly") and len(args) >= 6:
+            x = format_semantic_argument("draw", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("draw", 2, args[2], defined_variables, args)
+            sides = format_semantic_argument("draw", 3, args[3], defined_variables, args)
+            radius = format_semantic_argument("draw", 4, args[4], defined_variables, args)
+            rot = format_semantic_argument("draw", 5, args[5], defined_variables, args)
+            if rot in ("0", "0.0"):
+                return f"draw.line_poly({x}, {y}, {sides}, {radius})"
+            return f"draw.line_poly({x}, {y}, {sides}, {radius}, {rot})"
+        elif cmd == "triangle" and len(args) >= 7:
+            x1 = format_semantic_argument("draw", 1, args[1], defined_variables, args)
+            y1 = format_semantic_argument("draw", 2, args[2], defined_variables, args)
+            x2 = format_semantic_argument("draw", 3, args[3], defined_variables, args)
+            y2 = format_semantic_argument("draw", 4, args[4], defined_variables, args)
+            x3 = format_semantic_argument("draw", 5, args[5], defined_variables, args)
+            y3 = format_semantic_argument("draw", 6, args[6], defined_variables, args)
+            return f"draw.triangle({x1}, {y1}, {x2}, {y2}, {x3}, {y3})"
+        elif cmd == "image" and len(args) >= 6:
+            x = format_semantic_argument("draw", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("draw", 2, args[2], defined_variables, args)
+            img = format_semantic_argument("draw", 3, args[3], defined_variables, args)
+            size = format_semantic_argument("draw", 4, args[4], defined_variables, args)
+            rot = format_semantic_argument("draw", 5, args[5], defined_variables, args)
+            if rot in ("0", "0.0"):
+                if size in ("32", "32.0"):
+                    return f"draw.image({x}, {y}, {img})"
+                return f"draw.image({x}, {y}, {img}, {size})"
+            return f"draw.image({x}, {y}, {img}, {size}, {rot})"
+        elif cmd == "print" and len(args) >= 4:
+            x = format_semantic_argument("draw", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("draw", 2, args[2], defined_variables, args)
+            align_token = args[3]
+            if align_token in ALIGN_TOKEN_TO_ENUM:
+                return f"draw.print({x}, {y}, {ALIGN_TOKEN_TO_ENUM[align_token]})"
+            elif align_token in ("0", "0.0"):
+                return f"draw.print({x}, {y})"
+            else:
+                align_arg = format_semantic_argument("draw", 3, align_token, defined_variables, args)
+                return f"draw.print({x}, {y}, {align_arg})"
+        elif cmd == "translate" and len(args) >= 3:
+            x = format_semantic_argument("draw", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("draw", 2, args[2], defined_variables, args)
+            return f"draw.translate({x}, {y})"
+        elif cmd == "scale" and len(args) >= 3:
+            x = format_semantic_argument("draw", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("draw", 2, args[2], defined_variables, args)
+            return f"draw.scale({x}, {y})"
+        elif cmd == "rotate" and len(args) >= 4:
+            deg = format_semantic_argument("draw", 3, args[3], defined_variables, args)
+            return f"draw.rotate({deg})"
+        elif cmd == "reset":
+            return "draw.reset()"
+
+    if op == "ucontrol" and len(args) >= 1:
+        action = args[0]
+        if action in ("idle", "stop"):
+            return f"ucontrol.{action}()"
+        elif action == "move" and len(args) >= 3:
+            x = format_semantic_argument("ucontrol", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("ucontrol", 2, args[2], defined_variables, args)
+            return f"ucontrol.move({x}, {y})"
+        elif action == "approach" and len(args) >= 4:
+            x = format_semantic_argument("ucontrol", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("ucontrol", 2, args[2], defined_variables, args)
+            r = format_semantic_argument("ucontrol", 3, args[3], defined_variables, args)
+            return f"ucontrol.approach({x}, {y}, {r})"
+        elif action == "pathfind" and len(args) >= 3:
+            x = format_semantic_argument("ucontrol", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("ucontrol", 2, args[2], defined_variables, args)
+            return f"ucontrol.pathfind({x}, {y})"
+        elif action in ("autoPathfind", "auto_pathfind"):
+            return "ucontrol.auto_pathfind()"
+        elif action == "boost" and len(args) >= 2:
+            enable = format_semantic_argument("ucontrol", 1, args[1], defined_variables, args)
+            return f"ucontrol.boost({enable})"
+        elif action == "target" and len(args) >= 4:
+            x = format_semantic_argument("ucontrol", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("ucontrol", 2, args[2], defined_variables, args)
+            shoot = format_semantic_argument("ucontrol", 3, args[3], defined_variables, args)
+            return f"ucontrol.target({x}, {y}, {shoot})"
+        elif action == "targetp" and len(args) >= 3:
+            unit = format_semantic_argument("ucontrol", 1, args[1], defined_variables, args)
+            shoot = format_semantic_argument("ucontrol", 2, args[2], defined_variables, args)
+            return f"ucontrol.targetp({unit}, {shoot})"
+        elif action in ("itemDrop", "item_drop") and len(args) >= 3:
+            to = format_semantic_argument("ucontrol", 1, args[1], defined_variables, args)
+            amount = format_semantic_argument("ucontrol", 2, args[2], defined_variables, args)
+            return f"ucontrol.item_drop({to}, {amount})"
+        elif action in ("itemTake", "item_take") and len(args) >= 4:
+            from_ = format_semantic_argument("ucontrol", 1, args[1], defined_variables, args)
+            item = format_semantic_argument("ucontrol", 2, args[2], defined_variables, args)
+            amount = format_semantic_argument("ucontrol", 3, args[3], defined_variables, args)
+            return f"ucontrol.item_take({from_}, {item}, {amount})"
+        elif action in ("payDrop", "pay_drop"):
+            return "ucontrol.pay_drop()"
+        elif action in ("payTake", "pay_take") and len(args) >= 2:
+            take_units = format_semantic_argument("ucontrol", 1, args[1], defined_variables, args)
+            return f"ucontrol.pay_take({take_units})"
+        elif action in ("payEnter", "pay_enter"):
+            return "ucontrol.pay_enter()"
+        elif action == "mine" and len(args) >= 3:
+            x = format_semantic_argument("ucontrol", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("ucontrol", 2, args[2], defined_variables, args)
+            return f"ucontrol.mine({x}, {y})"
+        elif action == "flag" and len(args) >= 2:
+            val = format_semantic_argument("ucontrol", 1, args[1], defined_variables, args)
+            return f"ucontrol.flag({val})"
+        elif action == "build" and len(args) >= 6:
+            x = format_semantic_argument("ucontrol", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("ucontrol", 2, args[2], defined_variables, args)
+            block = format_semantic_argument("ucontrol", 3, args[3], defined_variables, args)
+            rot = format_semantic_argument("ucontrol", 4, args[4], defined_variables, args)
+            config = format_semantic_argument("ucontrol", 5, args[5], defined_variables, args)
+            return f"ucontrol.build({x}, {y}, {block}, {rot}, {config})"
+        elif action == "deconstruct" and len(args) >= 3:
+            x = format_semantic_argument("ucontrol", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("ucontrol", 2, args[2], defined_variables, args)
+            return f"ucontrol.deconstruct({x}, {y})"
+        elif action in ("getBlock", "get_block") and len(args) >= 6:
+            x = format_semantic_argument("ucontrol", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("ucontrol", 2, args[2], defined_variables, args)
+            out_t = format_semantic_argument("ucontrol", 3, args[3], defined_variables, args)
+            out_b = format_semantic_argument("ucontrol", 4, args[4], defined_variables, args)
+            out_f = format_semantic_argument("ucontrol", 5, args[5], defined_variables, args)
+            return f"ucontrol.get_block({x}, {y}, {out_t}, {out_b}, {out_f})"
+        elif action == "within" and len(args) >= 5:
+            x = format_semantic_argument("ucontrol", 1, args[1], defined_variables, args)
+            y = format_semantic_argument("ucontrol", 2, args[2], defined_variables, args)
+            r = format_semantic_argument("ucontrol", 3, args[3], defined_variables, args)
+            out_res = format_semantic_argument("ucontrol", 4, args[4], defined_variables, args)
+            return f"ucontrol.within({x}, {y}, {r}, {out_res})"
+        elif action == "unbind":
+            return "ucontrol.unbind()"
+
 
     if op == "set" and len(args) == 2:
         dest, val = args[0], format_operand(args[1])
@@ -506,7 +677,11 @@ class UnstructuredNode(StructuredNode):
         lines = [f"{prefix}# [UNSTRUCTURED REGION]: {self.reason}"]
         for instr in self.instructions:
             if instr.is_jump:
-                args_repr = ", ".join(repr(a) for a in instr.args)
+                formatted_args = [
+                    format_semantic_argument("jump", idx, a, self.defined_variables, instr.args)
+                    for idx, a in enumerate(instr.args)
+                ]
+                args_repr = ", ".join(formatted_args)
                 lines.append(f"{prefix}jump({args_repr})  # addr {instr.address}")
             else:
                 lines.append(f"{prefix}{instruction_to_python(instr, self.defined_variables)}")

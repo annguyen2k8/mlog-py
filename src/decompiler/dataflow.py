@@ -248,6 +248,129 @@ def get_node_uses(node: StructuredNode) -> Set[str]:
     return set()
 
 
+def fold_constants(expr: Expr) -> Expr:
+    """Evaluate compile-time constant sub-expressions while preserving Mindustry semantics."""
+    import math
+
+    if isinstance(expr, BinaryExpr):
+        left = fold_constants(expr.left)
+        right = fold_constants(expr.right)
+        if isinstance(left, ConstantExpr) and isinstance(right, ConstantExpr):
+            v1, v2 = left.value, right.value
+            # Only fold pure numbers, never booleans as ints, never strings/builtins
+            if (
+                isinstance(v1, (int, float))
+                and isinstance(v2, (int, float))
+                and not isinstance(v1, bool)
+                and not isinstance(v2, bool)
+            ):
+                op = expr.op
+                res = None
+                if op == "+":
+                    res = v1 + v2
+                elif op == "-":
+                    res = v1 - v2
+                elif op == "*":
+                    res = v1 * v2
+                elif op == "//" and v2 != 0:
+                    res = v1 // v2
+                elif op == "%" and v2 != 0:
+                    res = v1 % v2
+                elif op == "**" and 0 <= v2 <= 32:
+                    try:
+                        res = v1 ** v2
+                    except OverflowError:
+                        res = None
+                elif op == "<<" and isinstance(v1, int) and isinstance(v2, int) and 0 <= v2 <= 64:
+                    res = v1 << v2
+                elif op == ">>" and isinstance(v1, int) and isinstance(v2, int) and 0 <= v2 <= 64:
+                    res = v1 >> v2
+                elif op == "&" and isinstance(v1, int) and isinstance(v2, int):
+                    res = v1 & v2
+                elif op == "|" and isinstance(v1, int) and isinstance(v2, int):
+                    res = v1 | v2
+                elif op == "^" and isinstance(v1, int) and isinstance(v2, int):
+                    res = v1 ^ v2
+                elif op == "/" and v2 != 0:
+                    div_res = v1 / v2
+                    if v1 % v2 == 0:
+                        res = int(v1 // v2) if isinstance(v1, int) and isinstance(v2, int) else div_res
+                    elif round(div_res, 6) == div_res:
+                        res = div_res
+                elif op in ("==", "!=", "<", "<=", ">", ">="):
+                    if op == "==":
+                        return ConstantExpr(v1 == v2)
+                    elif op == "!=":
+                        return ConstantExpr(v1 != v2)
+                    elif op == "<":
+                        return ConstantExpr(v1 < v2)
+                    elif op == "<=":
+                        return ConstantExpr(v1 <= v2)
+                    elif op == ">":
+                        return ConstantExpr(v1 > v2)
+                    elif op == ">=":
+                        return ConstantExpr(v1 >= v2)
+
+                if res is not None and not (math.isnan(res) or math.isinf(res)):
+                    if isinstance(v1, int) and isinstance(v2, int) and op != "/" and isinstance(res, (int, float)):
+                        res = int(res)
+                    return ConstantExpr(res)
+        return BinaryExpr(expr.op, left, right)
+
+    if isinstance(expr, UnaryExpr):
+        operand = fold_constants(expr.operand)
+        if isinstance(operand, ConstantExpr):
+            v = operand.value
+            if expr.op == "-" and isinstance(v, (int, float)) and not isinstance(v, bool):
+                return ConstantExpr(-v)
+            elif expr.op == "~" and isinstance(v, int) and not isinstance(v, bool):
+                return ConstantExpr(~v)
+            elif expr.op == "not" and isinstance(v, bool):
+                return ConstantExpr(not v)
+        return UnaryExpr(expr.op, operand)
+
+    if isinstance(expr, CallExpr):
+        new_args = [fold_constants(a) for a in expr.args]
+        if (
+            expr.func == "min"
+            and len(new_args) == 2
+            and isinstance(new_args[0], ConstantExpr)
+            and isinstance(new_args[1], ConstantExpr)
+        ):
+            v1, v2 = new_args[0].value, new_args[1].value
+            if (
+                isinstance(v1, (int, float))
+                and isinstance(v2, (int, float))
+                and not isinstance(v1, bool)
+                and not isinstance(v2, bool)
+            ):
+                return ConstantExpr(min(v1, v2))
+        if (
+            expr.func == "max"
+            and len(new_args) == 2
+            and isinstance(new_args[0], ConstantExpr)
+            and isinstance(new_args[1], ConstantExpr)
+        ):
+            v1, v2 = new_args[0].value, new_args[1].value
+            if (
+                isinstance(v1, (int, float))
+                and isinstance(v2, (int, float))
+                and not isinstance(v1, bool)
+                and not isinstance(v2, bool)
+            ):
+                return ConstantExpr(max(v1, v2))
+        return CallExpr(expr.func, new_args)
+
+    if isinstance(expr, IfExpExpr):
+        test = fold_constants(expr.test)
+        body = fold_constants(expr.body)
+        orelse = fold_constants(expr.orelse)
+        return IfExpExpr(test=test, body=body, orelse=orelse)
+
+
+    return expr
+
+
 # Opcodes that must never receive an inlined expression operand: their operands are
 # instruction addresses or explicit control-flow tokens, not plain values.
 _CONTROL_FLOW_OPCODES = frozenset({"jump", "stop", "end"})
@@ -258,7 +381,7 @@ def inline_temporary_into_instruction(
     target: str,
     value: Expr,
 ) -> Optional[MlogInstruction]:
-    """Substitute a single-use temporary into a raw instruction operand.
+    """Substitute a single-use temporary or alias into a raw instruction operand.
 
     Returns a new ``MlogInstruction`` when every occurrence of ``target`` in the
     operand list sits in a substitutable position, otherwise ``None``.
@@ -270,11 +393,14 @@ def inline_temporary_into_instruction(
         (``KEYWORD_OR_ENUM``) and ``@``-constants are never rewritten, because
         substituting an expression there would change semantics or produce
         uncompilable DSL.
-      * The rendered value must satisfy ``is_safe_inline_expression`` (pure
-        arithmetic/bitwise over identifiers and numbers). This is the exact same
-        SSOT predicate the Python renderer uses to decide whether an operand is an
-        expression or a string literal, so the inliner can never emit an operand the
-        renderer would silently quote back into a string.
+      * For VariableExpr aliases (e.g. ``b = g``), direct substitution is safe
+        when the source is a valid DSL identifier.
+      * For arithmetic expressions, the rendered value must satisfy
+        ``is_safe_inline_expression`` (pure arithmetic/bitwise over identifiers
+        and numbers). This is the exact same SSOT predicate the Python renderer
+        uses to decide whether an operand is an expression or a string literal,
+        so the inliner can never emit an operand the renderer would silently quote
+        back into a string.
       * The value must be side-effect free; re-evaluation is only safe then.
     """
     if instr.opcode in _CONTROL_FLOW_OPCODES:
@@ -285,6 +411,26 @@ def inline_temporary_into_instruction(
         return None
     if not isinstance(value, (BinaryExpr, UnaryExpr, VariableExpr, IfExpExpr)):
         return None
+
+    if isinstance(value, VariableExpr):
+        new_name = value.name
+        if not new_name.isidentifier() or new_name.startswith("@") or new_name in ("true", "false", "null"):
+            return None
+        args = list(instr.args)
+        for idx, arg in enumerate(args):
+            if arg != target:
+                continue
+            role = get_argument_semantic_role(instr.opcode, idx, instr.args)
+            if role is not ArgumentSemanticRole.OPERAND:
+                return None
+            args[idx] = new_name
+        return MlogInstruction(
+            address=instr.address,
+            opcode=instr.opcode,
+            args=tuple(args),
+            loc=instr.loc,
+            raw_text=instr.raw_text,
+        )
 
     rendered = value.to_python()
     if not is_safe_inline_expression(rendered):
@@ -380,12 +526,12 @@ class DataflowTransformer:
                             expr = UnaryExpr("not", a_expr)
                         else:
                             expr = BinaryExpr(py_op, a_expr, b_expr)
-                        result.append(AssignNode(target=dest, value=expr, source_addresses=[instr.address]))
+                        result.append(AssignNode(target=dest, value=fold_constants(expr), source_addresses=[instr.address]))
                         continue
 
                     # B.2: Unary not (bitwise)
                     if op_name == "not":
-                        result.append(AssignNode(target=dest, value=UnaryExpr("~", a_expr), source_addresses=[instr.address]))
+                        result.append(AssignNode(target=dest, value=fold_constants(UnaryExpr("~", a_expr)), source_addresses=[instr.address]))
                         continue
 
                     # B.3: Python min and max calls: dest = min(a, b) or max(a, b)
@@ -393,7 +539,7 @@ class DataflowTransformer:
                         result.append(
                             AssignNode(
                                 target=dest,
-                                value=CallExpr(op_name, [a_expr, b_expr]),
+                                value=fold_constants(CallExpr(op_name, [a_expr, b_expr])),
                                 source_addresses=[instr.address],
                             )
                         )
@@ -403,7 +549,7 @@ class DataflowTransformer:
                     call_args = [ConstantExpr(op_name), a_expr]
                     if len(args) > 3 and op_name not in UNARY_LOGIC_OPS:
                         call_args.append(b_expr)
-                    result.append(AssignNode(target=dest, value=CallExpr("op", call_args), source_addresses=[instr.address]))
+                    result.append(AssignNode(target=dest, value=fold_constants(CallExpr("op", call_args)), source_addresses=[instr.address]))
                     continue
 
                 defined_vars = getattr(node, "defined_variables", None)
@@ -511,7 +657,7 @@ class DataflowTransformer:
                         result.append(
                             AssignNode(
                                 target=dest,
-                                value=IfExpExpr(test=test_expr, body=a_expr, orelse=b_expr),
+                                value=fold_constants(IfExpExpr(test=test_expr, body=a_expr, orelse=b_expr)),
                                 source_addresses=[instr.address],
                             )
                         )
@@ -569,7 +715,17 @@ class DataflowTransformer:
                 val = stmt.value
 
                 # Criteria 1: Candidate temporary or single-use local intermediate
-                if not is_compiler_temporary(target):
+                is_temp = is_compiler_temporary(target)
+                is_alias = (
+                    (not is_temp)
+                    and isinstance(val, VariableExpr)
+                    and val.name.isidentifier()
+                    and not val.name.startswith("@")
+                    and val.name not in ("true", "false", "null")
+                    and val.name != target
+                )
+
+                if not is_temp and not is_alias:
                     continue
 
                 # Criteria 2: Exactly 1 definition and exactly 1 use
@@ -591,8 +747,19 @@ class DataflowTransformer:
                     # Target might be used inside an inner block or not found in top-level
                     continue
 
+                target_node = current_nodes[use_idx]
+
+                # If target_node is a compound block (IfNode or WhileNode), target MUST be used in
+                # its condition_expr directly to be inlined safely from outside without moving across control boundaries.
+                if isinstance(target_node, (IfNode, WhileNode)):
+                    if target_node.condition_expr is None or target not in get_expr_variables(target_node.condition_expr):
+                        continue
+
                 # Criteria 4: No intervening statements modify any variable in val.variables_used
                 val_vars = val.variables_used
+                if isinstance(target_node, WhileNode) and (get_node_defs(target_node) & val_vars):
+                    continue
+
                 intervening_overwrite = False
                 for k in range(i + 1, use_idx):
                     if get_node_defs(current_nodes[k]) & val_vars:
@@ -603,14 +770,13 @@ class DataflowTransformer:
                     continue
 
                 # ALL SAFETY CHECKS PASSED: Safely inline target with val!
-                target_node = current_nodes[use_idx]
                 merged_addrs = sorted(
                     set(getattr(target_node, "source_addresses", []))
                     | set(getattr(stmt, "source_addresses", []))
                 )
 
                 if isinstance(target_node, AssignNode):
-                    new_val = substitute_variable(target_node.value, target, val)
+                    new_val = fold_constants(substitute_variable(target_node.value, target, val))
                     current_nodes[use_idx] = AssignNode(
                         target=target_node.target,
                         value=new_val,
@@ -621,7 +787,7 @@ class DataflowTransformer:
                     break
 
                 elif isinstance(target_node, ExprStmtNode):
-                    new_expr = substitute_variable(target_node.expr, target, val)
+                    new_expr = fold_constants(substitute_variable(target_node.expr, target, val))
                     current_nodes[use_idx] = ExprStmtNode(
                         expr=new_expr,
                         source_addresses=merged_addrs,
@@ -631,7 +797,7 @@ class DataflowTransformer:
                     break
 
                 elif isinstance(target_node, IfNode) and target_node.condition_expr is not None:
-                    new_cond = substitute_variable(target_node.condition_expr, target, val)
+                    new_cond = fold_constants(substitute_variable(target_node.condition_expr, target, val))
                     target_node.condition_expr = new_cond
                     target_node.source_addresses = merged_addrs
                     current_nodes.pop(i)
@@ -639,7 +805,7 @@ class DataflowTransformer:
                     break
 
                 elif isinstance(target_node, WhileNode) and target_node.condition_expr is not None:
-                    new_cond = substitute_variable(target_node.condition_expr, target, val)
+                    new_cond = fold_constants(substitute_variable(target_node.condition_expr, target, val))
                     target_node.condition_expr = new_cond
                     target_node.source_addresses = merged_addrs
                     current_nodes.pop(i)
@@ -647,7 +813,7 @@ class DataflowTransformer:
                     break
 
                 elif isinstance(target_node, ReturnNode) and target_node.value is not None:
-                    new_val = substitute_variable(target_node.value, target, val)
+                    new_val = fold_constants(substitute_variable(target_node.value, target, val))
                     target_node.value = new_val
                     target_node.source_addresses = merged_addrs
                     current_nodes.pop(i)
@@ -655,7 +821,7 @@ class DataflowTransformer:
                     break
 
                 elif isinstance(target_node, CallNode):
-                    new_args = [substitute_variable(a, target, val) for a in target_node.args]
+                    new_args = [fold_constants(substitute_variable(a, target, val)) for a in target_node.args]
                     target_node.args = new_args
                     target_node.source_addresses = merged_addrs
                     current_nodes.pop(i)

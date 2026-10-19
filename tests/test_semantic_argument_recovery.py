@@ -147,7 +147,7 @@ class TestSemanticArgumentRecovery(unittest.TestCase):
         mlog = "ucontrol itemDrop container1 10 0 0 0\n"
         py = decompile(mlog).strip()
         ast.parse(py)
-        self.assertEqual(py, 'from mlog import ucontrol\n\nucontrol("itemDrop", "container1", 10, 0, 0, 0)')
+        self.assertEqual(py, 'from mlog import ucontrol\n\nucontrol.item_drop("container1", 10)')
 
     # -----------------------------------------------------------------------
     # 3. Variable Holding Block (getlink) Remains Unquoted

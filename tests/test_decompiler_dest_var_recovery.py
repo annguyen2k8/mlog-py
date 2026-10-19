@@ -203,22 +203,22 @@ control enabled reactor1 1 0 0 0
 """
         py = decompile(mlog)
         self._assert_no_undefined_variables(py)
-        self.assertIn('draw("stroke", 1, 0, 255, 255, 0, 0)', py)
+        self.assertIn("draw.stroke(1)", py)
         self.assertIn('control("enabled", "reactor1", 1, 0, 0, 0)', py)
 
         recompiled = compile_py(py).mlog.strip()
-        self.assertIn("draw stroke 1 0 255 255 0 0", recompiled)
+        self.assertIn("draw stroke 1 0 0 0 0 0", recompiled)
         self.assertIn("control enabled reactor1 1 0 0 0", recompiled)
 
     def test_ucontrol_action_keyword_never_confused_with_variable(self):
-        """ucontrol action keyword must always remain quoted even if a variable with same name exists."""
+        """ucontrol action keyword must always remain quoted or modern alias even if a variable with same name exists."""
         mlog = """sensor flag @unit @flag
 jump 2 equal flag 1
 ucontrol flag 1 0 0 0 0
 """
         py = decompile(mlog)
-        self.assertIn('ucontrol("flag", 1, 0, 0, 0, 0)', py)
-        self.assertNotIn('ucontrol(flag,', py)
+        self.assertIn("ucontrol.flag(1)", py)
+        self.assertNotIn("ucontrol(flag,", py)
         recompiled = compile_py(py).mlog.strip()
         self.assertIn("ucontrol flag 1 0 0 0 0", recompiled)
 
@@ -235,17 +235,25 @@ ulocate building core 0 @copper kx ky kfound kblock
         self.assertIn("ulocate building core 0 @copper kx ky kfound kblock", recompiled)
 
     def test_control_properties_and_draw_types_always_quoted(self):
-        """All ControlProperty and DrawType keywords must always be quoted string literals."""
-        from src.mlog_registry_data import CONTROL_PROPERTIES, GRAPHICS_TYPES
+        """All ControlProperty and DrawType keywords must always be quoted string literals or modern methods."""
+        from src.mlog_registry_data import CONTROL_PROPERTIES
         for prop in CONTROL_PROPERTIES:
             mlog = f"control {prop} reactor1 1 0 0 0\n"
             py = decompile(mlog)
             self.assertIn(f'control("{prop}", "reactor1", 1, 0, 0, 0)', py)
 
-        for dtype in ("clear", "color", "stroke", "line", "rect"):
+        expected_draw = {
+            "clear": "draw.clear(0, 0, 0)",
+            "color": "draw.color(0, 0, 0, 0)",
+            "stroke": "draw.stroke(0)",
+            "line": "draw.line(0, 0, 0, 0)",
+            "rect": "draw.rect(0, 0, 0, 0)",
+        }
+        for dtype, expected_call in expected_draw.items():
             mlog = f"draw {dtype} 0 0 0 0 0 0\n"
             py = decompile(mlog)
-            self.assertIn(f'draw("{dtype}", 0, 0, 0, 0, 0, 0)', py)
+            self.assertIn(expected_call, py)
+
 
     def test_unpackcolor_dest_variable_recovery(self):
         """unpackcolor destination variables must be tracked in dest vars."""

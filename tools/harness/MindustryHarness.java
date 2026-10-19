@@ -47,12 +47,201 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 
 public class MindustryHarness {
+    public static void clearTeamData(mindustry.game.Teams.TeamData data) {
+        if (data == null) return;
+        data.units.clear();
+        if (data.unitTree != null) data.unitTree.clear();
+        if (data.unitsByType != null) {
+            for (int i = 0; i < data.unitsByType.length; i++) {
+                if (data.unitsByType[i] != null) data.unitsByType[i].clear();
+            }
+        }
+        data.buildings.clear();
+        data.cores.clear();
+        if (data.buildingTree != null) data.buildingTree.clear();
+        if (data.turretTree != null) data.turretTree.clear();
+        data.buildingTypes.clear();
+        data.unitCap = 0;
+        data.unitCount = 0;
+        data.lastCore = null;
+    }
+
+    public static void resetWorld() {
+        Groups.clear();
+        Groups.init();
+
+        for (Team t : Team.all) {
+            clearTeamData(t.data());
+        }
+        Vars.state.teams.present.clear();
+        Vars.state.teams.present.add(Team.sharded.data());
+
+        for (int x = 0; x < 100; x++) {
+            for (int y = 0; y < 100; y++) {
+                Vars.world.tiles.set(x, y, new Tile(x, y));
+            }
+        }
+
+        Vars.indexer = new BlockIndexer();
+        Vars.spawner = new WaveSpawner();
+        arc.Events.fire(new mindustry.game.EventType.WorldLoadEvent());
+
+        Vars.state.set(GameState.State.playing);
+        Vars.state.rules = new mindustry.game.Rules();
+        Vars.state.rules.allowLogicData = true;
+        SpawnGroup defaultGroup = new SpawnGroup(UnitTypes.flare);
+        defaultGroup.begin = 0;
+        defaultGroup.end = 100;
+        defaultGroup.unitAmount = 1;
+        Vars.state.rules.spawns.clear();
+        Vars.state.rules.spawns.add(defaultGroup);
+        Vars.state.rules.mission = null;
+        Vars.state.markers.clear();
+        Vars.state.tick = 0;
+        Vars.state.wave = 1;
+        Vars.state.wavetime = 0f;
+
+        Time.time = 10000f;
+        Time.delta = 1.0f;
+
+        Vars.logicVars = new GlobalVars();
+        Vars.logicVars.init();
+
+        if (Vars.ui instanceof SafeUI sui) {
+            sui.hasAnnounce = false;
+            sui.lastAnnounceText = null;
+            sui.lastAnnounceDuration = 0;
+            sui.lastToastText = null;
+            sui.lastToastDuration = 0;
+            if (sui.hudfrag instanceof SafeHudFragment shf) {
+                shf.hasToast = false;
+                shf.lastToastText = null;
+            }
+        }
+        if (Vars.control != null && Vars.control.input != null) {
+            Vars.control.input.logicCutscene = false;
+            Vars.control.input.logicHideHud = false;
+            Vars.control.input.logicCutsceneZoom = 0;
+            Vars.control.input.logicCamSpeed = 0;
+            if (Vars.control.input.logicCamPan != null) {
+                Vars.control.input.logicCamPan.set(0, 0);
+            }
+        }
+        if (Vars.renderer != null) {
+            try {
+                java.lang.reflect.Field sf = mindustry.core.Renderer.class.getDeclaredField("shakeIntensity");
+                sf.setAccessible(true);
+                sf.setFloat(Vars.renderer, 0f);
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    public static void initEnvironment() {
+        Core.files = new MockFiles() {
+            @Override
+            public Fi get(String path, Files.FileType type) {
+                if ("logicids.dat".equals(path)) {
+                    File f1 = new File("../Mindustry/core/assets/logicids.dat");
+                    if (f1.exists()) return new Fi(f1);
+                    File f2 = new File("logicids.dat");
+                    if (f2.exists()) return new Fi(f2);
+                }
+                return super.get(path, type);
+            }
+        };
+        Vars.state = new GameState();
+        Vars.state.set(GameState.State.playing);
+        Vars.state.rules.allowLogicData = true;
+        arc.Core.app = new arc.mock.MockApplication();
+        arc.Core.camera = new arc.graphics.Camera();
+        arc.Core.audio = new arc.mock.MockAudio();
+        Core.settings = new arc.Settings();
+        Core.settings.put("locale", "default");
+        arc.Core.assets = new arc.assets.AssetManager();
+        Vars.content = new ContentLoader();
+        Vars.content.createBaseContent();
+        Vars.content.units().each(u -> {
+            for (mindustry.type.Weapon w : u.weapons) {
+                if (w.bullet != null) {
+                    w.bullet.afterPatch();
+                }
+            }
+            u.init();
+        });
+        Vars.content.blocks().each(mindustry.world.Block::init);
+        Vars.logicVars = new GlobalVars();
+        Vars.logicVars.init();
+        Groups.init();
+        Vars.world = new World();
+        Vars.world.resize(100, 100);
+        for (int x = 0; x < 100; x++) {
+            for (int y = 0; y < 100; y++) {
+                Vars.world.tiles.set(x, y, new Tile(x, y));
+            }
+        }
+        Vars.world.setGenerating(true);
+        Vars.headless = false;
+        try {
+            java.lang.reflect.Field uf = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+            uf.setAccessible(true);
+            sun.misc.Unsafe unsafe = (sun.misc.Unsafe)uf.get(null);
+            Vars.renderer = (mindustry.core.Renderer)unsafe.allocateInstance(mindustry.core.Renderer.class);
+            Vars.renderer.enableEffects = false;
+
+            mindustry.input.DesktopInput dInput = (mindustry.input.DesktopInput)unsafe.allocateInstance(mindustry.input.DesktopInput.class);
+            dInput.logicCamPan = new arc.math.geom.Vec2();
+            Vars.control = (mindustry.core.Control)unsafe.allocateInstance(mindustry.core.Control.class);
+            Vars.control.input = dInput;
+            Vars.control.sound = (mindustry.audio.SoundControl)unsafe.allocateInstance(mindustry.audio.SoundControl.class);
+
+            SafeUI safeUi = (SafeUI)unsafe.allocateInstance(SafeUI.class);
+            SafeHudFragment safeHud = (SafeHudFragment)unsafe.allocateInstance(SafeHudFragment.class);
+            safeUi.hudfrag = safeHud;
+            Vars.ui = safeUi;
+        } catch (Throwable ignored) {}
+        Vars.mods = new mindustry.mod.Mods();
+        Vars.net = new Net(null);
+        Vars.indexer = new BlockIndexer();
+        Vars.spawner = new WaveSpawner();
+        Vars.logic = new Logic();
+        if (Vars.state.rules.spawns.isEmpty()) {
+            SpawnGroup defaultGroup = new SpawnGroup(UnitTypes.flare);
+            defaultGroup.begin = 0;
+            defaultGroup.end = 100;
+            defaultGroup.unitAmount = 1;
+            Vars.state.rules.spawns.add(defaultGroup);
+        }
+        arc.Events.fire(new mindustry.game.EventType.WorldLoadEvent());
+        if (Fonts.logic == null) {
+            Font.FontData fData = new Font.FontData();
+            fData.spaceXadvance = 5f;
+            fData.lineHeight = 7f;
+            for (char c = 32; c < 127; c++) {
+                Font.Glyph g = new Font.Glyph();
+                g.id = c;
+                g.xadvance = 5;
+                fData.setGlyph(c, g);
+            }
+            Seq<TextureRegion> fRegs = new Seq<>();
+            fRegs.add(new TextureRegion());
+            Fonts.logic = new Font(fData, fRegs, true) {
+                @Override
+                protected void load(Font.FontData d) {
+                    // no-op: avoid requiring OpenGL texture initialization in headless harness
+                }
+            };
+        }
+    }
+
     public static void main(String[] args) {
+        boolean daemonMode = false;
         boolean runMode = false;
         int maxSteps = 10000;
         String procType = "logic";
         for (int i = 0; i < args.length; i++) {
-            if ("--run".equals(args[i])) {
+            if ("--daemon".equals(args[i])) {
+                daemonMode = true;
+            } else if ("--run".equals(args[i])) {
                 runMode = true;
                 if (i + 1 < args.length && !args[i + 1].startsWith("--")) {
                     try {
@@ -69,153 +258,143 @@ public class MindustryHarness {
         }
 
         try {
-            Core.files = new MockFiles() {
-                @Override
-                public Fi get(String path, Files.FileType type) {
-                    if ("logicids.dat".equals(path)) {
-                        File f1 = new File("../Mindustry/core/assets/logicids.dat");
-                        if (f1.exists()) return new Fi(f1);
-                        File f2 = new File("logicids.dat");
-                        if (f2.exists()) return new Fi(f2);
-                    }
-                    return super.get(path, type);
-                }
-            };
-            Vars.state = new GameState();
-            Vars.state.set(GameState.State.playing);
-            Vars.state.rules.allowLogicData = true;
-            arc.Core.app = new arc.mock.MockApplication();
-            arc.Core.camera = new arc.graphics.Camera();
-            arc.Core.audio = new arc.mock.MockAudio();
-            Core.settings = new arc.Settings();
-            Core.settings.put("locale", "default");
-            arc.Core.assets = new arc.assets.AssetManager();
-            Vars.content = new ContentLoader();
-            Vars.content.createBaseContent();
-            Vars.content.units().each(u -> {
-                for (mindustry.type.Weapon w : u.weapons) {
-                    if (w.bullet != null) {
-                        w.bullet.afterPatch();
-                    }
-                }
-                u.init();
-            });
-            Vars.content.blocks().each(mindustry.world.Block::init);
-            Vars.logicVars = new GlobalVars();
-            Vars.logicVars.init();
-            Groups.init();
-            Vars.world = new World();
-            Vars.world.resize(100, 100);
-            for (int x = 0; x < 100; x++) {
-                for (int y = 0; y < 100; y++) {
-                    Vars.world.tiles.set(x, y, new Tile(x, y));
-                }
-            }
-            Vars.world.setGenerating(true);
-            Vars.headless = false;
-            try {
-                java.lang.reflect.Field uf = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
-                uf.setAccessible(true);
-                sun.misc.Unsafe unsafe = (sun.misc.Unsafe)uf.get(null);
-                Vars.renderer = (mindustry.core.Renderer)unsafe.allocateInstance(mindustry.core.Renderer.class);
-                Vars.renderer.enableEffects = false;
+            initEnvironment();
+        } catch (Throwable t) {
+            System.err.println("Init error: " + t.getMessage());
+            t.printStackTrace(System.err);
+            System.exit(2);
+        }
 
-                mindustry.input.DesktopInput dInput = (mindustry.input.DesktopInput)unsafe.allocateInstance(mindustry.input.DesktopInput.class);
-                dInput.logicCamPan = new arc.math.geom.Vec2();
-                Vars.control = (mindustry.core.Control)unsafe.allocateInstance(mindustry.core.Control.class);
-                Vars.control.input = dInput;
-                Vars.control.sound = (mindustry.audio.SoundControl)unsafe.allocateInstance(mindustry.audio.SoundControl.class);
-
-                SafeUI safeUi = (SafeUI)unsafe.allocateInstance(SafeUI.class);
-                SafeHudFragment safeHud = (SafeHudFragment)unsafe.allocateInstance(SafeHudFragment.class);
-                safeUi.hudfrag = safeHud;
-                Vars.ui = safeUi;
-            } catch (Throwable ignored) {}
-            Vars.mods = new mindustry.mod.Mods();
-            Vars.net = new Net(null);
-            Vars.indexer = new BlockIndexer();
-            Vars.spawner = new WaveSpawner();
-            Vars.logic = new Logic();
-            if (Vars.state.rules.spawns.isEmpty()) {
-                SpawnGroup defaultGroup = new SpawnGroup(UnitTypes.flare);
-                defaultGroup.begin = 0;
-                defaultGroup.end = 100;
-                defaultGroup.unitAmount = 1;
-                Vars.state.rules.spawns.add(defaultGroup);
-            }
-            arc.Events.fire(new mindustry.game.EventType.WorldLoadEvent());
-            if (Fonts.logic == null) {
-                Font.FontData fData = new Font.FontData();
-                fData.spaceXadvance = 5f;
-                fData.lineHeight = 7f;
-                for (char c = 32; c < 127; c++) {
-                    Font.Glyph g = new Font.Glyph();
-                    g.id = c;
-                    g.xadvance = 5;
-                    fData.setGlyph(c, g);
-                }
-                Seq<TextureRegion> fRegs = new Seq<>();
-                fRegs.add(new TextureRegion());
-                Fonts.logic = new Font(fData, fRegs, true) {
-                    @Override
-                    protected void load(Font.FontData d) {
-                        // no-op: avoid requiring OpenGL texture initialization in headless harness
+        if (daemonMode) {
+            System.out.println("READY");
+            System.out.flush();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    line = line.trim();
+                    if (line.isEmpty()) continue;
+                    if ("EXIT".equals(line) || "QUIT".equals(line)) {
+                        break;
                     }
-                };
+                    if ("PING".equals(line)) {
+                        System.out.println("PONG");
+                        System.out.println("<<<END_RESULT>>>");
+                        System.out.flush();
+                        continue;
+                    }
+                    try {
+                        if (line.startsWith("VALIDATE ")) {
+                            String[] parts = line.split(" ", 3);
+                            String pType = parts.length > 1 ? parts[1] : "logic";
+                            String b64 = parts.length > 2 ? parts[2] : "";
+                            String mlog = new String(java.util.Base64.getDecoder().decode(b64), StandardCharsets.UTF_8);
+                            processRequest(mlog, false, 0, pType, System.out, true);
+                        } else if (line.startsWith("RUN ")) {
+                            String[] parts = line.split(" ", 4);
+                            int steps = parts.length > 1 ? Integer.parseInt(parts[1]) : 1000;
+                            String pType = parts.length > 2 ? parts[2] : "logic";
+                            String b64 = parts.length > 3 ? parts[3] : "";
+                            String mlog = new String(java.util.Base64.getDecoder().decode(b64), StandardCharsets.UTF_8);
+                            processRequest(mlog, true, steps, pType, System.out, true);
+                        } else {
+                            System.out.println("ERR:Unknown command: " + line);
+                        }
+                    } catch (Throwable t) {
+                        System.out.println("ERR:" + (t.getMessage() != null ? t.getMessage() : t.toString()));
+                    } finally {
+                        System.out.println("<<<END_RESULT>>>");
+                        System.out.flush();
+                    }
+                }
+            } catch (Throwable t) {
+                System.err.println("Daemon error: " + t.getMessage());
             }
-
+            System.exit(0);
+        } else {
             StringBuilder sb = new StringBuilder();
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     sb.append(line).append("\n");
                 }
-            }
-
-            String mlog = sb.toString();
-            if ("logic".equals(procType)) {
-                if (mlog.contains("#processor: hyper") || mlog.contains("#processor:hyper")) {
-                    procType = "hyper";
-                } else if (mlog.contains("#processor: world") || mlog.contains("#processor:world")) {
-                    procType = "world";
-                } else if (mlog.contains("#processor: micro") || mlog.contains("#processor:micro")) {
-                    procType = "micro";
-                }
-            }
-            boolean isPrivileged = "world".equals(procType);
-
-            Seq<LStatement> stmts = LAssembler.read(mlog, isPrivileged);
-            Seq<String[]> rawStatements = extractStatementTokens(mlog);
-
-            for (int i = 0; i < stmts.size; i++) {
-                LStatement s = stmts.get(i);
-                if (s instanceof LStatements.InvalidStatement) {
-                    String[] toks = i < rawStatements.size ? rawStatements.get(i) : null;
-                    if (toks != null && toks.length == 1 && "noop".equals(toks[0])) {
-                        continue;
-                    }
-                    String repr = toks != null ? String.join(" ", toks) : "";
-                    System.err.println("Line " + (i + 1) + ": Mindustry rejected statement as InvalidStatement" + (repr.isEmpty() ? "" : ": '" + repr + "'"));
-                    System.exit(1);
-                }
-            }
-
-            LAssembler asm = LAssembler.assemble(mlog, isPrivileged);
-            if (asm.instructions == null) {
-                System.err.println("Assembly produced null instruction array");
+            } catch (Exception e) {
+                System.err.println("Read error: " + e.getMessage());
                 System.exit(1);
             }
 
-            for (int i = 0; i < asm.instructions.length; i++) {
-                if (asm.instructions[i] == null) {
-                    System.err.println("Instruction " + i + " assembled to null");
-                    System.exit(1);
-                }
+            try {
+                boolean ok = processRequest(sb.toString(), runMode, maxSteps, procType, System.out, false);
+                System.exit(ok ? 0 : 1);
+            } catch (Throwable t) {
+                System.err.println("ERROR: " + t.getMessage());
+                t.printStackTrace(System.err);
+                System.exit(2);
             }
+        }
+    }
 
-            if (runMode) {
+    public static boolean processRequest(String mlog, boolean runMode, int maxSteps, String procType, java.io.PrintStream out, boolean isDaemon) throws Exception {
+        if ("logic".equals(procType)) {
+            if (mlog.contains("#processor: hyper") || mlog.contains("#processor:hyper")) {
+                procType = "hyper";
+            } else if (mlog.contains("#processor: world") || mlog.contains("#processor:world")) {
+                procType = "world";
+            } else if (mlog.contains("#processor: micro") || mlog.contains("#processor:micro")) {
+                procType = "micro";
+            }
+        }
+        boolean isPrivileged = "world".equals(procType);
 
-                LogicBlock procBlock = (LogicBlock)Blocks.logicProcessor;
+        if (runMode) {
+            resetWorld();
+        }
+
+        Seq<LStatement> stmts = LAssembler.read(mlog, isPrivileged);
+        Seq<String[]> rawStatements = extractStatementTokens(mlog);
+
+        for (int i = 0; i < stmts.size; i++) {
+            LStatement s = stmts.get(i);
+            if (s instanceof LStatements.InvalidStatement) {
+                String[] toks = i < rawStatements.size ? rawStatements.get(i) : null;
+                if (toks != null && toks.length == 1 && "noop".equals(toks[0])) {
+                    continue;
+                }
+                String repr = toks != null ? String.join(" ", toks) : "";
+                String msg = "Line " + (i + 1) + ": Mindustry rejected statement as InvalidStatement" + (repr.isEmpty() ? "" : ": '" + repr + "'");
+                if (isDaemon) {
+                    out.println("ERR:" + msg);
+                } else {
+                    System.err.println(msg);
+                }
+                return false;
+            }
+        }
+
+        LAssembler asm = LAssembler.assemble(mlog, isPrivileged);
+        if (asm.instructions == null) {
+            String msg = "Assembly produced null instruction array";
+            if (isDaemon) {
+                out.println("ERR:" + msg);
+            } else {
+                System.err.println(msg);
+            }
+            return false;
+        }
+
+        for (int i = 0; i < asm.instructions.length; i++) {
+            if (asm.instructions[i] == null) {
+                String msg = "Instruction " + i + " assembled to null";
+                if (isDaemon) {
+                    out.println("ERR:" + msg);
+                } else {
+                    System.err.println(msg);
+                }
+                return false;
+            }
+        }
+
+        if (runMode) {
+            LogicBlock procBlock = (LogicBlock)Blocks.logicProcessor;
                 if ("hyper".equals(procType)) {
                     procBlock = (LogicBlock)Blocks.hyperProcessor;
                 } else if ("micro".equals(procType)) {
@@ -794,13 +973,8 @@ public class MindustryHarness {
             } else {
                 System.out.println("OK:" + asm.instructions.length);
             }
-            System.exit(0);
-        } catch (Throwable t) {
-            System.err.println("ERROR: " + t.getMessage());
-            t.printStackTrace(System.err);
-            System.exit(2);
+            return true;
         }
-    }
 
     private static Seq<String[]> extractStatementTokens(String text) {
         if (text == null || text.isEmpty()) return new Seq<>();

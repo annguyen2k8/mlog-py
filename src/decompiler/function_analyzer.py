@@ -306,11 +306,17 @@ class FunctionAnalyzer:
                     continue
 
                 proc_end = curr_entry
+                found_terminal = False
                 while proc_end < global_start_addr:
                     pi = self.instr_by_addr[proc_end]
                     if pi.opcode in ("end", "stop"):
+                        found_terminal = True
                         break
                     proc_end += 1
+
+                if not found_terminal:
+                    curr_entry += 1
+                    continue
 
                 main_callers = [
                     i for i in self.instructions
@@ -580,16 +586,17 @@ class FunctionAnalyzer:
 
             # Check Loop Header
             matching_latch: Optional[int] = None
-            for a in range(curr_addr + 1, stop_addr):
-                if a in self.instr_by_addr:
-                    cand_i = self.instr_by_addr[a]
-                    if (
-                        cand_i.is_jump
-                        and cand_i.jump_type.name == "UNCONDITIONAL"
-                        and cand_i.jump_target == curr_addr
-                    ):
-                        matching_latch = a
-                        break
+            is_conditional_latch = False
+            latch_cand_i: Optional[MlogInstruction] = None
+            if not any(h == curr_addr for h, _ in loop_stack):
+                for a in reversed(range(curr_addr + 1, stop_addr)):
+                    if a in self.instr_by_addr:
+                        cand_i = self.instr_by_addr[a]
+                        if cand_i.is_jump and cand_i.jump_target == curr_addr:
+                            matching_latch = a
+                            latch_cand_i = cand_i
+                            is_conditional_latch = cand_i.is_conditional_jump
+                            break
 
             if matching_latch is not None:
                 cond_str = "True"
@@ -623,14 +630,53 @@ class FunctionAnalyzer:
                     call_start_map=call_start_map,
                     absorbed_addresses=absorbed_addresses,
                 )
+
+                if is_conditional_latch and not (instr.is_conditional_jump and instr.jump_target is not None) and latch_cand_i:
+                    cond_str_break = condition_to_python(
+                        latch_cand_i.jump_condition or "always",
+                        latch_cand_i.args[2] if len(latch_cand_i.args) > 2 else "0",
+                        latch_cand_i.args[3] if len(latch_cand_i.args) > 3 else "0",
+                        invert=True,
+                    )
+                    cond_expr_break = condition_to_expr(
+                        latch_cand_i.jump_condition or "always",
+                        latch_cand_i.args[2] if len(latch_cand_i.args) > 2 else "0",
+                        latch_cand_i.args[3] if len(latch_cand_i.args) > 3 else "0",
+                        invert=True,
+                    )
+                    loop_body.append(
+                        IfNode(
+                            condition_str=cond_str_break,
+                            then_body=[BreakNode(source_addresses=[latch_cand_i.address])],
+                            else_body=[],
+                            condition_expr=cond_expr_break,
+                            source_addresses=[latch_cand_i.address],
+                        )
+                    )
+
                 nodes.append(WhileNode(condition_str=cond_str, body=loop_body, condition_expr=cond_expr, source_addresses=sorted(set([curr_addr, matching_latch]))))
                 curr_addr = max(exit_addr, matching_latch + 1)
                 continue
 
-            # Check Conditional Branch (If / If-Else)
+            # Check Conditional Branch (If / If-Else / Break / Continue)
             if instr.is_conditional_jump and instr.jump_target is not None:
                 jump_target = instr.jump_target
                 fallthrough = curr_addr + 1
+
+                if loop_stack:
+                    curr_loop_start, curr_loop_end = loop_stack[-1]
+                    if jump_target == curr_loop_start:
+                        cond_str = condition_to_python(instr.jump_condition or "always", instr.args[2] if len(instr.args) > 2 else "0", instr.args[3] if len(instr.args) > 3 else "0", invert=False)
+                        cond_expr = condition_to_expr(instr.jump_condition or "always", instr.args[2] if len(instr.args) > 2 else "0", instr.args[3] if len(instr.args) > 3 else "0", invert=False)
+                        nodes.append(IfNode(condition_str=cond_str, then_body=[ContinueNode(source_addresses=[curr_addr])], else_body=[], condition_expr=cond_expr, source_addresses=[curr_addr]))
+                        curr_addr += 1
+                        continue
+                    if jump_target == curr_loop_end:
+                        cond_str = condition_to_python(instr.jump_condition or "always", instr.args[2] if len(instr.args) > 2 else "0", instr.args[3] if len(instr.args) > 3 else "0", invert=False)
+                        cond_expr = condition_to_expr(instr.jump_condition or "always", instr.args[2] if len(instr.args) > 2 else "0", instr.args[3] if len(instr.args) > 3 else "0", invert=False)
+                        nodes.append(IfNode(condition_str=cond_str, then_body=[BreakNode(source_addresses=[curr_addr])], else_body=[], condition_expr=cond_expr, source_addresses=[curr_addr]))
+                        curr_addr += 1
+                        continue
 
                 if jump_target > curr_addr and jump_target <= stop_addr:
                     has_else = False

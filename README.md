@@ -49,6 +49,9 @@ mlog-py compile input.py -o output.mlog
 # Compile without clipboard copy
 mlog-py compile input.py --no-clipboard
 
+# Convert Python '# comments' into Mindustry 'print' statements
+mlog-py compile input.py --comments-to-print
+
 # Debug mode: view IR instructions and resolved label addresses
 mlog-py compile input.py --debug
 
@@ -67,11 +70,15 @@ mlog-py decompile input.mlog
 # Decompile and save to file
 mlog-py decompile input.mlog -o output.py
 
+# Simplify expressions & fold single-use temporaries via Dataflow analysis
+mlog-py decompile input.mlog --simplify-expressions
+
 # Piped / stream input from stdin
 cat input.mlog | mlog-py decompile
 mlog-py decompile - < input.mlog
 
-# Interactive copy-paste in terminal (finish with Ctrl+D or 'EOF' line)
+# Interactive paste in terminal (press Ctrl+D or type 'EOF' on an empty line)
+# Offers an interactive prompt to save to a custom file or print to stdout
 mlog-py decompile
 
 # Include instruction addresses in comments (# mlog[<addr>])
@@ -170,6 +177,9 @@ Explore complete paired examples in [`examples/`](examples/README.md):
 - **Augmented Assignment**: In-place assignment operators (`+=`, `-=`, `*=`, `/=`, `//=`, `%=`, `**=`, `&=`, `|=`, `^=`, `<<=`, `>>=`) for both scalar variables and memory arrays (`arr[i] += val`), featuring atomic single-offset address evaluation without redundant reads.
 - **Short-Circuit Boolean Logic**: Full support for `and`, `or`, and `not` with standard Python short-circuit evaluation.
 - **Mindustry Compiler Intrinsics**: Direct access to Mindustry instructions (`sensor`, `control`, `ucontrol`, `draw`, `read`, `write`, `print`, `ubind`, `lookup`, `packcolor`, `unpackcolor`, `printchar`, `format`, `setrate`, `select`, etc.).
+- **Display & Graphics API**: Complete support for `draw` instructions, including `draw.clear(r=0, g=0, b=0, a=0)` (DSL accepts 0 to 4 arguments for color compatibility; compiles to canonical Mindustry RGB `draw clear r g b 0 0 0`), shape drawing, affine transforms, and `drawflush`.
+- **Advanced Decompiler Control Flow**: Deterministic reconstruction of top-tested while loops with inlined temporaries, bottom-tested loops (`do-while`), nested loops, loop-scoped `break`/`continue`, loop invariant protection, and canonical method aliases (`ucontrol.<method>`, `draw.<method>`).
+- **Comments to Print Buffer**: Compile-time `--comments-to-print` flag converting Python `# comments` directly into Mindustry `print` instructions.
 - **Verified Registry & Enums**: Enums (`SensorProperty`, `ControlProperty`, `UnitControl`, `DrawType`, `LogicOp`, `Condition`, `Units`, etc.) verified against vanilla Mindustry source.
 - **Source Mapping**: Bi-directional provenance tracking between Python statements and mlog instruction addresses.
 - **Semantic Argument Recovery**: Disambiguates named hardware links (quoted strings like `"reactor1"`) from program variables during decompilation.
@@ -222,14 +232,20 @@ The project maintains a comprehensive automated test suite verifying both compil
 - **Tier 3 (Runtime JVM Mindustry v160.7)**: Direct execution on official Mindustry bytecode engine (`LExecutor` + `LAssembler`), verifying variable registers, print buffer states, hardware interactions, and edge cases.
 
 ```bash
-# Run entire test suite
-python3 -m unittest discover -s tests -p "test_*.py"
+# Run entire test suite (using persistent Mindustry JVM daemon ~50-80s)
+python3 run_tests.py --all
 
-# Run Tier 3 runtime test suite on real Mindustry JVM engine
-python3 -m unittest tests/test_tier3_runtime.py
+# Run fast tier (Pure Python: AST, Compiler, Decompiler, IR ~13s)
+python3 run_tests.py --fast
+
+# Run JVM tier (Real Mindustry runtime ~70s)
+python3 run_tests.py --jvm
+
+# Standard unittest command is also fully supported
+python3 -m unittest discover -s tests -p "test_*.py"
 ```
 
-- **1,147 Automated Tests**: 100% passing baseline across compiler, decompiler, registry, CFG, structuring, dataflow, function recovery, bitwise operators, min/max, for loops, memory arrays (int, float, bool), Memory Bank Header Protocol (inter-processor communication layout), Callable Namespace Objects (`draw.<method>`, `ucontrol.<method>`, `ulocate.<method>`, `op.<method>`), augmented assignment, constant folding, system clipboard, built-in variables (Vars API), Mindustry v8 modulo semantics, color packing/unpacking, printchar, format & f-strings, setrate, select & ternary expressions, comprehensive `is`/`is not` semantics, all 25 World Processor privileged statements, CLI stdin/paste decompile, source mapping, and real JVM runtime verification.
+- **1,249 Automated Tests**: 100% passing baseline across compiler, decompiler, registry, CFG, structuring, dataflow, function recovery, bitwise operators, min/max, for loops, memory arrays (int, float, bool), Memory Bank Header Protocol (inter-processor communication layout), Callable Namespace Objects (`draw.<method>`, `ucontrol.<method>`, `ulocate.<method>`, `op.<method>`), augmented assignment, constant folding, system clipboard, built-in variables (Vars API), Mindustry v8 modulo semantics, color packing/unpacking, printchar, format & f-strings, setrate, select & ternary expressions, comprehensive `is`/`is not` semantics, all 25 World Processor privileged statements, CLI stdin/paste decompile, user-defined `enum.IntEnum` named constants, source mapping, and real JVM runtime verification.
 - **Real-World Test Corpus**: 32 representative programs across handwritten scripts, compiler-generated programs, control flow patterns, and pathological edge cases.
 - **Round-Trip Verification**: Guarantees that `MLog → Decompiler → Compiler` produces valid, functionally equivalent instructions.
 

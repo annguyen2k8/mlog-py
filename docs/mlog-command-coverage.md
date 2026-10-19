@@ -72,17 +72,18 @@ flowchart TD
         WORLD["World Processor Exclusive: 24 Statements\n(Privileged Sandbox Map Logic)"]
     end
 
-    subgraph MlogPyCoverage["mlog-py Support & Tier 3 Verification"]
+    subgraph MlogPyCoverage["mlog-py Support & Verification"]
         direction TB
         SUP_STD["28 Standard Opcodes (100.0% Tier 3 Verified)\n(read, write, draw, print, printchar, format,\ndrawflush, printflush, getlink, control, radar, sensor,\nset, op, select, lookup, packcolor, unpackcolor, wait,\nstop, end, jump, setrate, ubind, ucontrol, uradar, ulocate, noop)"]
-        UNSUP_WORLD["24 World Processor Statements (Unimplemented)\n(query, getblock, setblock, spawn, bullet, status,\nweathersense, weatherset, spawnwave, setrule,\nmessage, cutscene, effect, explosion, fetch, sync,\ngetflag, setflag, setprop, playsound, playmusic,\nsetmarker, makemarker, localeprint)"]
+        SUP_WORLD["25 World Processor Statements (100.0% Tier 4 Verified)\n(query, getblock, setblock, spawn, bullet, status,\nweathersense, weatherset, spawnwave, setrule,\nmessage, cutscene, effect, explosion, fetch, sync,\ngetflag, setflag, setprop, playsound, playmusic,\nsetmarker, makemarker, localeprint, clientdata)"]
     end
 
     UI_ALL --> STD
     UI_ALL --> WORLD
     STD --> SUP_STD
     NOOP --> SUP_STD
-    WORLD --> UNSUP_WORLD
+    WORLD --> SUP_WORLD
+    CLIENTDATA --> SUP_WORLD
 ```
 
 ---

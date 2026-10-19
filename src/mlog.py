@@ -5,6 +5,7 @@ import builtins
 import os
 import sys
 from dataclasses import dataclass
+from enum import IntEnum
 from typing import Dict, List, Optional
 
 _cli_print = builtins.print
@@ -120,8 +121,10 @@ from .metadata import (
 from .optimizer import PassThroughOptimizer
 from .parser import parse_and_validate
 from .validator import MlogValidator, ValidationError
+from .comments import transform_comments_to_print
 
 # Null constant representing null in Mindustry Logic
+
 null = None
 
 
@@ -147,7 +150,7 @@ def _get_version() -> str:
     except ImportError:
         pass
 
-    return "0.5.0"
+    return "0.6.0"
 
 
 __version__: str = _get_version()
@@ -171,6 +174,7 @@ def compile_py(
     validate: bool = True,
     allow_functions: bool = False,
     fold_constants: bool = True,
+    comments_to_print: bool = False,
 ) -> CompileResult:
     """Compile Python subset source code into canonical vanilla mlog.
 
@@ -181,18 +185,25 @@ def compile_py(
         validate: Validate emitted mlog against Mindustry syntax rules.
         allow_functions: Allow user-defined function definitions and calls.
         fold_constants: Enable compile-time constant folding (default: True).
+        comments_to_print: Convert Python comments into Mindustry 'print' instructions.
 
     Returns:
         CompileResult containing the emitted mlog, IR instructions, and label table.
     """
+    # 0. Optional comments-to-print preprocessing
+    processed_source, is_comments_to_print = transform_comments_to_print(
+        source, comments_to_print=comments_to_print
+    )
+
     # 1. Parse & validate Python AST subset
-    tree = parse_and_validate(source, filename, allow_functions=allow_functions)
+    tree = parse_and_validate(processed_source, filename, allow_functions=allow_functions)
 
     # 2. Lower AST to IR
     compiler = Compiler(
         filename,
         allow_functions=allow_functions,
         fold_constants=fold_constants,
+        comments_to_print=is_comments_to_print,
     )
     ir = compiler.compile(tree)
 
@@ -227,7 +238,9 @@ def _cli_compile(args: argparse.Namespace) -> int:
             validate=not args.no_validate,
             allow_functions=not args.no_functions,
             fold_constants=not getattr(args, "no_fold_constants", False),
+            comments_to_print=getattr(args, "comments_to_print", False),
         )
+
     except (CompileError, ValidationError) as e:
         _cli_print(f"Compilation error: {e}", file=sys.stderr)
         return 1
@@ -501,6 +514,13 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="Disable automatic copying of compiled mlog to system clipboard",
     )
+    compile_p.add_argument(
+        "--comments-to-print",
+        dest="comments_to_print",
+        action="store_true",
+        help="Convert Python comments into Mindustry 'print' instructions",
+    )
+
 
     # Subcommand: decompile (MLog -> Python DSL)
     decompile_p = subparsers.add_parser(

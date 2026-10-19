@@ -57,11 +57,14 @@ Python DSL Source (.py) / SourceMap (.json)
 ## 3. Phase 2: Structured Control Flow
 
 - **Dominance Analysis (`src/decompiler/structurer.py`)**: Computes immediate dominators (`idom`) and dominance frontiers for every basic block.
-- **Natural Loop Detection**: Identifies back-edges $u \to v$ where $v$ dominates $u$. Reconstructs `WhileNode` with natural loop headers, bodies, and latches.
+- **Natural Loop Detection**: Identifies back-edges $u \to v$ where $v$ dominates $u$.
+  - **Top-tested While Loops (`while cond:`)**: Pure temporary calculations feeding the condition jump are inlined directly into the comparison expression.
+  - **Loop Header Side-Effects**: When a loop header contains I/O operations (`read`, `sensor`, `getlink`), the loop is safely structured as `while True:` where the pre-instructions execute first, followed by `if exit_cond: break`, ensuring exact execution order without undefined variable access.
+  - **Bottom-tested Loops (`do-while`)**: When the condition check occurs at the latch back-edge, the body statements are scoped up to `latch_block.end_address`, and the latch is cleanly emitted as `if not (latch_cond): break`.
 - **Branch Ladder Recovery**: Reconstructs `IfNode` trees with optional `elif` and `else` branches based on convergence merge points.
-- **Break & Continue Isolation**: Distinguishes between loop-internal jumps (`continue` targeting header/latch, `break` targeting loop exit) and external jumps.
+- **Break & Continue Isolation**: Distinguishes between loop-internal jumps (`continue` targeting header/latch, `break` targeting loop exit) and external jumps across nested loops.
 - **Zero Guessing Fallback (`UnstructuredNode`)**:
-  If a loop is irreducible (multiple entry points) or an indirect jump modifies `@counter`, the structurer does not guess speculative while loops. Instead, it emits `UnstructuredNode` with comments and raw jump calls to preserve 100% execution fidelity.
+  If a loop is irreducible (multiple entry points) or an indirect jump modifies `@counter`, the structurer does not guess speculative while loops. Instead, it emits `UnstructuredNode` with comments and raw, unquoted semantic `jump(...)` calls (`jump(1, "equal", y, 2)`) to preserve 100% execution fidelity and byte-for-byte round-trip equivalence.
 
 ---
 
@@ -69,11 +72,15 @@ Python DSL Source (.py) / SourceMap (.json)
 
 - **Scoped Use-Def Analysis (`src/decompiler/dataflow.py`)**:
   Tracks definitions and usages of variables within structured basic block scopes.
+- **Loop Invariant Safety**:
+  Guarantees that variables modified inside a `WhileNode` body are never inlined into `WhileNode.condition_expr` or folded out of the loop scope.
 - **Temporary Variable Collapsing**:
   Compiler-generated temporaries (`__tmp0`, `__tmp1`) are collapsed into compound expression trees if and only if:
   1. The variable is defined exactly once.
   2. The variable is used exactly once.
   3. The use occurs within the same structured scope without intervening redefinitions or side-effects.
+- **Alias Simplification & Constant Folding (`--simplify-expressions`)**:
+  Eliminates redundant variable-to-variable aliases (`b = g`) and folds constant operations while strictly respecting Mindustry arithmetic semantics and IEEE-754 limits.
 - **Expression IR (`src/decompiler/expression.py`)**:
   Builds nested `BinaryOpNode`, `UnaryOpNode`, and `CallNode` expression trees with proper operator precedence and minimal parenthesization.
 - **Safe Multi-Use Preservation**:
@@ -136,6 +143,9 @@ control enabled reactor1 0 0 0 0
 
 # Basic decompilation
 python_code = decompile(mlog_text)
+
+# Decompilation with advanced dataflow expression & alias simplification
+simplified_code = decompile(mlog_text, recover_expressions=True)
 
 # Decompilation with provenance comments (# mlog[<addr>])
 debug_code = decompile(mlog_text, debug=True)

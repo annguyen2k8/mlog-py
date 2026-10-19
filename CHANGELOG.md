@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-19
+
 ### Added
+- **`enum.IntEnum` Named Constants Support**:
+  - Full support for `from enum import IntEnum` and `class State(IntEnum): ...` lowering member references directly to compile-time integer constants with zero runtime objects or heap allocations in Mlog.
+  - Safe static evaluation for integer expressions, bitwise flags (`1 << 0`, `FLAG_A | FLAG_B`), arithmetic, unary inversion (`~`), and references to earlier members of the same enum.
+  - Independent `NamedConstantRegistry` symbol table architecture keeping constant resolution decoupled from specific AST nodes.
+  - Strict compile-time validation rejecting unsupported base classes (`Flag`, `StrEnum`, `Enum`), multiple inheritance, methods, decorators, member reassignments, dynamic expressions, or standalone enum values.
+- **Ultra-Fast Persistent Mindustry JVM Daemon & Test Tiering**:
+  - Re-architected `tools/harness/MindustryHarness.java` with a persistent `--daemon` protocol and isolated world reset (`resetWorld()`).
+  - Implemented unbuffered raw binary IPC in `src/mindustry_validator.py` with automatic timeout handling, crash recovery, and seamless one-shot fallback.
+  - Accelerated full test suite execution from ~29.4 minutes to ~50-80 seconds (over 20x speedup) on Termux/Android ARM64.
+  - Added tiered test runner `run_tests.py` supporting `--fast` (pure Python in ~13s), `--jvm` (Mindustry runtime in ~70s), and `--all` (full suite in ~80s).
 - **Tier 4 World Processor & Map Scripting (25 Privileged Statements)**:
   - Complete support across Validator, Registry, AST Parser, Compiler, Decompiler, and IDE Stubs for all 25 privileged statements:
     - **World State Manipulation**: `query`, `getblock`, `setblock`.
@@ -28,12 +40,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Full support for piped streams (`cat code.mlog | mlog-py decompile`) and interactive terminal paste with guidance printed to `sys.stderr` and sentinel termination (`EOF` or `__EOF__`).
   - Standard exit codes: `0` on success, `1` on empty input or syntax error, `130` on `KeyboardInterrupt` (Ctrl+C).
   - Safe `-o` flag support when reading from stdin, and graceful `BrokenPipeError` handling.
+- **Advanced Loop Decompiler & Semantic Control Flow**:
+  - Deterministic reconstruction of top-tested `while` loops, inlining safe compiler-generated condition temporaries without moving loop-modified variables into conditions.
+  - Safe handling of loop header I/O side-effects (`read`, `sensor`, `getlink`): reconstructed as `while True:` where pre-instructions execute before `if exit_cond: break`, completely eliminating `undefined variable` errors.
+  - Robust bottom-tested loops (`do-while` / conditional latch) structured cleanly as `while True: ... if not (latch_cond): break`.
+  - Scoped `break` and `continue` isolation across nested loops and conditional branches.
+  - Clean unquoted fallback in `UnstructuredNode` emitting semantic `jump(...)` calls (`jump(1, "equal", y, 2)`) preserving exact round-trip bytecode without quoting identifiers.
+- **Enhanced `draw.clear()` API**:
+  - `draw.clear(r=0, g=0, b=0, a=0)` in both compiler and decompiler supporting 0 to 4 arguments (DSL accepts RGBA for color compatibility, compiling to standard Mindustry RGB opcode `draw clear r g b 0 0 0`) with complete typing stubs (`mlog.pyi`).
+- **Comments to Print Compilation (`--comments-to-print`)**:
+  - Added CLI and compiler flag `--comments-to-print` allowing Python `# comments` to be lowered into runtime Mindustry `print "comment"` instructions.
+- **Dataflow Expression & Alias Simplification (`--simplify-expressions`)**:
+  - Phase 3 dataflow pass safely inlining single-use temporaries into arithmetic/logic expressions, constant folding pure expressions, and eliminating redundant aliases (`b = g`).
+- **Decompiler Canonical Method Aliases**:
+  - Recovers idiomatic Pythonic method calls for `ucontrol` (`ucontrol.move()`, `ucontrol.approach()`, etc.) and `draw` (`draw.clear()`, `draw.color()`, etc.) instead of generic opcode calls.
 - **Decompiler 53/53 Opcode Parity & Regression Suite**:
   - Comprehensive coverage test suite (`tests/test_decompiler_full_coverage.py`) verifying round-trip semantic equivalence across all 53 Mindustry v160.7 opcodes, structured control flow recovery, and parser error boundaries.
   - Automated CLI test suite (`tests/test_cli_decompile_stdin.py`) covering all stdin, piped, interactive, sentinel, and error scenarios.
+  - Dedicated loop regression suite (`tests/test_decompiler_loops.py`) with 22 edge-case and roundtrip tests.
+  - Automated test suite expanded to **1,249 automated tests** with 100% pass rate.
 
 ### Fixed
 - **CLI Could Not Compile Function Definitions**: `mlog-py compile script.py` always ran with `allow_functions=False`, so every `def` statement failed with `unsupported Python feature: function definition` even though the compiler fully supports user-defined functions. The CLI now enables function support by default (matching the documented Python subset and `examples/compiler/functions.py`) and exposes `--no-functions` to restore the strict subset. The Python API default (`compile_py(..., allow_functions=False)`) is unchanged.
+- **FunctionAnalyzer Loop Latch Truncation**: Loop latch detection in `FunctionAnalyzer` previously scanned forwards, mistaking early `continue` jumps targeting the loop header for the outer loop latch. This cut the loop body short and dropped all subsequent statements. Reversed latch search resolves the true bottom-most loop latch and preserves all instructions.
 - **Decompiler Emitted Reserved Compiler Temporaries**: Preserved `__tmpN` assignments produced Python the compiler refused to recompile (`variable name '__tmp0' is reserved for compiler temporaries`), so `examples/compiler/array_memory.mlog`, `examples/compiler/aug_assign.mlog`, and `examples/compiler/color_channels.mlog` could not complete an MLog → Python → MLog round-trip. All compiler examples now decompile to valid, recompilable Python, and `color_channels.mlog` round-trips byte-for-byte.
 - **Inlined Operands Silently Quoted Into Strings**: Without the shared predicate, folding a comparison or a boolean-bearing expression into an operand rendered it as a string literal (e.g. `write("i > 5", "cell1", 0)`), changing program semantics.
 - **`src/parser.py` Missing `Union` Import**: `_validate_unpacking_assign` annotated its target with `Union`, which was never imported. This was masked by PEP 649 lazy annotation evaluation on Python 3.14 and would raise `NameError` at import time on Python 3.9-3.13.

@@ -369,7 +369,7 @@ class _DrawCallable:
         draw(DrawType.LINE, x1, y1, x2, y2)
     and modern namespace method syntax:
         draw.line(x1, y1, x2, y2)
-        draw.clear(r, g, b)
+        draw.clear(r=0, g=0, b=0, a=0)
         draw.color(r, g, b, a=255)
         draw.rect(x, y, width, height)
         draw.reset()
@@ -378,8 +378,9 @@ class _DrawCallable:
     def __call__(self, type_: Any, *params: Any) -> None:
         return None
 
-    def clear(self, r: Any, g: Any, b: Any) -> None:
+    def clear(self, r: Any = 0, g: Any = 0, b: Any = 0, a: Any = 0) -> None:
         return None
+
 
     def color(self, r: Any, g: Any, b: Any, a: Any = 255) -> None:
         return None
@@ -2962,6 +2963,7 @@ MLOG_EXPORTS: Set[str] = (
         "compile_py",
         "CompileResult",
         "ColorChannels",
+        "IntEnum",
         "LocateResult",
         "OreLocateResult",
         "main",
@@ -3002,7 +3004,7 @@ def generate_pyi() -> str:
     lines.append('Do not edit directly; regenerated and verified via test suite.')
     lines.append('"""')
     lines.append("")
-    lines.append("from enum import Enum")
+    lines.append("from enum import Enum, IntEnum")
     lines.append("from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, overload")
     lines.append("")
     lines.append("# Package version")
@@ -3069,7 +3071,7 @@ def generate_pyi() -> str:
     lines.append("    label_table: Dict[str, int]")
     lines.append("")
     lines.append(
-        "def compile_py(source: str, filename: str = '<stdin>', optimize: bool = False, validate: bool = True) -> CompileResult:"
+        "def compile_py(source: str, filename: str = '<stdin>', optimize: bool = False, validate: bool = True, allow_functions: bool = False, fold_constants: bool = True, comments_to_print: bool = False) -> CompileResult:"
     )
     lines.append('    """Compile Python subset source code into canonical vanilla mlog."""')
     lines.append("    ...")
@@ -3095,11 +3097,11 @@ def generate_pyi() -> str:
             lines.append("        draw(DrawType.LINE, x1, y1, x2, y2)")
             lines.append("    and modern namespace method syntax:")
             lines.append("        draw.line(x1, y1, x2, y2)")
-            lines.append("        draw.clear(r, g, b)")
+            lines.append("        draw.clear(r=0, g=0, b=0, a=0)")
             lines.append("        draw.color(r, g, b, a=255)")
             lines.append('    """')
             lines.append("    def __call__(self, type: Union[DrawType, str], x: Any = 0, y: Any = 0, p1: Any = 0, p2: Any = 0, p3: Any = 0, p4: Any = 0) -> None: ...")
-            lines.append("    def clear(self, r: Any, g: Any, b: Any) -> None: ...")
+            lines.append("    def clear(self, r: Any = 0, g: Any = 0, b: Any = 0, a: Any = 0) -> None: ...")
             lines.append("    def color(self, r: Any, g: Any, b: Any, a: Any = 255) -> None: ...")
             lines.append("    def col(self, color: Any) -> None: ...")
             lines.append("    def stroke(self, width: Any) -> None: ...")

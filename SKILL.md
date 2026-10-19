@@ -41,8 +41,8 @@ non-negotiable rules:
    isolated unit test reproducing the issue before and verifying the solution
    after.
 7. **Run Full Test Suite Before Concluding**: Execute
-   `python3 -m unittest discover -s tests` and verify all tests pass
-   (987/987 PASS) before completing any task.
+   `python3 -m unittest discover -s tests -p "test_*.py"` and verify all tests pass
+   (1,249/1,249 PASS) before completing any task.
 
 ---
 
@@ -69,7 +69,7 @@ mlog-py/
 │   ├── emitter.py           # Two-pass address resolution
 │   ├── validator.py         # Static grammar & processor limits
 │   └── decompiler/          # Decompiler subsystem (Phases 1–5)
-└── tests/                   # Comprehensive test suite (987 tests)
+└── tests/                   # Comprehensive test suite (1,249 tests)
     └── corpus/              # 32-case real-world corpus
 ```
 
@@ -267,7 +267,7 @@ The framework provides guaranteed round-trip verification across three flows:
 
 ## 7. Testing Requirements & Corpus Structure
 
-- **Test Suite**: 987 automated tests in `tests/test_*.py`.
+- **Test Suite**: 1,249 automated tests in `tests/test_*.py`.
 - **Hardening Corpus (`tests/corpus/`)**: 32 real-world programs across 6
   categories:
   - `handwritten/`: Real game controller scripts (turrets, mining drones,

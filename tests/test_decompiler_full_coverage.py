@@ -77,8 +77,8 @@ packcolor col 1 0 0 1
 unpackcolor r g b a col
 """
         py_code, recompiled = self._verify_roundtrip(mlog_raw)
-        self.assertIn('draw("clear", 0, 0, 0, 0, 0, 0)', py_code)
-        self.assertIn('draw("color", 255, 128, 0, 255, 0, 0)', py_code)
+        self.assertIn('draw.clear(0, 0, 0)', py_code)
+        self.assertIn('draw.color(255, 128, 0)', py_code)
         self.assertIn('draw.print(10, 20, Align.CENTER)', py_code)
         self.assertIn('drawflush("display1")', py_code)
         self.assertIn('col = packcolor(1, 0, 0, 1)', py_code)
@@ -96,7 +96,8 @@ status false @status-burning @unit 5
 """
         py_code, recompiled = self._verify_roundtrip(mlog)
         self.assertIn('ubind("@flare")', py_code)
-        self.assertIn('ucontrol("move", 100, 200, 0, 0, 0)', py_code)
+        self.assertIn('ucontrol.move(100, 200)', py_code)
+
         self.assertIn('ulocate.building("core", 0)', py_code)
         self.assertIn('spawned_unit = spawn("@flare", 50, 60, 0, "@sharded", 0)', py_code)
         self.assertIn('spawned_bullet = bullet("@flare", 0, 10, 20, 5, "@sharded", None, -1, 1, 1, -1, -1)', py_code)

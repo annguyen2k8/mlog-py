@@ -17,7 +17,7 @@ import unittest
 
 from src.compiler import CompileError
 from src.decompiler import decompile
-from src.mindustry_validator import get_classpath, is_mindustry_available
+from src.mindustry_validator import get_classpath, is_mindustry_available, run_with_mindustry
 from src.mlog import compile_py
 from src.metadata import _rt_select
 from src.validator import MlogValidator, ValidationError
@@ -649,21 +649,11 @@ class TestIsNotComprehensiveSemantics(unittest.TestCase):
         if not is_mindustry_available():
             self.skipTest("Mindustry Java runtime not available in this environment")
         res = compile_py(source)
-        cp = get_classpath()
-        java_bin = shutil.which("java")
-        proc = subprocess.run(
-            [java_bin, "-cp", cp, "mindustry.test.MindustryHarness", "--run"],
-            input=res.mlog,
-            text=True,
-            capture_output=True,
-            timeout=30,
-        )
-        self.assertEqual(proc.returncode, 0, f"Mindustry JVM failed: {proc.stderr}")
+        run_res = run_with_mindustry(res.mlog)
+        self.assertTrue(run_res.success, f"Mindustry JVM failed: {run_res.message}")
         vars_map = {}
-        for line in proc.stdout.splitlines():
-            if line.startswith("VAR:"):
-                k, v = line[4:].split("=", 1)
-                vars_map[k] = v
+        for k, v in run_res.vars.items():
+            vars_map[k] = str(v)
         return vars_map
 
     def test_is_not_assignment_lowering(self):

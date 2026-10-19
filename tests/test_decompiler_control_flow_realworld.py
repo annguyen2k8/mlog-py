@@ -86,9 +86,10 @@ class TestDecompilerControlFlowRealWorld(unittest.TestCase):
         self.assertNotIn("jump(", py_code)
 
         # The body statements must only appear once, not duplicated
-        self.assertEqual(py_code.count('draw("rect", x, y, size, size, 0, 0)'), 1)
+        self.assertEqual(py_code.count("draw.rect(x, y, size, size)"), 1)
         self.assertEqual(py_code.count("y = y + size"), 1)
         self.assertEqual(py_code.count("x = x + size"), 1)
+
 
         # Roundtrip compile
         res = compile_py(py_code, allow_functions=False, validate=True)
