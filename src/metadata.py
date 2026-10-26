@@ -9,7 +9,7 @@ import math
 import sys
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set, Tuple, Union
 
 from .mlog_registry import (
     Align,

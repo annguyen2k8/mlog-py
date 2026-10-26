@@ -14,6 +14,7 @@ Tests verify:
 import shutil
 import subprocess
 import unittest
+from typing import List, Tuple
 
 from src.compiler import CompileError
 from src.decompiler import decompile

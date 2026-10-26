@@ -6,9 +6,10 @@ formal parameters (Parameter), return values (ReturnValue), and program-level co
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from .expression import Expr
+from .instruction import MlogInstruction
 from .structured_ir import StructuredNode, StructuredProgram
 
 

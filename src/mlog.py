@@ -6,7 +6,7 @@ import os
 import sys
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 _cli_print = builtins.print
 

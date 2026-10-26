@@ -6,7 +6,7 @@ performs safe copy/constant propagation, and eliminates compiler temporaries
 strictly following the Zero Guessing principle.
 """
 
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .expression import (
     MLOG_TO_PY_BINARY_OPS,
