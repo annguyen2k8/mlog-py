@@ -197,14 +197,14 @@ op round xM xM b
         self.assertIn("op round xM xM", recompiled)
 
     def test_draw_stroke_and_control_enabled_no_undefined_names(self):
-        """draw(stroke, ...) and control(enabled, ...) must emit quoted strings to avoid undefined NameErrors."""
+        """draw(stroke, ...) and control(enabled, ...) must emit quoted strings or modern methods to avoid undefined NameErrors."""
         mlog = """draw stroke 1 0 255 255 0 0
 control enabled reactor1 1 0 0 0
 """
         py = decompile(mlog)
         self._assert_no_undefined_variables(py)
         self.assertIn("draw.stroke(1)", py)
-        self.assertIn('control("enabled", "reactor1", 1, 0, 0, 0)', py)
+        self.assertIn('control.enabled("reactor1", 1)', py)
 
         recompiled = compile_py(py).mlog.strip()
         self.assertIn("draw stroke 1 0 0 0 0 0", recompiled)
@@ -234,13 +234,25 @@ ulocate building core 0 @copper kx ky kfound kblock
         self.assertIn("ulocate building container 0 @copper cx cy found cblock", recompiled)
         self.assertIn("ulocate building core 0 @copper kx ky kfound kblock", recompiled)
 
-    def test_control_properties_and_draw_types_always_quoted(self):
-        """All ControlProperty and DrawType keywords must always be quoted string literals or modern methods."""
+    def test_control_properties_and_draw_types_never_undefined_names(self):
+        """All ControlProperty and DrawType keywords must never leak as undefined variable names."""
         from src.mlog_registry_data import CONTROL_PROPERTIES
-        for prop in CONTROL_PROPERTIES:
+
+        expected_control = {
+            "enabled": 'control.enabled("reactor1", 1)',
+            "shoot": 'control.shoot("reactor1", 1, 0, 0)',
+            "shootp": 'control.shootp("reactor1", 1, 0)',
+            "config": 'control.config("reactor1", 1)',
+            "color": 'control.color("reactor1", 1)',
+        }
+        self.assertEqual(set(expected_control), set(CONTROL_PROPERTIES))
+        for prop, expected_call in expected_control.items():
             mlog = f"control {prop} reactor1 1 0 0 0\n"
             py = decompile(mlog)
-            self.assertIn(f'control("{prop}", "reactor1", 1, 0, 0, 0)', py)
+            self._assert_no_undefined_variables(py)
+            self.assertIn(expected_call, py)
+            self.assertNotIn(f'control("{prop}"', py)
+            self.assertEqual(compile_py(py).mlog.strip(), mlog.strip())
 
         expected_draw = {
             "clear": "draw.clear(0, 0, 0)",

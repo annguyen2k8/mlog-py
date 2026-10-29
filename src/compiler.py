@@ -1031,6 +1031,43 @@ class Compiler:
         else:
             return self.compile_expr(arg)
 
+    def validate_control_at_token(self, value: str, node: ast.AST) -> None:
+        """Validate a bare ``@`` token used as a control operand.
+
+        A bare mlog token cannot contain whitespace, quote characters, or the
+        comment delimiters ``#`` and ``;``. Rejecting those here keeps invalid
+        tokens from reaching the emitted instruction and producing a confusing
+        downstream validation error.
+        """
+        if len(value) < 2 or any(ch.isspace() or ch in "\"'#;" for ch in value):
+            self.error(
+                f"invalid control '@' token {value!r}: expected '@' followed by characters other than whitespace, quotes, '#', or ';'",
+                node,
+            )
+
+    def format_control_target(self, arg: ast.expr) -> str:
+        """Format a control target, validating string literals that begin with ``@``."""
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value.startswith("@"):
+            self.validate_control_at_token(arg.value, arg)
+        return str(self.format_intrinsic_arg(arg, is_ident=True))
+
+    def format_control_value(self, arg: ast.expr) -> str:
+        """Format a ``control`` parameter operand.
+
+        Control parameters are normally numeric, but ``shootp`` and ``config`` accept
+        object operands, and any operand may be a special constant such as ``@copper``
+        or ``@unit``. String literals beginning with ``@`` are therefore emitted as
+        bare mlog tokens; all other string literals stay quoted so they cannot be
+        mistaken for variable names.
+        """
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            value = arg.value
+            if value.startswith("@"):
+                self.validate_control_at_token(value, arg)
+                return value
+            return str(self.format_intrinsic_arg(arg, is_ident=False))
+        return str(self.format_intrinsic_arg(arg, is_ident=True))
+
     def compile_raw_value(self, call: ast.Call, target_dest: Optional[str] = None) -> str:
         """Compile raw("<token>") used as a standalone value expression.
 
@@ -1065,6 +1102,8 @@ class Compiler:
                 ns = call.func.value.id
                 if ns == "draw":
                     return self.compile_draw_method(call, target_dest=target_dest, is_statement=is_statement)
+                elif ns == "control":
+                    return self.compile_control_method(call, target_dest=target_dest, is_statement=is_statement)
                 elif ns == "ucontrol":
                     return self.compile_ucontrol_method(call, target_dest=target_dest, is_statement=is_statement)
                 elif ns == "ulocate":
@@ -1379,13 +1418,11 @@ class Compiler:
                 )
             type_arg = self.format_intrinsic_arg(args[0], is_ident=True)
             type_str = self.validate_arg(type_arg, REG_CONTROL_PROPERTIES, self.loc(args[0]))
-            target = str(self.format_intrinsic_arg(args[1], is_ident=True))
+            target = self.format_control_target(args[1])
             param_strs = [type_str, target]
             for i in range(2, 6):
                 if i < len(args):
-                    param_strs.append(
-                        str(self.format_intrinsic_arg(args[i], is_ident=False))
-                    )
+                    param_strs.append(self.format_control_value(args[i]))
                 else:
                     param_strs.append("0")
             self.instructions.append(
@@ -2641,6 +2678,78 @@ class Compiler:
 
         else:
             self.error(f"unknown draw method: 'draw.{method_name}'", call)
+
+    def compile_control_method(
+        self,
+        call: ast.Call,
+        target_dest: Optional[str] = None,
+        is_statement: bool = False,
+    ) -> str:
+        """Compile control.<method>(...) into a Mindustry v160.7 'control' instruction."""
+        loc = self.loc(call)
+        assert isinstance(call.func, ast.Attribute)
+        method_name = call.func.attr
+        args = call.args
+        ns = call.func.value.id if isinstance(call.func.value, ast.Name) else "control"
+
+        if method_name == "enabled":
+            if len(args) != 2 or call.keywords:
+                self.error(
+                    f"invalid arguments for {ns}.enabled: expected {ns}.enabled(target, value)",
+                    call,
+                )
+            target = self.format_control_target(args[0])
+            value = self.format_control_value(args[1])
+            params = ["enabled", target, value, "0", "0", "0"]
+
+        elif method_name == "shoot":
+            if len(args) != 4 or call.keywords:
+                self.error(
+                    f"invalid arguments for {ns}.shoot: expected {ns}.shoot(target, x, y, shoot)",
+                    call,
+                )
+            target = self.format_control_target(args[0])
+            x = self.format_control_value(args[1])
+            y = self.format_control_value(args[2])
+            shoot = self.format_control_value(args[3])
+            params = ["shoot", target, x, y, shoot, "0"]
+
+        elif method_name == "shootp":
+            if len(args) != 3 or call.keywords:
+                self.error(
+                    f"invalid arguments for {ns}.shootp: expected {ns}.shootp(target, unit, shoot)",
+                    call,
+                )
+            target = self.format_control_target(args[0])
+            unit = self.format_control_value(args[1])
+            shoot = self.format_control_value(args[2])
+            params = ["shootp", target, unit, shoot, "0", "0"]
+
+        elif method_name == "config":
+            if len(args) != 2 or call.keywords:
+                self.error(
+                    f"invalid arguments for {ns}.config: expected {ns}.config(target, value)",
+                    call,
+                )
+            target = self.format_control_target(args[0])
+            value = self.format_control_value(args[1])
+            params = ["config", target, value, "0", "0", "0"]
+
+        elif method_name == "color":
+            if len(args) != 2 or call.keywords:
+                self.error(
+                    f"invalid arguments for {ns}.color: expected {ns}.color(target, value)",
+                    call,
+                )
+            target = self.format_control_target(args[0])
+            value = self.format_control_value(args[1])
+            params = ["color", target, value, "0", "0", "0"]
+
+        else:
+            self.error(f"unknown control method: '{ns}.{method_name}'", call)
+
+        self.instructions.append(IRRaw(opcode="control", args=params, loc=loc))
+        return "0"
 
     def compile_ucontrol_method(
         self,

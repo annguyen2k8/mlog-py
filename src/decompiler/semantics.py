@@ -64,6 +64,16 @@ def is_string_literal(token: str) -> bool:
     return len(token) >= 2 and token.startswith('"') and token.endswith('"')
 
 
+def is_mlog_color_literal(token: str) -> bool:
+    """Check for an MLog color literal (``%RRGGBB``, ``%RRGGBBAA``, or ``%[name]``)."""
+    if token.startswith("%[") and token.endswith("]") and len(token) > 3:
+        return not any(ch.isspace() for ch in token[2:-1])
+    if not token.startswith("%"):
+        return False
+    digits = token[1:]
+    return len(digits) in (6, 8) and all(ch in "0123456789abcdefABCDEF" for ch in digits)
+
+
 def quote_string_literal(val: str) -> str:
     """Format string with canonical double quotes escaping quotes and backslashes."""
     escaped = val.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
@@ -343,6 +353,16 @@ def format_semantic_argument(
     args: Optional[Tuple[str, ...]] = None,
 ) -> str:
     """Format an argument into its proper Python DSL representation based on semantics and SSOT."""
+    # Control operands need extra care to preserve object-vs-string semantics.
+    # A quoted string beginning with '@' is a string object, not a special constant;
+    # emit it through raw() so the compiler cannot turn it into a bare @ token.
+    # MLog color literals (%RRGGBB[AA]) are numeric constants and must not be quoted.
+    if opcode == "control" and arg_idx > 0:
+        if is_string_literal(arg) and arg[1:-1].startswith("@"):
+            return f"raw({arg!r})"
+        if arg_idx == 2 and args and args[0] == "color" and is_mlog_color_literal(arg):
+            return f"raw({arg!r})"
+
     # 1. String literal already
     if is_string_literal(arg):
         return arg

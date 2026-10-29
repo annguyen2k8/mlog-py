@@ -502,6 +502,46 @@ ulocate.spawn(outX, outY, found)                                         # Emits
 ulocate.damaged(outX, outY, found, b)                                    # Emits: ulocate damaged core true @copper outX outY found b
 ```
 
+### Building Control Callable Namespace Object (`control.<method>`)
+
+Mindustry v160.7 exposes exactly five building-control modes from `LAccess`: `enabled`, `shoot`, `shootp`, `config`, and `color`. The `control` symbol is both directly callable (legacy generic form) and an object with typed methods. Each method injects the trailing dummy operands required by the six-operand `control` instruction:
+
+```python
+from mlog import control, Items, packcolor, raw
+
+control.enabled(reactor1, 1)                # Emits: control enabled reactor1 1 0 0 0
+control.enabled(reactor1, False)            # Emits: control enabled reactor1 false 0 0 0
+control.shoot(turret1, 100, 200, 1)         # Emits: control shoot turret1 100 200 1 0
+control.shootp(turret1, "@unit", 1)         # Emits: control shootp turret1 @unit 1 0 0
+control.shootp(turret1, unit1, 1)           # Emits: control shootp turret1 unit1 1 0 0
+control.config(sorter1, "@copper")          # Emits: control config sorter1 @copper 0 0 0
+control.config(sorter1, Items.COPPER)       # Emits: control config sorter1 @copper 0 0 0
+control.config(sorter1, 3)                  # Compiles, but the engine ignores numeric config
+white = packcolor(1, 1, 1, 1)
+control.color(light1, white)                # Emits: control color light1 white 0 0 0
+control.color(light1, raw("%ffffffff"))     # Emits: control color light1 %ffffffff 0 0 0
+
+# Legacy generic form remains fully supported:
+control("enabled", reactor1, 1)             # Emits: control enabled reactor1 1 0 0 0
+control("shootp", turret1, "@unit", 1)      # Emits: control shootp turret1 @unit 1 0 0
+```
+
+#### Mindustry v160.7 Control Mode Mapping Reference
+
+| Method | Arguments | Emitted MLog | Engine Semantics |
+| :--- | :--- | :--- | :--- |
+| `control.enabled(target, value)` | `target, value` | `control enabled target value 0 0 0` | Uses `p1.bool()` to enable/disable the block. |
+| `control.shoot(target, x, y, shoot)` | `target, x, y, shoot` | `control shoot target x y shoot 0` | Numeric path: aims at world coordinates and sets the shooting flag (turret-specific). |
+| `control.shootp(target, unit, shoot)` | `target, unit, shoot` | `control shootp target unit shoot 0 0` | Object path when `unit` is an object (unit/building reference); aims at that position and sets the shooting flag. |
+| `control.config(target, value)` | `target, value` | `control config target value 0 0 0` | Object-capable configuration; the engine applies it only for `logicConfigurable` blocks and ignores `LogicBuild` values. Numeric values compile but are ignored by the engine. |
+| `control.color(target, value)` | `target, value` | `control color target value 0 0 0` | Color value from `packcolor(...)` or an MLog color literal (`%RRGGBB` / `%RRGGBBAA`, e.g. via `raw`). The engine reads the double bit pattern; a raw integer such as `0xFFFFFFFF` is not packed RGBA. |
+
+- **Target resolution**: `target` may be a hardware link name (`"reactor1"`), a dynamic variable (`b = getlink(0)`), or `"@this"`. The engine only applies the control when the target is a valid linked building, or when the processor is privileged (world processor).
+- **Object-capable modes**: `shootp` and `config` are `LAccess` object-capable modes (`isObj=true`). `enabled`, `shoot`, and `color` use the numeric path. For `config`, pass an item/liquid/block content token (e.g. `"@copper"`, `Items.COPPER`); a numeric value compiles but is ignored by the engine.
+- **Content tokens vs strings**: any string literal starting with `@` (for example `"@copper"`, `"@unit"`, `"@router"`) is emitted as a bare mlog token. Other string literals stay quoted, so `control.config(message1, "hello")` emits `control config message1 "hello" 0 0 0`. This rule applies to both namespace methods and the legacy generic form. To preserve a literal string that begins with `@`, wrap it in `raw('"@unit"')`; the decompiler emits this form automatically for control operands.
+- **Strict arity**: each namespace method accepts only its documented positional arguments. Keyword arguments, missing arguments, extra arguments, and unknown method names are rejected with a `CompileError`.
+- **Decompiler output**: canonical six-operand instructions whose trailing dummy operands are exactly `0` decompile to the modern `control.<method>(...)` form. Noncanonical dummy spellings (for example `0.0` or `0e0`) and nonzero dummy operands use the generic `control("mode", target, ...)` form so their tokens are preserved. Both forms are semantically equivalent; token-identical output is guaranteed for canonical operands and quoted `@` strings, while exotic numeric spellings in non-dummy operands may normalize.
+
 ### Operation Callable Namespace Object (`op.<method>`)
 
 The compiler implements a **Callable Namespace Object** pattern for Mindustry operations (`op`). The `op` symbol is both callable as a legacy function (supporting all 45 Mindustry v160.7 logic operations) and equipped with methods corresponding to 42 operations (excluding Python keywords `not`, `and`, `or` which remain fully supported via legacy `op(...)` and Python infix operators):

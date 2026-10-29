@@ -810,15 +810,27 @@ def clientdata(channel: Any, value: Any, reliable: Any = False) -> None:
     """
     ...
 
-def control(type: Union[ControlProperty, str], target: Any, p1: Any = 0, p2: Any = 0, p3: Any = 0, p4: Any = 0) -> None:
-    """Control a building property.
+class _ControlCallable:
+    """Callable namespace object for Mindustry building control operations.
 
-    Args:
-        type: ControlProperty enum or string (e.g. ControlProperty.ENABLED, 'shoot').
-        target: Target building.
-        p1, p2, p3, p4: Control parameters (default 0).
+    Supports both legacy function-call syntax:
+        control("enabled", target, 1)
+        control(ControlProperty.ENABLED, target, 1)
+    and modern namespace method syntax:
+        control.enabled(target, 1)
+        control.shoot(target, x, y, shoot)
+        control.shootp(target, unit, shoot)
+        control.config(target, "@copper")
+        control.color(target, color_value)
     """
-    ...
+    def __call__(self, type: Union[ControlProperty, str], target: Any, p1: Any = 0, p2: Any = 0, p3: Any = 0, p4: Any = 0) -> None: ...
+    def enabled(self, target: Any, value: Any) -> None: ...
+    def shoot(self, target: Any, x: Any, y: Any, shoot: Any) -> None: ...
+    def shootp(self, target: Any, unit: Any, shoot: Any) -> None: ...
+    def config(self, target: Any, value: Any) -> None: ...
+    def color(self, target: Any, value: Any) -> None: ...
+
+control: _ControlCallable
 
 class _CutsceneCallable:
     """Callable namespace object for Mindustry cutscene operations.
@@ -1895,6 +1907,7 @@ __all__ = [
     "Units",
     "Vars",
     "Weathers",
+    "_ControlCallable",
     "_CutsceneCallable",
     "_DrawCallable",
     "_MarkerCallable",

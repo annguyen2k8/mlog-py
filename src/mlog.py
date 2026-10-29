@@ -50,6 +50,7 @@ from .metadata import (
     LocateResult,
     MLOG_EXPORTS,
     OreLocateResult,
+    _ControlCallable,
     _CutsceneCallable,
     _DrawCallable,
     _OpCallable,

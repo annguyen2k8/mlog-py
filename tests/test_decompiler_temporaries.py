@@ -41,6 +41,7 @@ EXPECTED_BYTE_EXACT = (
     "color_channels.mlog",
     "conditionals.mlog",
     "constant_folding.mlog",
+    "control_building.mlog",
     "display_graphics.mlog",
     "for_loop.mlog",
     "functions.mlog",

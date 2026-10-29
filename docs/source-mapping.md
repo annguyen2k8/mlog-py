@@ -34,10 +34,10 @@ heat = sensor("reactor1", "@heat")
 # mlog[1, 3]
 if heat > 0.5:
     # mlog[2]
-    control("enabled", "reactor1", 0, 0, 0, 0)
+    control.enabled("reactor1", 0)
 else:
     # mlog[4]
-    control("enabled", "reactor1", 1, 0, 0, 0)
+    control.enabled("reactor1", 1)
 # mlog[5]
 wait(0.5)
 ```

@@ -223,6 +223,11 @@ class ASTValidator(ast.NodeVisitor):
                 if node.attr not in DRAW_METHODS:
                     self.error(f"unknown draw method: 'draw.{node.attr}'", node)
                 return
+            if node.value.id == "control":
+                CONTROL_METHODS = {"enabled", "shoot", "shootp", "config", "color"}
+                if node.attr not in CONTROL_METHODS:
+                    self.error(f"unknown control method: 'control.{node.attr}'", node)
+                return
             if node.value.id == "ucontrol":
                 UCONTROL_METHODS = {
                     "idle", "stop", "move", "approach", "pathfind", "auto_pathfind", "autoPathfind",
@@ -290,7 +295,7 @@ class ASTValidator(ast.NodeVisitor):
                     self.error(f"enum '{node.value.id}' has no member '{node.attr}'", node)
                 return
         self.error(
-            f"attribute access is only supported on DSL enum types ({', '.join(sorted(ENUM_CLASS_TO_REGISTRY.keys()))}), user-defined IntEnums, 'Vars', 'draw', 'ucontrol', 'ulocate', 'cutscene', 'sound', 'music', 'marker', and 'op'",
+            f"attribute access is only supported on DSL enum types ({', '.join(sorted(ENUM_CLASS_TO_REGISTRY.keys()))}), user-defined IntEnums, 'Vars', 'draw', 'control', 'ucontrol', 'ulocate', 'cutscene', 'sound', 'music', 'marker', and 'op'",
             node,
         )
 
@@ -472,7 +477,7 @@ class ASTValidator(ast.NodeVisitor):
         if (
             isinstance(node.func, ast.Attribute)
             and isinstance(node.func.value, ast.Name)
-            and node.func.value.id in ("draw", "ucontrol", "ulocate", "op", "cutscene", "sound", "music", "marker")
+            and node.func.value.id in ("draw", "control", "ucontrol", "ulocate", "op", "cutscene", "sound", "music", "marker")
         ):
             self.visit(node.func)
             for arg in node.args:

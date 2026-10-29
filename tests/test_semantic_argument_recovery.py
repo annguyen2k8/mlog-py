@@ -129,11 +129,11 @@ class TestSemanticArgumentRecovery(unittest.TestCase):
         self.assertEqual(py, 'from mlog import sensor\n\nhp = sensor("vault1", \'@health\')')
 
     def test_control_named_building(self):
-        """control enabled reactor1 1 0 0 0 must decompile to control('enabled', 'reactor1', ...) with import."""
+        """control enabled reactor1 1 0 0 0 must decompile to control.enabled('reactor1', 1) with import."""
         mlog = "control enabled reactor1 1 0 0 0\n"
         py = decompile(mlog).strip()
         ast.parse(py)
-        self.assertEqual(py, 'from mlog import control\n\ncontrol("enabled", "reactor1", 1, 0, 0, 0)')
+        self.assertEqual(py, 'from mlog import control\n\ncontrol.enabled("reactor1", 1)')
 
     def test_radar_named_turret(self):
         """radar with cyclone1 must decompile with cyclone1 as quoted string with import."""

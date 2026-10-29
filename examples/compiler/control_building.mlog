@@ -1,0 +1,7 @@
+control enabled reactor1 1 0 0 0
+control shoot turret1 100 200 1 0
+control shootp turret1 @unit 1 0 0
+control config sorter1 @copper 0 0 0
+packcolor light_color 1 1 1 1
+control color light1 light_color 0 0 0
+control enabled conveyor1 1 0 0 0

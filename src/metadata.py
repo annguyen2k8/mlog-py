@@ -260,8 +260,41 @@ def _rt_max(a: Any, b: Any) -> Any:
 def _rt_sensor(*args: Any) -> Any:
     return 0
 
-def _rt_control(type_: Any, target: Any, *params: Any) -> None:
-    return None
+class _ControlCallable:
+    """Callable namespace object for Mindustry building control operations.
+
+    Supports both legacy function-call syntax:
+        control("enabled", target, 1)
+        control(ControlProperty.ENABLED, target, 1)
+    and modern namespace method syntax:
+        control.enabled(target, 1)
+        control.shoot(target, x, y, shoot)
+        control.shootp(target, unit, shoot)
+        control.config(target, "@copper")
+        control.color(target, color_value)
+    """
+
+    def __call__(self, type_: Any, target: Any, *params: Any) -> None:
+        return None
+
+    def enabled(self, target: Any, value: Any) -> None:
+        return None
+
+    def shoot(self, target: Any, x: Any, y: Any, shoot: Any) -> None:
+        return None
+
+    def shootp(self, target: Any, unit: Any, shoot: Any) -> None:
+        return None
+
+    def config(self, target: Any, value: Any) -> None:
+        return None
+
+    def color(self, target: Any, value: Any) -> None:
+        return None
+
+
+_rt_control = _ControlCallable()
+control = _rt_control
 
 class _UnitControlCallable:
     """Callable namespace object for Mindustry unit control operations.
@@ -1277,7 +1310,16 @@ INTRINSIC_DEFINITIONS: List[IntrinsicDef] = [
             "Args:\n"
             "    type: ControlProperty enum or string (e.g. ControlProperty.ENABLED, 'shoot').\n"
             "    target: Target building.\n"
-            "    p1, p2, p3, p4: Control parameters (default 0)."
+            "    p1, p2, p3, p4: Control parameters (default 0).\n\n"
+            "Namespace form (Mindustry v160.7 modes):\n"
+            "    control.enabled(target, value)\n"
+            "    control.shoot(target, x, y, shoot)\n"
+            "    control.shootp(target, unit, shoot)\n"
+            "    control.config(target, value)\n"
+            "    control.color(target, value)\n\n"
+            "Config requires an object/content value to take effect; numeric config\n"
+            "values compile but are ignored by the engine. Color values are produced\n"
+            "by packcolor(...) or written as an MLog %RRGGBB[AA] literal via raw()."
         ),
         min_args=2,
         max_args=6,
@@ -2971,6 +3013,7 @@ MLOG_EXPORTS: Set[str] = (
         "raw",
         "Vars",
         "__version__",
+        "_ControlCallable",
         "_DrawCallable",
         "_OpCallable",
         "_UnitControlCallable",
@@ -3088,6 +3131,30 @@ def generate_pyi() -> str:
     lines.append("")
 
     for name in sorted(INTRINSICS.keys()):
+        if name == "control":
+            lines.append("class _ControlCallable:")
+            lines.append('    """Callable namespace object for Mindustry building control operations.')
+            lines.append("")
+            lines.append("    Supports both legacy function-call syntax:")
+            lines.append('        control("enabled", target, 1)')
+            lines.append("        control(ControlProperty.ENABLED, target, 1)")
+            lines.append("    and modern namespace method syntax:")
+            lines.append("        control.enabled(target, 1)")
+            lines.append("        control.shoot(target, x, y, shoot)")
+            lines.append("        control.shootp(target, unit, shoot)")
+            lines.append('        control.config(target, "@copper")')
+            lines.append("        control.color(target, color_value)")
+            lines.append('    """')
+            lines.append("    def __call__(self, type: Union[ControlProperty, str], target: Any, p1: Any = 0, p2: Any = 0, p3: Any = 0, p4: Any = 0) -> None: ...")
+            lines.append("    def enabled(self, target: Any, value: Any) -> None: ...")
+            lines.append("    def shoot(self, target: Any, x: Any, y: Any, shoot: Any) -> None: ...")
+            lines.append("    def shootp(self, target: Any, unit: Any, shoot: Any) -> None: ...")
+            lines.append("    def config(self, target: Any, value: Any) -> None: ...")
+            lines.append("    def color(self, target: Any, value: Any) -> None: ...")
+            lines.append("")
+            lines.append("control: _ControlCallable")
+            lines.append("")
+            continue
         if name == "draw":
             lines.append("class _DrawCallable:")
             lines.append('    """Callable namespace object for Mindustry draw operations.')

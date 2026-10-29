@@ -53,6 +53,35 @@ def is_compiler_temporary(name: str) -> bool:
     return False
 
 
+def is_zero_operand(token: str) -> bool:
+    """Return True for numeric zero operands used as canonical dummy arguments."""
+    try:
+        return float(token) == 0.0
+    except (TypeError, ValueError):
+        return False
+
+
+def is_canonical_zero_operand(token: str) -> bool:
+    """Return True only for the canonical dummy token ``0``."""
+    return token == "0"
+
+
+def format_control_operand(
+    arg_idx: int,
+    arg: str,
+    defined_variables: Optional[Set[str]],
+    args: Tuple[str, ...],
+) -> str:
+    """Format a generic control operand while preserving noncanonical zero spellings."""
+    if arg_idx >= 2 and arg != "0" and is_zero_operand(arg):
+        if arg in ("0.0", "-0.0"):
+            return arg
+        # raw() preserves exotic spellings such as 0e0 and 00 that Python would
+        # otherwise normalize or reject as a literal.
+        return f"raw({arg!r})"
+    return format_semantic_argument("control", arg_idx, arg, defined_variables, args)
+
+
 def format_operand(op: str) -> str:
     """Format an mlog operand token into Python-friendly representation."""
     if op == "true":
@@ -223,6 +252,32 @@ def instruction_to_python(
             return f"draw.rotate({deg})"
         elif cmd == "reset":
             return "draw.reset()"
+
+    if op == "control" and len(args) == 6:
+        control_type = args[0]
+        if control_type == "enabled" and all(is_canonical_zero_operand(a) for a in args[3:6]):
+            target = format_semantic_argument("control", 1, args[1], defined_variables, args)
+            value = format_semantic_argument("control", 2, args[2], defined_variables, args)
+            return f"control.enabled({target}, {value})"
+        elif control_type == "shoot" and is_canonical_zero_operand(args[5]):
+            target = format_semantic_argument("control", 1, args[1], defined_variables, args)
+            x = format_semantic_argument("control", 2, args[2], defined_variables, args)
+            y = format_semantic_argument("control", 3, args[3], defined_variables, args)
+            shoot = format_semantic_argument("control", 4, args[4], defined_variables, args)
+            return f"control.shoot({target}, {x}, {y}, {shoot})"
+        elif control_type == "shootp" and all(is_canonical_zero_operand(a) for a in args[4:6]):
+            target = format_semantic_argument("control", 1, args[1], defined_variables, args)
+            unit = format_semantic_argument("control", 2, args[2], defined_variables, args)
+            shoot = format_semantic_argument("control", 3, args[3], defined_variables, args)
+            return f"control.shootp({target}, {unit}, {shoot})"
+        elif control_type == "config" and all(is_canonical_zero_operand(a) for a in args[3:6]):
+            target = format_semantic_argument("control", 1, args[1], defined_variables, args)
+            value = format_semantic_argument("control", 2, args[2], defined_variables, args)
+            return f"control.config({target}, {value})"
+        elif control_type == "color" and all(is_canonical_zero_operand(a) for a in args[3:6]):
+            target = format_semantic_argument("control", 1, args[1], defined_variables, args)
+            value = format_semantic_argument("control", 2, args[2], defined_variables, args)
+            return f"control.color({target}, {value})"
 
     if op == "ucontrol" and len(args) >= 1:
         action = args[0]
@@ -493,11 +548,18 @@ def instruction_to_python(
                 return "cutscene.set_hud(False)"
             return f"cutscene.set_hud({shown})"
 
-    # Format arguments using semantic roles from SSOT metadata
-    formatted_args = [
-        format_semantic_argument(op, idx, arg, defined_variables, args)
-        for idx, arg in enumerate(args)
-    ]
+    # Format arguments using semantic roles from SSOT metadata.
+    # Generic control instructions preserve noncanonical zero dummy spellings.
+    if op == "control":
+        formatted_args = [
+            format_control_operand(idx, arg, defined_variables, args)
+            for idx, arg in enumerate(args)
+        ]
+    else:
+        formatted_args = [
+            format_semantic_argument(op, idx, arg, defined_variables, args)
+            for idx, arg in enumerate(args)
+        ]
     return f"{op}({', '.join(formatted_args)})"
 
 
