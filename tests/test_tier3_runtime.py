@@ -2017,7 +2017,7 @@ control(ControlProperty.ENABLED, switch1, 0)
         self.assertIn("draw.clear(0, 0, 0)", decompiled)
         self.assertIn("draw.color(255, 255, 255, 128)", decompiled)
         self.assertIn('drawflush("display1")', decompiled)
-        self.assertIn('control("enabled", "switch1", 0, 0, 0, 0)', decompiled)
+        self.assertIn('control.enabled("switch1", 0)', decompiled)
 
     # -----------------------------------------------------------------------
     # Group F: Unit Binding & Radar/Locate (ubind, uradar, ulocate)

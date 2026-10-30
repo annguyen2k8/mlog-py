@@ -13,10 +13,12 @@ Covers:
 """
 
 import unittest
-import os
+from pathlib import Path
 
 from src.decompiler import decompile
 from src.mlog import compile_py
+
+_FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
 class TestDecompilerDataflowAlias(unittest.TestCase):
@@ -24,9 +26,8 @@ class TestDecompilerDataflowAlias(unittest.TestCase):
 
     def test_render_mlog_fixture_alias_elimination_and_variable_preservation(self):
         """Fixture render.mlog: b = g alias eliminated, meaningful variables preserved."""
-        render_path = "/data/data/com.termux/files/home/mlogs/render.mlog"
-        if not os.path.exists(render_path):
-            self.skipTest("render.mlog fixture not found at expected path")
+        render_path = _FIXTURES / "render.mlog"
+        self.assertTrue(render_path.is_file(), f"Missing fixture: {render_path}")
 
         with open(render_path, "r", encoding="utf-8") as f:
             mlog_code = f.read()

@@ -1,0 +1,27 @@
+sensor wScr display1 @displayWidth
+sensor hScr display1 @displayHeight
+set size 4
+set x 0
+jump 7 lessThanEq size 0
+jump 26 greaterThanEq x wScr
+jump 8 always 0 0
+jump 26 lessThanEq x wScr
+set y 0
+jump 12 lessThanEq size 0
+jump 24 greaterThanEq y hScr
+jump 13 always 0 0
+jump 24 lessThanEq y hScr
+op mul __tmp0 255 y
+op div r __tmp0 hScr
+op div __tmp1 x wScr
+op sub __tmp2 1 __tmp1
+op mul g __tmp2 r
+set b g
+draw color r g b 255 0 0
+draw rect x y size size 0 0
+drawflush display1
+op add y y size
+jump 9 always 0 0
+op add x x size
+jump 4 always 0 0
+end

@@ -28,7 +28,13 @@ class TestClipboardBackendDetection(unittest.TestCase):
         environ = {"TERMUX_VERSION": "0.118.0", "PREFIX": "/data/data/com.termux/files/usr"}
         which_map = {"termux-clipboard-set": "/data/data/com.termux/files/usr/bin/termux-clipboard-set"}
 
-        self.assertTrue(is_termux(environ=environ, executable="/data/data/com.termux/files/usr/bin/python"))
+        self.assertTrue(
+            is_termux(
+                environ=environ,
+                platform="linux",
+                executable="/data/data/com.termux/files/usr/bin/python",
+            )
+        )
         backend = detect_clipboard_backend(
             which_fn=lambda cmd: which_map.get(cmd),
             environ=environ,
@@ -208,6 +214,7 @@ class TestCopyToClipboardExecution(unittest.TestCase):
         self.assertIn("timed out after 5.0s", msg)
 
     @patch("src.clipboard.detect_clipboard_backend", return_value=None)
+    @patch("src.clipboard.sys.platform", "linux")
     def test_copy_without_backend(self, mock_detect):
         """When no backend is installed, returns False with install guide."""
         ok, msg = copy_to_clipboard("set x 10\n")
@@ -290,6 +297,7 @@ class TestCliClipboardIntegration(unittest.TestCase):
         self.assertIn("cannot assign to read-only built-in variable", stderr_buf.getvalue())
 
     @patch("src.clipboard.detect_clipboard_backend", return_value=None)
+    @patch("src.clipboard.sys.platform", "linux")
     def test_cli_compile_missing_backend_preserves_output_and_succeeds(self, mock_detect):
         """Missing clipboard backend emits guidance to stderr, preserves stdout, and exits 0."""
         stdout_buf = io.StringIO()

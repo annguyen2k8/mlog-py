@@ -13,8 +13,8 @@ Covers:
 - Mindustry engine validation and runtime execution assertions
 """
 
-import os
 import unittest
+from pathlib import Path
 
 from src.errors import CompileError
 from src.mindustry_validator import (
@@ -261,12 +261,14 @@ for i in range(3):
 
     def test_3_7segments_regression(self):
         """Verify the exact user script 3-7segments.py compiles and runs in Mindustry."""
-        sample_path = "/data/data/com.termux/files/home/mlogs/3-7segments.py"
-        if not os.path.exists(sample_path):
-            self.skipTest(f"{sample_path} not found")
+        sample_path = Path(__file__).resolve().parent / "fixtures" / "3-7segments.py"
+        self.assertTrue(sample_path.is_file(), f"Missing fixture: {sample_path}")
 
-        with open(sample_path, "r", encoding="utf-8") as f:
-            code = f.read()
+        # The original user script is UTF-16 LE with a BOM; keep the fixture
+        # byte-for-byte identical and decode according to its BOM.
+        data = sample_path.read_bytes()
+        encoding = "utf-16" if data.startswith((b"\xff\xfe", b"\xfe\xff")) else "utf-8"
+        code = data.decode(encoding)
 
         res = compile_py(code)
         self.assertIsNotNone(res.mlog)

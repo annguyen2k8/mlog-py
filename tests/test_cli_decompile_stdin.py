@@ -226,14 +226,21 @@ class TestCliDecompileStdin(unittest.TestCase):
         self.assertIn("Decompilation aborted by user", stderr)
 
     def test_interactive_save_os_error_reports_error_and_returns_1(self):
-        """Invalid path or permission error at save prompt reports error and returns code 1."""
+        """An unwritable save path reports an error and returns code 1 on every platform."""
         from src import mlog as mlog_module
         mlog = "set score 50\n"
-        mlog_module._interactive_prompt_hook = lambda prompt: "/root/forbidden/cannot_write_here.py"
-        try:
-            code, stdout, stderr = self._run_cli_capture(["decompile"], stdin_data=mlog, is_tty=True)
-        finally:
-            mlog_module._interactive_prompt_hook = None
+        with tempfile.TemporaryDirectory() as tmp:
+            # A regular file cannot be used as the parent directory of the output
+            # path, so makedirs() raises OSError on both POSIX and Windows.
+            blocker = os.path.join(tmp, "blocker")
+            with open(blocker, "w", encoding="utf-8") as handle:
+                handle.write("not a directory")
+            target = os.path.join(blocker, "cannot_write_here.py")
+            mlog_module._interactive_prompt_hook = lambda prompt: target
+            try:
+                code, stdout, stderr = self._run_cli_capture(["decompile"], stdin_data=mlog, is_tty=True)
+            finally:
+                mlog_module._interactive_prompt_hook = None
 
         self.assertEqual(code, 1)
         self.assertIn("Error writing output file", stderr)
