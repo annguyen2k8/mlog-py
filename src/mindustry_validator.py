@@ -6,14 +6,18 @@ to validate generated mlog directly against Mindustry's actual LParser & LAssemb
 
 import atexit
 import base64
-import glob
 import os
-import select
+import queue
 import shutil
 import subprocess
 import threading
 import time
 from typing import Optional, Tuple
+
+try:
+    from .mindustry_discovery import MindustryDiscovery, discover as _discover_mindustry
+except ImportError:  # pragma: no cover - allows running this file directly
+    from mindustry_discovery import MindustryDiscovery, discover as _discover_mindustry
 
 
 class RunResult(tuple):
@@ -111,58 +115,65 @@ class RunResult(tuple):
         self.markers = markers if markers is not None else {}
 
 
+_DISCOVERY = None
+_CHECKED_DISCOVERY = False
+
+
+def _get_discovery() -> MindustryDiscovery:
+    """Return the cached, fully validated harness discovery result."""
+    global _DISCOVERY, _CHECKED_DISCOVERY
+    if not _CHECKED_DISCOVERY:
+        _DISCOVERY = _discover_mindustry()
+        _CHECKED_DISCOVERY = True
+    return _DISCOVERY
+
+
+def _reset_mindustry_discovery() -> None:
+    """Clear cached discovery results (used by tests and after rebuilding)."""
+    global _DISCOVERY, _CHECKED_DISCOVERY
+    _DISCOVERY = None
+    _CHECKED_DISCOVERY = False
+
+
 def _find_classpath() -> Optional[str]:
-    """Discover classpath for Mindustry engine and MindustryHarness."""
-    src_dir = os.path.dirname(os.path.abspath(__file__))
-    mlog_py_root = os.path.abspath(os.path.join(src_dir, ".."))
-    harness_build = os.environ.get("MINDUSTRY_HARNESS_BUILD", os.path.join(mlog_py_root, "build"))
-
-    # Mindustry core classes
-    env_core = os.environ.get("MINDUSTRY_CORE_PATH")
-    if env_core:
-        mindustry_core_classes = os.path.abspath(env_core)
-    else:
-        mindustry_core_classes = os.path.abspath(
-            os.path.join(mlog_py_root, "..", "Mindustry", "core", "build", "classes", "java", "main")
-        )
-
-    # Arc dependencies from Gradle cache
-    env_arc = os.environ.get("ARC_JARS_PATH")
-    if env_arc and os.path.isdir(env_arc):
-        arc_jars = glob.glob(os.path.join(env_arc, "**", "*.jar"), recursive=True)
-    else:
-        gradle_cache = os.path.expanduser("~/.gradle/caches/modules-2/files-2.1/com.github.Anuken.Arc")
-        arc_jars = glob.glob(os.path.join(gradle_cache, "**", "*.jar"), recursive=True)
-
-    if not os.path.exists(harness_build):
-        return None
-    if not os.path.exists(mindustry_core_classes):
-        return None
-    if not arc_jars:
-        return None
-
-    cp_entries = arc_jars + [mindustry_core_classes, harness_build]
-    return ":".join(cp_entries)
-
-
-_CACHED_CP = None
-_CHECKED_CP = False
+    """Discover the classpath without using the cache."""
+    return _discover_mindustry().classpath
 
 
 def get_classpath() -> Optional[str]:
     """Get the cached classpath if available."""
-    global _CACHED_CP, _CHECKED_CP
-    if not _CHECKED_CP:
-        _CACHED_CP = _find_classpath()
-        _CHECKED_CP = True
-    return _CACHED_CP
+    return _get_discovery().classpath
+
+
+def get_mindustry_assets() -> Optional[str]:
+    """Return the validated Mindustry assets directory, if available."""
+    return _get_discovery().assets_path
+
+
+def get_mindustry_unavailable_reason() -> Optional[str]:
+    """Explain why the Mindustry JVM harness cannot be used, if it cannot."""
+    if not shutil.which("java"):
+        return "Java runtime not found in PATH (install a JRE or add java to PATH)"
+    discovery = _get_discovery()
+    if discovery.available:
+        return None
+    return discovery.error or "Mindustry runtime classpath not available"
 
 
 def is_mindustry_available() -> bool:
-    """Check if Java and Mindustry classes are available for real validation."""
-    if not shutil.which("java"):
-        return False
-    return get_classpath() is not None
+    """Check if Java and the Mindustry harness are available for validation."""
+    return get_mindustry_unavailable_reason() is None
+
+
+def _java_command(java_bin: str, classpath: str, *args: str) -> list[str]:
+    """Build a Java command with the discovered assets directory attached."""
+    command = [java_bin]
+    assets = get_mindustry_assets()
+    if assets:
+        command.append(f"-Dmindustry.assets={assets}")
+    command.extend(["-cp", classpath, "mindustry.test.MindustryHarness"])
+    command.extend(args)
+    return command
 
 
 def _parse_validate_output(lines: list[str]) -> Tuple[bool, str, int]:
@@ -393,6 +404,8 @@ class _MindustryDaemonClient:
         self._pid = os.getpid()
         self._failed = False
         self._leftover = b""
+        self._reader: Optional[threading.Thread] = None
+        self._chunks: "queue.Queue[Optional[bytes]]" = queue.Queue()
 
     def _ensure_started(self) -> bool:
         if os.environ.get("MLOG_DISABLE_DAEMON") == "1":
@@ -403,6 +416,8 @@ class _MindustryDaemonClient:
             self._pid = os.getpid()
             self._failed = False
             self._leftover = b""
+            self._reader = None
+            self._chunks = queue.Queue()
 
         if self._failed:
             return False
@@ -417,13 +432,23 @@ class _MindustryDaemonClient:
             return False
 
         try:
+            self._chunks = queue.Queue()
+            # The harness emits Java warnings on stderr during startup.  A
+            # PIPE that is never drained fills up and blocks the JVM before
+            # it can print READY, so discard stderr for the long-lived
+            # daemon.  The one-shot fallback still captures stderr.
             self._proc = subprocess.Popen(
-                [java_bin, "-cp", cp, "mindustry.test.MindustryHarness", "--daemon"],
+                _java_command(java_bin, cp, "--daemon"),
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
             )
-            fd = self._proc.stdout.fileno()
+            self._reader = threading.Thread(
+                target=self._reader_loop,
+                args=(self._proc.stdout, self._chunks),
+                daemon=True,
+            )
+            self._reader.start()
             buf = b""
             # Read until READY\n arrives (can take ~5-70s on cold start)
             deadline = time.time() + 120.0
@@ -433,17 +458,17 @@ class _MindustryDaemonClient:
                     self._stop()
                     self._failed = True
                     return False
-                r, _, _ = select.select([fd], [], [], max(0.001, rem))
-                if not r:
+                try:
+                    chunk = self._next_chunk(rem)
+                except queue.Empty:
                     self._stop()
                     self._failed = True
                     return False
-                chunk = os.read(fd, 1024)
-                if not chunk:
+                if chunk is None:
                     self._stop()
                     self._failed = True
                     return False
-                buf += chunk
+                buf = (buf + chunk).replace(b"\r\n", b"\n")
             # Discard everything up to READY\n
             idx = buf.index(b"READY\n")
             self._leftover = buf[idx + len(b"READY\n"):]
@@ -453,8 +478,34 @@ class _MindustryDaemonClient:
             self._failed = True
             return False
 
+    @staticmethod
+    def _reader_loop(stream, chunks: "queue.Queue[Optional[bytes]]") -> None:
+        """Read daemon stdout continuously without blocking the caller.
+
+        ``select.select`` on a pipe is not portable to Windows (it raises
+        OSError with WinError 10093), so a daemon thread feeds chunks into a
+        queue instead.
+        """
+        try:
+            fd = stream.fileno()
+            while True:
+                chunk = os.read(fd, 4096)
+                if not chunk:
+                    break
+                chunks.put(chunk)
+        except Exception:
+            pass
+        finally:
+            chunks.put(None)
+
+    def _next_chunk(self, timeout_sec: float) -> Optional[bytes]:
+        """Return the next stdout chunk (None on EOF); raise on timeout."""
+        return self._chunks.get(timeout=max(0.001, timeout_sec))
+
     def _stop(self):
         self._leftover = b""
+        self._reader = None
+        self._chunks = queue.Queue()
         if self._proc:
             try:
                 if self._proc.poll() is None:
@@ -484,7 +535,6 @@ class _MindustryDaemonClient:
 
     def _read_response(self, timeout_sec: float) -> Tuple[Optional[list[str]], bool]:
         deadline = time.time() + timeout_sec
-        fd = self._proc.stdout.fileno()
         sentinel = b"<<<END_RESULT>>>\n"
         buf = self._leftover
         self._leftover = b""
@@ -493,19 +543,15 @@ class _MindustryDaemonClient:
             if remaining <= 0:
                 self._stop()
                 return None, True
-            r, _, _ = select.select([fd], [], [], max(0.001, remaining))
-            if not r:
+            try:
+                chunk = self._next_chunk(remaining)
+            except queue.Empty:
                 self._stop()
                 return None, True
-            try:
-                chunk = os.read(fd, 4096)
-            except Exception:
+            if chunk is None:
                 self._stop()
                 return None, False
-            if not chunk:
-                self._stop()
-                return None, False
-            buf += chunk
+            buf = (buf + chunk).replace(b"\r\n", b"\n")
 
         idx = buf.index(sentinel)
         result_bytes = buf[:idx]
@@ -572,13 +618,14 @@ def validate_with_mindustry(
     Returns:
         (is_valid: bool, message: str, instruction_count: int)
     """
-    cp = get_classpath()
-    if not cp:
-        return False, "Mindustry runtime classpath not available", -1
+    reason = get_mindustry_unavailable_reason()
+    if reason:
+        return False, reason, -1
 
+    cp = get_classpath()
     java_bin = shutil.which("java")
-    if not java_bin:
-        return False, "Java runtime not available", -1
+    if not cp or not java_bin:
+        return False, "Mindustry runtime classpath not available", -1
 
     # Try fast persistent daemon first
     res = _DAEMON.validate(mlog_text, timeout_sec=timeout_sec)
@@ -588,7 +635,7 @@ def validate_with_mindustry(
     # Fallback to one-shot subprocess
     try:
         proc = subprocess.run(
-            [java_bin, "-cp", cp, "mindustry.test.MindustryHarness"],
+            _java_command(java_bin, cp),
             input=mlog_text,
             text=True,
             capture_output=True,
@@ -619,13 +666,14 @@ def run_with_mindustry(
             - result.text_buffer: processor textBuffer string
             - result.messages: dict of flushed message block contents (e.g. {"message1": "..."})
     """
-    cp = get_classpath()
-    if not cp:
-        return RunResult(False, {}, "Mindustry runtime classpath not available", text_buffer="", messages={})
+    reason = get_mindustry_unavailable_reason()
+    if reason:
+        return RunResult(False, {}, reason, text_buffer="", messages={})
 
+    cp = get_classpath()
     java_bin = shutil.which("java")
-    if not java_bin:
-        return RunResult(False, {}, "Java runtime not available", text_buffer="", messages={})
+    if not cp or not java_bin:
+        return RunResult(False, {}, "Mindustry runtime classpath not available", text_buffer="", messages={})
 
     # Try fast persistent daemon first
     res = _DAEMON.run(mlog_text, max_steps=max_steps, timeout_sec=timeout_sec)
@@ -635,7 +683,7 @@ def run_with_mindustry(
     # Fallback to one-shot subprocess
     try:
         proc = subprocess.run(
-            [java_bin, "-cp", cp, "mindustry.test.MindustryHarness", "--run", str(max_steps)],
+            _java_command(java_bin, cp, "--run", str(max_steps)),
             input=mlog_text,
             text=True,
             capture_output=True,

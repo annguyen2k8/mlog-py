@@ -141,8 +141,12 @@ public class MindustryHarness {
             @Override
             public Fi get(String path, Files.FileType type) {
                 if ("logicids.dat".equals(path)) {
-                    File f1 = new File("../Mindustry/core/assets/logicids.dat");
-                    if (f1.exists()) return new Fi(f1);
+                    String configured = System.getProperty("mindustry.assets");
+                    if (configured != null && !configured.isEmpty()) {
+                        File root = new File(configured);
+                        File f1 = root.isDirectory() ? new File(root, path) : root;
+                        if (f1.exists()) return new Fi(f1);
+                    }
                     File f2 = new File("logicids.dat");
                     if (f2.exists()) return new Fi(f2);
                 }

@@ -6,11 +6,22 @@ outputting compiled classes into build/ directory.
 """
 
 import argparse
-import glob
 import os
 import shutil
 import subprocess
 import sys
+
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from src.mindustry_discovery import find_arc_entries, find_mindustry_core
+
+
+def _output_path(repo_root: str, output_dir: str) -> str:
+    if os.path.isabs(output_dir):
+        return os.path.abspath(output_dir)
+    return os.path.abspath(os.path.join(repo_root, output_dir))
 
 
 def build_harness(output_dir: str = "build") -> bool:
@@ -26,31 +37,19 @@ def build_harness(output_dir: str = "build") -> bool:
         print("Error: 'javac' compiler not found in PATH", file=sys.stderr)
         return False
 
-    # Discover Mindustry classes
-    core_path = os.environ.get("MINDUSTRY_CORE_PATH")
+    core_path, core_error = find_mindustry_core(repo_root)
     if not core_path:
-        core_path = os.path.join(repo_root, "..", "Mindustry", "core", "build", "classes", "java", "main")
-    core_path = os.path.abspath(core_path)
-
-    if not os.path.isdir(core_path):
-        print(f"Error: Mindustry core classes directory not found: {core_path}", file=sys.stderr)
+        print(f"Error: {core_error}", file=sys.stderr)
         print("Hint: Build Mindustry core first or set MINDUSTRY_CORE_PATH.", file=sys.stderr)
         return False
 
-    # Discover Arc jars
-    arc_dir = os.environ.get("ARC_JARS_PATH")
-    if arc_dir and os.path.isdir(arc_dir):
-        arc_jars = glob.glob(os.path.join(arc_dir, "**", "*.jar"), recursive=True)
-    else:
-        gradle_cache = os.path.expanduser("~/.gradle/caches/modules-2/files-2.1/com.github.Anuken.Arc")
-        arc_jars = glob.glob(os.path.join(gradle_cache, "**", "*.jar"), recursive=True)
-
-    if not arc_jars:
-        print("Error: No Arc jars found in Gradle cache or ARC_JARS_PATH", file=sys.stderr)
+    arc_entries, arc_error = find_arc_entries(repo_root)
+    if not arc_entries:
+        print(f"Error: {arc_error}", file=sys.stderr)
         return False
 
-    classpath = ":".join(arc_jars + [core_path])
-    out_path = os.path.abspath(os.path.join(repo_root, output_dir))
+    classpath = os.pathsep.join(list(arc_entries) + [core_path])
+    out_path = _output_path(repo_root, output_dir)
     os.makedirs(out_path, exist_ok=True)
 
     cmd = [javac_bin, "-cp", classpath, java_src, "-d", out_path]
@@ -67,11 +66,21 @@ def build_harness(output_dir: str = "build") -> bool:
 
 def test_harness(output_dir: str = "build") -> bool:
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    sys.path.insert(0, repo_root)
-    from src.mindustry_validator import is_mindustry_available, validate_with_mindustry
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
 
-    if not is_mindustry_available():
-        print("Error: Mindustry harness not detected as available", file=sys.stderr)
+    # Make a custom -o output discoverable for the sanity check, while still
+    # respecting an explicitly configured harness location.
+    os.environ.setdefault("MINDUSTRY_HARNESS_BUILD", _output_path(repo_root, output_dir))
+
+    from src.mindustry_validator import (
+        get_mindustry_unavailable_reason,
+        validate_with_mindustry,
+    )
+
+    reason = get_mindustry_unavailable_reason()
+    if reason:
+        print(f"Error: {reason}", file=sys.stderr)
         return False
 
     sample_mlog = "set a 10\nprint a\nprintflush message1\n"

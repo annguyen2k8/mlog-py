@@ -14,16 +14,33 @@ Verifies:
    validates 'noop' while rejecting 'noop 1' and invalid opcodes as InvalidStatement.
 """
 
+import functools
 import unittest
 
 from src.decompiler import decompile
 from src.decompiler.errors import MlogParseError
 from src.decompiler.parser import MlogParser
 from src.errors import CompileError
-from src.mindustry_validator import validate_with_mindustry
+from src.mindustry_validator import (
+    get_mindustry_unavailable_reason,
+    validate_with_mindustry,
+)
 from src.mlog import compile_py
 from src.validator import MlogValidator, ValidationError
 import mlog
+
+
+def _requires_mindustry(test):
+    """Skip with the concrete discovery error when the JVM harness is absent."""
+
+    @functools.wraps(test)
+    def wrapper(self, *args, **kwargs):
+        reason = get_mindustry_unavailable_reason()
+        if reason:
+            self.skipTest(reason)
+        return test(self, *args, **kwargs)
+
+    return wrapper
 
 
 class TestNoopSupport(unittest.TestCase):
@@ -197,12 +214,14 @@ class TestNoopSupport(unittest.TestCase):
     # 5. Mindustry JVM Harness Tests
     # -----------------------------------------------------------------------
 
+    @_requires_mindustry
     def test_mindustry_harness_accepts_noop(self):
         """Real Mindustry engine accepts 'noop'."""
         valid, msg, count = validate_with_mindustry("noop")
         self.assertTrue(valid, f"Expected noop to be accepted, got error: {msg}")
         self.assertEqual(count, 1)
 
+    @_requires_mindustry
     def test_mindustry_harness_accepts_interleaved_noop(self):
         """Real Mindustry engine accepts 'set a 1\\nnoop\\nset a 2'."""
         mlog_text = "set a 1\nnoop\nset a 2"
@@ -210,18 +229,21 @@ class TestNoopSupport(unittest.TestCase):
         self.assertTrue(valid, f"Expected script with noop to be accepted, got error: {msg}")
         self.assertEqual(count, 3)
 
+    @_requires_mindustry
     def test_mindustry_harness_rejects_noop_with_args(self):
         """Real Mindustry engine rejects 'noop 1' as InvalidStatement."""
         valid, msg, count = validate_with_mindustry("noop 1")
         self.assertFalse(valid, "Expected noop with args to be rejected")
         self.assertIn("InvalidStatement", msg)
 
+    @_requires_mindustry
     def test_mindustry_harness_rejects_invalid_opcode(self):
         """Real Mindustry engine rejects non-existent opcode as InvalidStatement."""
         valid, msg, count = validate_with_mindustry("fake_opcode foo bar")
         self.assertFalse(valid, "Expected non-existent opcode to be rejected")
         self.assertIn("InvalidStatement", msg)
 
+    @_requires_mindustry
     def test_mindustry_harness_accepts_noop_with_semicolon_in_string(self):
         """Regression: semicolon inside string literal must not misalign statement index."""
         mlog_text = 'print "hello; world"\nnoop'
@@ -229,6 +251,7 @@ class TestNoopSupport(unittest.TestCase):
         self.assertTrue(valid, f"Expected script to be accepted, got error: {msg}")
         self.assertEqual(count, 2)
 
+    @_requires_mindustry
     def test_mindustry_harness_accepts_noop_with_comment_char_in_string(self):
         """Regression: '#' inside string literal must not truncate statement or misalign index."""
         mlog_text = 'print "color #ff0000"; noop'
@@ -236,6 +259,7 @@ class TestNoopSupport(unittest.TestCase):
         self.assertTrue(valid, f"Expected script to be accepted, got error: {msg}")
         self.assertEqual(count, 2)
 
+    @_requires_mindustry
     def test_mindustry_harness_accepts_noop_with_escaped_quotes(self):
         """Regression: escaped quotes with semicolon must not confuse string boundary."""
         mlog_text = 'print "a \\" ; b"\nnoop'
@@ -243,6 +267,7 @@ class TestNoopSupport(unittest.TestCase):
         self.assertTrue(valid, f"Expected script to be accepted, got error: {msg}")
         self.assertEqual(count, 2)
 
+    @_requires_mindustry
     def test_mindustry_harness_accepts_noop_with_labels_and_comments(self):
         """Regression: jump labels and comments do not count as statements in LParser."""
         mlog_text = (
@@ -254,12 +279,14 @@ class TestNoopSupport(unittest.TestCase):
         self.assertTrue(valid, f"Expected script to be accepted, got error: {msg}")
         self.assertEqual(count, 1)
 
+    @_requires_mindustry
     def test_mindustry_harness_rejects_privileged_opcode(self):
         """Real Mindustry engine rejects privileged opcodes when unprivileged."""
         valid, msg, count = validate_with_mindustry("spawnunit @flare 0 0")
         self.assertFalse(valid, "Expected privileged opcode to be rejected in non-privileged harness")
         self.assertIn("InvalidStatement", msg)
 
+    @_requires_mindustry
     def test_mindustry_harness_prevents_index_mismatch_exploit_garbage_opcode(self):
         """Regression: index shift must never cause a garbage opcode to be accepted as noop."""
         mlog_text = 'print "a; noop ; b"\ninvalid_opcode foo'
@@ -268,6 +295,7 @@ class TestNoopSupport(unittest.TestCase):
         self.assertIn("InvalidStatement", msg)
         self.assertIn("invalid_opcode", msg)
 
+    @_requires_mindustry
     def test_mindustry_harness_prevents_index_mismatch_exploit_privileged_opcode(self):
         """Regression: index shift must never cause a privileged opcode to be accepted as noop."""
         mlog_text = 'print "a; noop ; b"\nspawnunit @flare 0 0'
