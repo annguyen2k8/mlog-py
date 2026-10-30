@@ -11,9 +11,10 @@ use exactly the same search order:
    a local ``Arc`` checkout.
 
 Every candidate is validated before it is used.  In particular a Mindustry
-"core path" must contain ``mindustry/Vars.class`` (either as a directory or in
-a jar), Arc must provide the classes required by the harness, and the harness
-build must contain ``mindustry/test/MindustryHarness.class``.
+"core path" must contain the classes directly referenced by the harness
+(either as a directory or in a jar), Arc must provide the classes required by
+the harness, and the harness build must contain
+``mindustry/test/MindustryHarness.class``.
 """
 
 from __future__ import annotations
@@ -29,8 +30,88 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 _CORE_CLASS = ("mindustry", "Vars.class")
+
+# These are the classes directly referenced by MindustryHarness.java.  A core
+# build that only contains Vars.class cannot actually run the harness, so
+# checking a single marker class would report a broken checkout as usable.
+_CORE_REQUIRED_CLASSES = (
+    ("mindustry", "Vars.class"),
+    ("mindustry", "core", "ContentLoader.class"),
+    ("mindustry", "core", "GameState.class"),
+    ("mindustry", "core", "Logic.class"),
+    ("mindustry", "core", "World.class"),
+    ("mindustry", "game", "SpawnGroup.class"),
+    ("mindustry", "logic", "GlobalVars.class"),
+    ("mindustry", "logic", "LAssembler.class"),
+    ("mindustry", "logic", "LStatement.class"),
+    ("mindustry", "logic", "LStatements.class"),
+    ("mindustry", "logic", "LExecutor.class"),
+    ("mindustry", "logic", "LVar.class"),
+    ("mindustry", "content", "Blocks.class"),
+    ("mindustry", "content", "UnitTypes.class"),
+    ("mindustry", "game", "Team.class"),
+    ("mindustry", "gen", "Building.class"),
+    ("mindustry", "gen", "Groups.class"),
+    ("mindustry", "gen", "Unit.class"),
+    ("mindustry", "world", "Block.class"),
+    ("mindustry", "world", "Tile.class"),
+    ("mindustry", "world", "blocks", "logic", "LogicBlock.class"),
+    ("mindustry", "world", "blocks", "logic", "LogicBlock$LogicBuild.class"),
+    ("mindustry", "world", "blocks", "logic", "LogicDisplay.class"),
+    ("mindustry", "world", "blocks", "logic", "LogicDisplay$LogicDisplayBuild.class"),
+    ("mindustry", "world", "blocks", "logic", "MemoryBlock.class"),
+    ("mindustry", "world", "blocks", "logic", "MemoryBlock$MemoryBuild.class"),
+    ("mindustry", "world", "blocks", "logic", "MessageBlock.class"),
+    ("mindustry", "world", "blocks", "logic", "MessageBlock$MessageBuild.class"),
+    ("mindustry", "world", "blocks", "storage", "CoreBlock.class"),
+    ("mindustry", "world", "blocks", "storage", "CoreBlock$CoreBuild.class"),
+    ("mindustry", "ai", "BlockIndexer.class"),
+    ("mindustry", "ai", "WaveSpawner.class"),
+    ("mindustry", "world", "meta", "BlockFlag.class"),
+    ("mindustry", "ui", "Fonts.class"),
+    ("mindustry", "net", "Net.class"),
+    ("mindustry", "game", "Teams.class"),
+    ("mindustry", "game", "Teams$TeamData.class"),
+    ("mindustry", "game", "EventType.class"),
+    ("mindustry", "game", "EventType$WorldLoadEvent.class"),
+    ("mindustry", "game", "Rules.class"),
+    ("mindustry", "type", "Weapon.class"),
+    ("mindustry", "input", "DesktopInput.class"),
+    ("mindustry", "core", "Control.class"),
+    ("mindustry", "audio", "SoundControl.class"),
+    ("mindustry", "mod", "Mods.class"),
+    ("mindustry", "core", "Renderer.class"),
+    ("mindustry", "world", "modules", "ItemModule.class"),
+    ("mindustry", "content", "Items.class"),
+    ("mindustry", "world", "blocks", "payloads", "PayloadBlock.class"),
+    ("mindustry", "ctype", "UnlockableContent.class"),
+    ("mindustry", "game", "MapObjectives.class"),
+    ("mindustry", "game", "MapObjectives$PosMarker.class"),
+    ("mindustry", "ui", "fragments", "HudFragment.class"),
+    ("mindustry", "core", "UI.class"),
+)
+
 _ARC_REQUIRED_CLASSES = (
     ("arc", "Core.class"),
+    ("arc", "Files.class"),
+    ("arc", "files", "Fi.class"),
+    ("arc", "mock", "MockFiles.class"),
+    ("arc", "struct", "Seq.class"),
+    ("arc", "util", "Time.class"),
+    ("arc", "graphics", "g2d", "Font.class"),
+    ("arc", "graphics", "g2d", "Font$FontData.class"),
+    ("arc", "graphics", "g2d", "Font$Glyph.class"),
+    ("arc", "graphics", "g2d", "TextureRegion.class"),
+    ("arc", "mock", "MockApplication.class"),
+    ("arc", "graphics", "Camera.class"),
+    ("arc", "mock", "MockAudio.class"),
+    ("arc", "Settings.class"),
+    ("arc", "assets", "AssetManager.class"),
+    ("arc", "math", "geom", "Vec2.class"),
+    ("arc", "math", "geom", "Rect.class"),
+    ("arc", "math", "geom", "QuadTree.class"),
+    ("arc", "Events.class"),
+    ("arc", "scene", "style", "Drawable.class"),
     ("arc", "math", "geom", "Mat3D.class"),
     ("arc", "freetype", "FreeType.class"),
 )
@@ -79,19 +160,48 @@ def _unique_paths(paths: Iterable[Path]) -> List[Path]:
     return result
 
 
+def _jar_names(path: Path) -> Optional[set[str]]:
+    """Return the archive's entry names, or None when it is not a valid jar."""
+    try:
+        with zipfile.ZipFile(path) as archive:
+            return set(archive.namelist())
+    except (OSError, zipfile.BadZipFile):
+        return None
+
+
 def _entry_contains(entry: str, parts: Sequence[str]) -> bool:
     """Return True when ``entry`` (a class directory or jar) has ``parts``."""
     path = Path(entry)
     if path.is_dir():
         return path.joinpath(*parts).is_file()
     if path.is_file() and path.suffix.lower() == ".jar":
-        try:
-            with zipfile.ZipFile(path) as archive:
-                archive.getinfo("/".join(parts))
-            return True
-        except (KeyError, OSError, zipfile.BadZipFile):
-            return False
+        names = _jar_names(path)
+        return names is not None and "/".join(parts) in names
     return False
+
+
+def _missing_classes(
+    entry: str, required: Sequence[Sequence[str]]
+) -> List[str]:
+    """Return required class paths absent from one directory or jar."""
+    path = Path(entry)
+    missing: List[str] = []
+    if path.is_dir():
+        for parts in required:
+            if not path.joinpath(*parts).is_file():
+                missing.append("/".join(parts))
+        return missing
+
+    names: Optional[set[str]] = None
+    if path.is_file() and path.suffix.lower() == ".jar":
+        names = _jar_names(path)
+    if names is None:
+        return ["/".join(parts) for parts in required]
+    for parts in required:
+        name = "/".join(parts)
+        if name not in names:
+            missing.append(name)
+    return missing
 
 
 def _is_runtime_jar(path: Path) -> bool:
@@ -120,11 +230,21 @@ def _config_candidates(repo_root: Path) -> List[str]:
 def load_config(repo_root: Optional[Path] = None) -> Tuple[Dict[str, str], Optional[str]]:
     """Load the first available Mindustry discovery config file.
 
-    Relative paths are resolved against the config file's directory.  Invalid
-    JSON is reported as an error but does not prevent the normal search from
-    continuing.
+    Relative paths are resolved against the config file's directory.  An
+    explicitly selected config file is required: if it is missing or invalid,
+    discovery stops with an error naming the file.  For implicit config files,
+    invalid JSON is reported while the normal search continues.
     """
     root = Path(repo_root or _REPO_ROOT)
+    explicit = os.environ.get("MLOG_MINDUSTRY_CONFIG")
+    if explicit:
+        expanded = _expand_path(explicit)
+        if not os.path.isfile(expanded):
+            return (
+                {},
+                "MLOG_MINDUSTRY_CONFIG does not point to a file: " + expanded,
+            )
+
     for candidate in _config_candidates(root):
         if not os.path.isfile(candidate):
             continue
@@ -231,11 +351,31 @@ def _core_candidates(root: Path) -> List[Path]:
     return _unique_paths(candidates)
 
 
+def _core_candidate_error(label: str, value: str, candidates: Sequence[Path]) -> str:
+    if not candidates:
+        return (
+            f"{label} does not contain compiled Mindustry classes "
+            f"(missing {'/'.join(_CORE_CLASS)}): {value}"
+        )
+
+    best_missing = min(
+        (
+            _missing_classes(str(candidate), _CORE_REQUIRED_CLASSES)
+            for candidate in candidates
+        ),
+        key=len,
+    )
+    return (
+        f"{label} is missing required Mindustry classes: "
+        f"{', '.join(best_missing)}: {value}"
+    )
+
+
 def find_mindustry_core(
     repo_root: Optional[Path] = None,
     config: Optional[Dict[str, str]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
-    """Find compiled Mindustry core classes, validating the required class."""
+    """Find compiled Mindustry core classes, validating all harness classes."""
     root = Path(repo_root or _REPO_ROOT)
     config = config or {}
     errors: List[str] = []
@@ -243,34 +383,32 @@ def find_mindustry_core(
     explicit = os.environ.get("MINDUSTRY_CORE_PATH")
     if explicit:
         expanded = _expand_path(explicit)
-        for candidate in _core_candidates(Path(expanded)):
-            if _entry_contains(str(candidate), _CORE_CLASS):
+        candidates = _core_candidates(Path(expanded))
+        for candidate in candidates:
+            if not _missing_classes(str(candidate), _CORE_REQUIRED_CLASSES):
                 return str(candidate), None
-        errors.append(
-            "MINDUSTRY_CORE_PATH does not contain compiled Mindustry classes "
-            f"(missing {'/'.join(_CORE_CLASS)}): {expanded}"
-        )
+        errors.append(_core_candidate_error("MINDUSTRY_CORE_PATH", expanded, candidates))
+        return None, "; ".join(errors)
 
     configured = config.get("core_path")
     if configured:
-        for candidate in _core_candidates(Path(configured)):
-            if _entry_contains(str(candidate), _CORE_CLASS):
+        candidates = _core_candidates(Path(configured))
+        for candidate in candidates:
+            if not _missing_classes(str(candidate), _CORE_REQUIRED_CLASSES):
                 return str(candidate), None
-        errors.append(
-            "Configured core_path does not contain compiled Mindustry classes "
-            f"(missing {'/'.join(_CORE_CLASS)}): {configured}"
-        )
+        errors.append(_core_candidate_error("Configured core_path", configured, candidates))
+        return None, "; ".join(errors)
 
     for checkout in _candidate_checkout_roots(root, "Mindustry"):
         for candidate in _core_candidates(checkout):
-            if _entry_contains(str(candidate), _CORE_CLASS):
+            if not _missing_classes(str(candidate), _CORE_REQUIRED_CLASSES):
                 return str(candidate), None
 
     for jar in _gradle_artifact_jars("com.github.Anuken.Mindustry"):
-        if _entry_contains(str(jar), _CORE_CLASS):
+        if not _missing_classes(str(jar), _CORE_REQUIRED_CLASSES):
             return str(jar), None
     for jar in _maven_artifact_jars(("com", "github", "Anuken", "Mindustry")):
-        if _entry_contains(str(jar), _CORE_CLASS):
+        if not _missing_classes(str(jar), _CORE_REQUIRED_CLASSES):
             return str(jar), None
 
     hint = (
@@ -308,8 +446,9 @@ def _arc_entries_from_root(root: Path) -> List[str]:
             for path in sorted(root.glob("**/build/libs/*.jar"))
             if _is_runtime_jar(path)
         ]
-        if jars:
-            return [str(path) for path in _unique_paths(jars)]
+        jar_entries = [str(path) for path in _unique_paths(jars)]
+        if jar_entries and not _missing_arc_classes(jar_entries):
+            return jar_entries
 
         class_dirs: List[Path] = []
         for relative in (
@@ -322,7 +461,9 @@ def _arc_entries_from_root(root: Path) -> List[str]:
                 class_dirs.append(candidate)
         for pattern in ("*/build/classes/java/main", "*/*/build/classes/java/main"):
             class_dirs.extend(path for path in sorted(root.glob(pattern)) if path.is_dir())
-        return [str(path) for path in _unique_paths(class_dirs)]
+        entries = list(jars)
+        entries.extend(class_dirs)
+        return [str(path) for path in _unique_paths(entries)]
 
     return [
         str(path)
@@ -332,10 +473,25 @@ def _arc_entries_from_root(root: Path) -> List[str]:
 
 
 def _missing_arc_classes(entries: Sequence[str]) -> List[str]:
+    directories: List[Path] = []
+    archives: List[set[str]] = []
+    for entry in entries:
+        path = Path(entry)
+        if path.is_dir():
+            directories.append(path)
+        elif path.is_file() and path.suffix.lower() == ".jar":
+            names = _jar_names(path)
+            if names is not None:
+                archives.append(names)
+
     missing: List[str] = []
     for parts in _ARC_REQUIRED_CLASSES:
-        if not any(_entry_contains(entry, parts) for entry in entries):
-            missing.append("/".join(parts))
+        name = "/".join(parts)
+        if any(directory.joinpath(*parts).is_file() for directory in directories):
+            continue
+        if any(name in names for names in archives):
+            continue
+        missing.append(name)
     return missing
 
 
@@ -347,6 +503,15 @@ def _find_arc_from_value(value: str) -> Tuple[Tuple[str, ...], List[str]]:
         entries.extend(_arc_entries_from_root(Path(_expand_path(part))))
     unique = tuple(str(path) for path in _unique_paths(Path(entry) for entry in entries))
     return unique, _missing_arc_classes(unique)
+
+
+def _arc_value_error(label: str, value: str, missing: Sequence[str]) -> str:
+    if missing:
+        return (
+            f"{label} is missing required Arc classes: {', '.join(missing)}: "
+            f"{value}"
+        )
+    return f"{label} does not contain Arc jars or classes: {value}"
 
 
 def find_arc_entries(
@@ -363,22 +528,16 @@ def find_arc_entries(
         entries, missing = _find_arc_from_value(explicit)
         if entries and not missing:
             return entries, None
-        if missing:
-            errors.append(
-                "ARC_JARS_PATH is missing required Arc classes: " + ", ".join(missing)
-            )
-        else:
-            errors.append(f"ARC_JARS_PATH does not contain Arc jars or classes: {explicit}")
+        errors.append(_arc_value_error("ARC_JARS_PATH", explicit, missing))
+        return (), "; ".join(errors)
 
     configured = config.get("arc_path") or config.get("arc_jars_path")
     if configured:
         entries, missing = _find_arc_from_value(configured)
         if entries and not missing:
             return entries, None
-        if missing:
-            errors.append(
-                "Configured arc_path is missing required Arc classes: " + ", ".join(missing)
-            )
+        errors.append(_arc_value_error("Configured arc_path", configured, missing))
+        return (), "; ".join(errors)
 
     for checkout in _candidate_checkout_roots(root, "Arc"):
         entries = tuple(_arc_entries_from_root(checkout))
@@ -419,6 +578,7 @@ def find_harness_build(
             "MINDUSTRY_HARNESS_BUILD does not contain "
             f"{'/'.join(_HARNESS_CLASS)}: {expanded}"
         )
+        return None, "; ".join(errors)
 
     configured = config.get("harness_build")
     if configured:
@@ -428,6 +588,7 @@ def find_harness_build(
             "Configured harness_build does not contain "
             f"{'/'.join(_HARNESS_CLASS)}: {configured}"
         )
+        return None, "; ".join(errors)
 
     for candidate in (
         root / "build",
@@ -484,6 +645,19 @@ def _assets_candidates_from_core(core_path: Optional[str]) -> List[Path]:
     return _unique_paths(candidates)
 
 
+def _assets_error(checked: Sequence[Path]) -> str:
+    hint = (
+        "Mindustry logicids.dat not found. Set MINDUSTRY_ASSETS_PATH to the "
+        "directory containing logicids.dat (usually <Mindustry>/core/assets)."
+    )
+    if checked:
+        paths = ", ".join(
+            str(path / "logicids.dat") for path in _unique_paths(checked)
+        )
+        hint += " Checked: " + paths
+    return hint
+
+
 def find_assets(
     core_path: Optional[str] = None,
     repo_root: Optional[Path] = None,
@@ -504,6 +678,7 @@ def find_assets(
             "MINDUSTRY_ASSETS_PATH does not contain a non-empty logicids.dat: "
             f"{expanded}"
         )
+        return None, "; ".join(errors)
 
     configured = config.get("assets_path")
     if configured:
@@ -514,31 +689,30 @@ def find_assets(
             "Configured assets_path does not contain a non-empty logicids.dat: "
             f"{configured}"
         )
+        return None, "; ".join(errors)
 
-    for candidate in _assets_candidates_from_core(core_path):
+    candidates = _assets_candidates_from_core(core_path)
+    for candidate in candidates:
         valid = _valid_assets_dir(str(candidate))
         if valid:
             return valid, None
-
-    hint = (
-        "Mindustry logicids.dat not found. Set MINDUSTRY_ASSETS_PATH to the "
-        "directory containing logicids.dat (usually <Mindustry>/core/assets)."
-    )
 
     # Do not mix assets from a different checkout when the compiled core
     # belongs to a specific checkout.  A mismatched logicids.dat silently
     # corrupts lookup indices.
     if _core_checkout_root(core_path) is not None:
-        errors.append(hint)
+        errors.append(_assets_error(candidates))
         return None, "; ".join(errors)
 
+    checked = list(candidates)
     for checkout in _candidate_checkout_roots(root, "Mindustry"):
         for candidate in (checkout / "core" / "assets", checkout / "assets"):
+            checked.append(candidate)
             valid = _valid_assets_dir(str(candidate))
             if valid:
                 return valid, None
 
-    errors.append(hint)
+    errors.append(_assets_error(checked))
     return None, "; ".join(errors)
 
 
@@ -546,6 +720,14 @@ def discover(repo_root: Optional[Path] = None) -> MindustryDiscovery:
     """Run the complete validated discovery process."""
     root = Path(repo_root or _REPO_ROOT)
     config, config_error = load_config(root)
+    if os.environ.get("MLOG_MINDUSTRY_CONFIG") and config_error:
+        return MindustryDiscovery(
+            core_path=None,
+            arc_entries=(),
+            harness_build=None,
+            assets_path=None,
+            error=config_error,
+        )
 
     core_path, core_error = find_mindustry_core(root, config)
     arc_entries, arc_error = find_arc_entries(root, config)

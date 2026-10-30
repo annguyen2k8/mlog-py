@@ -19,7 +19,7 @@ import unittest
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from src import mindustry_discovery, mindustry_validator
 
@@ -54,9 +54,32 @@ def _make_jar(path: Path, entries) -> Path:
     return path
 
 
-def _make_core(checkout: Path) -> Path:
+_CORE_CLASS_FILES = tuple(
+    "/".join(parts) for parts in mindustry_discovery._CORE_REQUIRED_CLASSES
+)
+_ARC_CLASS_FILES = tuple(
+    "/".join(parts) for parts in mindustry_discovery._ARC_REQUIRED_CLASSES
+)
+_ARC_EXTENSION_CLASSES = {
+    "g3d": ("arc/math/geom/Mat3D.class",),
+    "freetype": ("arc/freetype/FreeType.class",),
+}
+_ARC_EXTENSION_CLASS_FILES = {
+    entry
+    for entries in _ARC_EXTENSION_CLASSES.values()
+    for entry in entries
+}
+_ARC_CORE_CLASSES = tuple(
+    name for name in _ARC_CLASS_FILES if name not in _ARC_EXTENSION_CLASS_FILES
+)
+
+
+def _make_core(checkout: Path, omit=()) -> Path:
     core = checkout / "core" / "build" / "classes" / "java" / "main"
-    _write_file(core / "mindustry" / "Vars.class")
+    omitted = set(omit)
+    for name in _CORE_CLASS_FILES:
+        if name not in omitted:
+            _write_file(core.joinpath(*name.split("/")))
     return core
 
 
@@ -66,19 +89,25 @@ def _make_assets(checkout: Path) -> Path:
     return assets
 
 
-def _make_arc(checkout: Path):
+def _make_arc(checkout: Path, omit=()):
+    omitted = set(omit)
+    modules = {
+        "arc-core": _ARC_CORE_CLASSES,
+        "g3d": _ARC_EXTENSION_CLASSES["g3d"],
+        "freetype": _ARC_EXTENSION_CLASSES["freetype"],
+    }
     return [
         _make_jar(
             checkout / "arc-core" / "build" / "libs" / "arc-core-1.0.jar",
-            ("arc/Core.class",),
+            [name for name in modules["arc-core"] if name not in omitted],
         ),
         _make_jar(
             checkout / "extensions" / "g3d" / "build" / "libs" / "g3d-1.0.jar",
-            ("arc/math/geom/Mat3D.class",),
+            [name for name in modules["g3d"] if name not in omitted],
         ),
         _make_jar(
             checkout / "extensions" / "freetype" / "build" / "libs" / "freetype-1.0.jar",
-            ("arc/freetype/FreeType.class",),
+            [name for name in modules["freetype"] if name not in omitted],
         ),
     ]
 
@@ -227,6 +256,104 @@ class TestMindustryDaemonProtocol(unittest.TestCase):
         self.assertFalse(timed_out)
         self.assertEqual(lines, ["RESULT:OK"])
 
+    def test_daemon_stop_reaps_after_terminate_timeout(self):
+        client = mindustry_validator._MindustryDaemonClient()
+
+        class FakeProcess:
+            def __init__(self):
+                self.stdin = io.BytesIO()
+                self.stdout = None
+                self.stderr = None
+                self.terminated = False
+                self.killed = False
+                self.wait_calls = 0
+
+            def poll(self):
+                return None
+
+            def terminate(self):
+                self.terminated = True
+
+            def wait(self, timeout=None):
+                self.wait_calls += 1
+                if self.wait_calls == 1:
+                    raise subprocess.TimeoutExpired("java", timeout or 1.0)
+                return 0
+
+            def kill(self):
+                self.killed = True
+
+        proc = FakeProcess()
+        client._proc = proc
+        client._stop()
+
+        self.assertTrue(proc.terminated)
+        self.assertTrue(proc.killed)
+        self.assertEqual(proc.wait_calls, 2)
+
+    def test_daemon_cleans_dead_process_before_restart(self):
+        client = mindustry_validator._MindustryDaemonClient()
+        old_proc = MagicMock()
+        old_proc.poll.return_value = 1
+        old_proc.stdin = MagicMock()
+        old_proc.stdout = MagicMock()
+        old_proc.stderr = MagicMock()
+        client._proc = old_proc
+
+        read_fd, write_fd = os.pipe()
+        stream = os.fdopen(read_fd, "rb", buffering=0)
+
+        class FakeProcess:
+            def __init__(self):
+                self.stdin = io.BytesIO()
+                self.stdout = stream
+                self.stderr = None
+
+            def poll(self):
+                return None
+
+            def terminate(self):
+                pass
+
+            def wait(self, timeout=None):
+                return 0
+
+            def kill(self):
+                pass
+
+        proc = FakeProcess()
+
+        def write_ready():
+            try:
+                os.write(write_fd, b"READY\n")
+            finally:
+                os.close(write_fd)
+
+        writer = threading.Thread(target=write_ready, daemon=True)
+        writer.start()
+
+        with patch.object(mindustry_validator, "get_classpath", return_value="cp"):
+            with patch.object(
+                mindustry_validator.shutil, "which", return_value="java"
+            ):
+                with patch.object(
+                    mindustry_validator,
+                    "_java_command",
+                    return_value=["java", "--daemon"],
+                ):
+                    with patch.object(
+                        mindustry_validator.subprocess, "Popen", return_value=proc
+                    ):
+                        try:
+                            self.assertTrue(client._ensure_started())
+                        finally:
+                            client._stop()
+                            writer.join(timeout=1.0)
+
+        old_proc.stdin.close.assert_called_once()
+        old_proc.stdout.close.assert_called_once()
+        old_proc.stderr.close.assert_called_once()
+
 
 class TestMindustryDiscovery(unittest.TestCase):
     """Validated discovery from environment, config, and sibling checkouts."""
@@ -347,6 +474,7 @@ class TestMindustryDiscovery(unittest.TestCase):
 
             self.assertFalse(result.available)
             self.assertIn("logicids.dat", result.error)
+            self.assertIn(str(checkout / "core" / "assets"), result.error)
 
     def test_missing_harness_reports_build_hint(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -395,7 +523,13 @@ class TestMindustryDiscovery(unittest.TestCase):
                 assets = _make_assets(checkout)
                 harness = _make_harness(repo)
                 broken_arc = Path(tmp) / "broken-arc"
-                _make_jar(broken_arc / "arc-core-1.0.jar", ("arc/Core.class",))
+                _make_arc(
+                    broken_arc,
+                    omit=(
+                        "arc/math/geom/Mat3D.class",
+                        "arc/freetype/FreeType.class",
+                    ),
+                )
 
                 env = _empty_discovery_env(
                     MINDUSTRY_CORE_PATH=str(core),
@@ -409,6 +543,192 @@ class TestMindustryDiscovery(unittest.TestCase):
             self.assertFalse(result.available)
             self.assertIn("Mat3D", result.error)
             self.assertIn("FreeType", result.error)
+
+    def test_incomplete_core_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with _isolated_discovery(tmp) as repo:
+                checkout = Path(tmp) / "Mindustry-source"
+                core = _make_core(
+                    checkout, omit=("mindustry/logic/LExecutor.class",)
+                )
+                assets = _make_assets(checkout)
+                _make_arc(Path(tmp) / "Arc")
+                harness = _make_harness(repo)
+
+                env = _empty_discovery_env(
+                    MINDUSTRY_CORE_PATH=str(core),
+                    ARC_JARS_PATH=str(Path(tmp) / "Arc"),
+                    MINDUSTRY_HARNESS_BUILD=str(harness),
+                    MINDUSTRY_ASSETS_PATH=str(assets),
+                )
+                with patch.dict(os.environ, env, clear=False):
+                    result = mindustry_discovery.discover(repo)
+
+            self.assertFalse(result.available)
+            self.assertIsNone(result.core_path)
+            self.assertIn("LExecutor.class", result.error)
+            self.assertIn(str(core), result.error)
+
+    def test_incomplete_arc_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with _isolated_discovery(tmp) as repo:
+                checkout = Path(tmp) / "Mindustry-source"
+                core = _make_core(checkout)
+                assets = _make_assets(checkout)
+                arc = Path(tmp) / "Arc"
+                _make_arc(arc, omit=("arc/mock/MockFiles.class",))
+                harness = _make_harness(repo)
+
+                env = _empty_discovery_env(
+                    MINDUSTRY_CORE_PATH=str(core),
+                    ARC_JARS_PATH=str(arc),
+                    MINDUSTRY_HARNESS_BUILD=str(harness),
+                    MINDUSTRY_ASSETS_PATH=str(assets),
+                )
+                with patch.dict(os.environ, env, clear=False):
+                    result = mindustry_discovery.discover(repo)
+
+            self.assertFalse(result.available)
+            self.assertEqual(result.arc_entries, ())
+            self.assertIn("arc/mock/MockFiles.class", result.error)
+            self.assertIn(str(arc), result.error)
+
+    def test_arc_checkout_combines_jars_and_class_dirs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with _isolated_discovery(tmp) as repo:
+                checkout = Path(tmp) / "Mindustry-source"
+                core = _make_core(checkout)
+                assets = _make_assets(checkout)
+                arc = Path(tmp) / "Arc"
+                core_jar = _make_jar(
+                    arc / "arc-core" / "build" / "libs" / "arc-core-1.0.jar",
+                    _ARC_CORE_CLASSES,
+                )
+                g3d_dir = (
+                    arc / "extensions" / "g3d" / "build" / "classes" / "java" / "main"
+                )
+                freetype_dir = (
+                    arc
+                    / "extensions"
+                    / "freetype"
+                    / "build"
+                    / "classes"
+                    / "java"
+                    / "main"
+                )
+                _write_file(
+                    g3d_dir.joinpath(*_ARC_EXTENSION_CLASSES["g3d"][0].split("/"))
+                )
+                _write_file(
+                    freetype_dir.joinpath(
+                        *_ARC_EXTENSION_CLASSES["freetype"][0].split("/")
+                    )
+                )
+                harness = _make_harness(repo)
+
+                env = _empty_discovery_env(
+                    MINDUSTRY_CORE_PATH=str(core),
+                    ARC_JARS_PATH=str(arc),
+                    MINDUSTRY_HARNESS_BUILD=str(harness),
+                    MINDUSTRY_ASSETS_PATH=str(assets),
+                )
+                with patch.dict(os.environ, env, clear=False):
+                    result = mindustry_discovery.discover(repo)
+
+            self.assertTrue(result.available, result.error)
+            self.assertEqual(
+                sorted(result.arc_entries),
+                sorted((str(core_jar), str(g3d_dir), str(freetype_dir))),
+            )
+
+    def test_invalid_explicit_paths_do_not_fall_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with _isolated_discovery(tmp) as repo:
+                checkout = Path(tmp) / "Mindustry-source"
+                core = _make_core(checkout)
+                assets = _make_assets(checkout)
+                arc = Path(tmp) / "Arc"
+                _make_arc(arc)
+                harness = _make_harness(repo)
+                bad = Path(tmp) / "bad"
+                bad.mkdir()
+                base_env = {
+                    "MINDUSTRY_CORE_PATH": str(core),
+                    "ARC_JARS_PATH": str(arc),
+                    "MINDUSTRY_HARNESS_BUILD": str(harness),
+                    "MINDUSTRY_ASSETS_PATH": str(assets),
+                }
+
+                for key, attr in (
+                    ("MINDUSTRY_CORE_PATH", "core_path"),
+                    ("ARC_JARS_PATH", "arc_entries"),
+                    ("MINDUSTRY_HARNESS_BUILD", "harness_build"),
+                    ("MINDUSTRY_ASSETS_PATH", "assets_path"),
+                ):
+                    env = _empty_discovery_env(**base_env)
+                    env[key] = str(bad)
+                    with self.subTest(key=key):
+                        with patch.dict(os.environ, env, clear=False):
+                            result = mindustry_discovery.discover(repo)
+                        self.assertFalse(result.available, result.error)
+                        self.assertIn(key, result.error)
+                        self.assertIn(str(bad), result.error)
+                        self.assertFalse(getattr(result, attr), result.error)
+
+    def test_invalid_configured_paths_do_not_fall_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with _isolated_discovery(tmp) as repo:
+                checkout = Path(tmp) / "Mindustry-source"
+                _make_core(checkout)
+                _make_assets(checkout)
+                _make_arc(Path(tmp) / "Arc")
+                _make_harness(repo)
+                bad = Path(tmp) / "bad"
+                bad.mkdir()
+
+                for key, attr in (
+                    ("core_path", "core_path"),
+                    ("arc_path", "arc_entries"),
+                    ("harness_build", "harness_build"),
+                    ("assets_path", "assets_path"),
+                ):
+                    (repo / ".mindustry.json").write_text(
+                        json.dumps({key: str(bad)}), encoding="utf-8"
+                    )
+                    with self.subTest(key=key):
+                        with patch.dict(
+                            os.environ, _empty_discovery_env(), clear=False
+                        ):
+                            result = mindustry_discovery.discover(repo)
+                        self.assertFalse(result.available, result.error)
+                        self.assertIn(key, result.error)
+                        self.assertIn(str(bad), result.error)
+                        self.assertFalse(getattr(result, attr), result.error)
+
+    def test_missing_explicit_config_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with _isolated_discovery(tmp) as repo:
+                checkout = Path(tmp) / "Mindustry-source"
+                core = _make_core(checkout)
+                assets = _make_assets(checkout)
+                arc = Path(tmp) / "Arc"
+                _make_arc(arc)
+                harness = _make_harness(repo)
+                missing = Path(tmp) / "missing.json"
+
+                env = _empty_discovery_env(
+                    MLOG_MINDUSTRY_CONFIG=str(missing),
+                    MINDUSTRY_CORE_PATH=str(core),
+                    ARC_JARS_PATH=str(arc),
+                    MINDUSTRY_HARNESS_BUILD=str(harness),
+                    MINDUSTRY_ASSETS_PATH=str(assets),
+                )
+                with patch.dict(os.environ, env, clear=False):
+                    result = mindustry_discovery.discover(repo)
+
+            self.assertFalse(result.available)
+            self.assertIn("MLOG_MINDUSTRY_CONFIG", result.error)
+            self.assertIn(str(missing), result.error)
 
     def test_gradle_cache_combines_required_arc_jars(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -429,15 +749,15 @@ class TestMindustryDiscovery(unittest.TestCase):
                 cache_jars = [
                     _make_jar(
                         cache / "arc-core" / "1.0" / "abc" / "arc-core-1.0.jar",
-                        ("arc/Core.class",),
+                        _ARC_CORE_CLASSES,
                     ),
                     _make_jar(
                         cache / "g3d" / "1.0" / "def" / "g3d-1.0.jar",
-                        ("arc/math/geom/Mat3D.class",),
+                        _ARC_EXTENSION_CLASSES["g3d"],
                     ),
                     _make_jar(
                         cache / "freetype" / "1.0" / "ghi" / "freetype-1.0.jar",
-                        ("arc/freetype/FreeType.class",),
+                        _ARC_EXTENSION_CLASSES["freetype"],
                     ),
                 ]
 

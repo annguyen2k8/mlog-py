@@ -422,8 +422,15 @@ class _MindustryDaemonClient:
         if self._failed:
             return False
 
-        if self._proc is not None and self._proc.poll() is None:
-            return True
+        if self._proc is not None:
+            try:
+                if self._proc.poll() is None:
+                    return True
+            except Exception:
+                pass
+            # The previous daemon exited unexpectedly.  Close its pipes before
+            # replacing it so a crashed process cannot leak file descriptors.
+            self._stop()
 
         cp = get_classpath()
         java_bin = shutil.which("java")
@@ -502,35 +509,50 @@ class _MindustryDaemonClient:
         """Return the next stdout chunk (None on EOF); raise on timeout."""
         return self._chunks.get(timeout=max(0.001, timeout_sec))
 
+    @staticmethod
+    def _terminate_process(proc) -> None:
+        """Terminate a process, escalating to kill and always reaping it."""
+        try:
+            if proc.poll() is not None:
+                return
+        except Exception:
+            pass
+
+        try:
+            proc.terminate()
+            proc.wait(timeout=1.0)
+            return
+        except Exception:
+            pass
+
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=1.0)
+        except Exception:
+            pass
+
     def _stop(self):
         self._leftover = b""
         self._reader = None
         self._chunks = queue.Queue()
-        if self._proc:
-            try:
-                if self._proc.poll() is None:
-                    if self._proc.stdin:
-                        try:
-                            self._proc.stdin.write(b"EXIT\n")
-                            self._proc.stdin.flush()
-                        except Exception:
-                            pass
-                    self._proc.terminate()
-                    self._proc.wait(timeout=1.0)
-            except Exception:
+        proc = self._proc
+        if proc:
+            if proc.stdin:
                 try:
-                    self._proc.kill()
+                    proc.stdin.write(b"EXIT\n")
+                    proc.stdin.flush()
                 except Exception:
                     pass
-            try:
-                if self._proc.stdin:
-                    self._proc.stdin.close()
-                if self._proc.stdout:
-                    self._proc.stdout.close()
-                if self._proc.stderr:
-                    self._proc.stderr.close()
-            except Exception:
-                pass
+            self._terminate_process(proc)
+            for stream in (proc.stdin, proc.stdout, proc.stderr):
+                if stream:
+                    try:
+                        stream.close()
+                    except Exception:
+                        pass
             self._proc = None
 
     def _read_response(self, timeout_sec: float) -> Tuple[Optional[list[str]], bool]:

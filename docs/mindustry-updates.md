@@ -21,6 +21,8 @@ Discovery is shared by the validator and `tools/build_harness.py` and runs in th
 
 `logicids.dat` is derived from the discovered core checkout (usually `<Mindustry>/core/assets/logicids.dat`) and passed to the harness as `-Dmindustry.assets=<assets-dir>`. Discovery validates the required classes and asset file before enabling JVM tests; if something is missing, tests skip with the concrete reason instead of reporting a false pass.
 
+Explicit environment and config paths are authoritative: if one is set but invalid, discovery reports the checked path instead of silently falling back to a sibling checkout. Validation checks every core and Arc class directly referenced by the harness, so partial builds and mixed jar/class-directory Arc builds are handled correctly.
+
 ---
 
 ## 2. Step-by-Step Update Procedure
