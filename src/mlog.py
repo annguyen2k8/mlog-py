@@ -151,7 +151,7 @@ def _get_version() -> str:
     except ImportError:
         pass
 
-    return "0.6.0"
+    return "0.7.0"
 
 
 __version__: str = _get_version()

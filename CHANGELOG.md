@@ -7,10 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-31
+
 ### Added
-- Shared Markdown agent memory and handoff for Antigravity and OpenCode:
-  `AGENTS.md`, `.agents/memory/context.md`, `.agents/memory/handoff.md`,
-  an ADR index, and structural tests.
+- **v160.7 `control` Namespace**:
+  - Full support for canonical `control` namespace in Python DSL (`control.enabled()`, `control.shoot()`, `control.shootp()`, `control.config()`, `control.color()`) with automatic dummy operand padding matching Mindustry v160.7 engine signatures.
+  - Decompiler round-trip recovery for `control` instructions into idiomatic `control.<prop>(...)` methods.
+- **Cross-Platform Engine Harness Auto-Discovery & Resilient Windows Daemon**:
+  - Auto-discovers compiled Mindustry core classes and Arc library jars across sibling folders, Gradle cache, and explicit configs (`.mindustry.json`).
+  - Hardened Windows daemon lifecycle with strict discovery, process cleanup, and daemon reuse.
+  - Replaced Termux-specific fixtures with cross-platform tests (preserving byte-identical BOM handling).
+- **v160.7 Engine Semantics & Sensor Alignment**:
+  - `status clear` boolean flag now strictly emits literal `"true"`/`"false"` matching `Boolean.valueOf()` parsing in the JVM engine, restoring exact decompiler round-trips.
+  - `marker.texture` emits `p1=printFlush` and `p2=name` per upstream v160.7 `LMarkerControl.texture` signature.
+  - Exposed privileged `@cameraX`, `@cameraY`, `@cameraWidth`, `@cameraHeight` in `SensorProperty` and registry extractor.
+- **Complete Mindustry v160.7 Opcode Coverage Audit**:
+  - Fully audited all 53 opcodes (28 standard, 25 world processor) in `docs/mlog-command-coverage.md`.
+  - Updated World Processor table with 7-column matrix documenting exact v160.7 MLog syntax, compiler intrinsics, source references, and regression tests.
+  - Documented deliberate architectural boundaries (World Processor `#processor: world` privilege requirement, 1:1 intrinsic mapping) and API gaps (`@queries` internal buffer protocol).
+- **Shared Agent Memory & Handoff Protocol**:
+  - Added filesystem Markdown shared agent memory (`AGENTS.md`, `.agents/memory/context.md`, `.agents/memory/handoff.md`, ADR index, and structural tests) facilitating pair-programming handover between Antigravity and OpenCode.
+- **Documentation & Walkthrough Synchronization**:
+  - Synchronized `README.md` decompiler flags and Thorium reactor safety controller walkthrough with exact CLI, API, and example files.
+  - Added explicit note clarifying that decompiler output recovers semantic equivalence with minimal imports rather than character-for-character original formatting.
 
 ## [0.6.0] - 2026-10-19
 

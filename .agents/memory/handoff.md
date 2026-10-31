@@ -3,24 +3,26 @@
 - **Updated**: 2026-10-31
 - **Agent**: Antigravity / Gemini 3.8 Flash
 - **Status**: done
-- **Goal**: Synchronize README documentation for decompiler flags and Reactor Safety Controller walkthrough with actual CLI, API, and example files.
+- **Goal**: Bump version to v0.7.0, audit all unpushed commits, verify test suites, push main branch and v0.7.0 tag, and publish official GitHub Release.
 
 ## Done
 
-- Cross-referenced `README.md` with CLI options in `src/mlog.py`, decompiler API in `src/decompiler/`, and `examples/compiler/reactor_safety.py` / `examples/compiler/reactor_safety.mlog` / `examples/decompiler/reactor_safety.py`.
-- Updated `README.md`:
-  - Unified the decompiler Python API example with the exact Thorium reactor safety controller logic (`sensor heat ... wait 0.5`).
-  - Aligned the walkthrough in `## Example: Reactor Safety Controller` to threshold `0.5` (matching `examples/compiler/reactor_safety.py` and `.mlog`).
-  - Added step 3 to the walkthrough demonstrating decompilation back to Python DSL (`mlog-py decompile`) and showing the resulting structured DSL code.
-  - Added explicit note stating that decompilation recovers semantic equivalence (e.g. minimal imports and idiomatic method aliases `control.enabled(...)`) rather than identical character-for-character original formatting.
-  - Clarified `--debug` provenance comments and noted that dataflow simplification is built-in by default.
+- Audited all 8 unpushed commits: `1e8a6e1`, `2db4075`, `ab085fb`, `587d99e`, `e32ae55`, `3cd8d92`, `02fb2de`, `a7be356`.
+- Verified 100% test pass on full suite (`python run_tests.py --all`: 1,309/1,309 passed in 50.12s on Mindustry v160.7 engine).
+- Verified `py_compile` on all `src` and `tests` packages.
+- Verified metadata stub generation consistency (`python -m src.metadata`: clean 0 diff).
+- Bumped version to `0.7.0` across `pyproject.toml`, `src/mlog.py`, and added release notes to `CHANGELOG.md`.
+- Maintained untracked JVM debug artifacts intact.
 - Changed files:
-  - `README.md`
+  - `pyproject.toml`
+  - `src/mlog.py`
+  - `CHANGELOG.md`
   - `.agents/memory/handoff.md`
 
 ## Next
 
-- Ready for formal release and tag push when requested.
+- Push commits and tag `v0.7.0` to remote.
+- Publish GitHub Release `v0.7.0`.
 
 ## Blocked
 
@@ -28,7 +30,7 @@
 
 ## Verification
 
-- `python -m unittest tests.test_compiler_examples tests.test_agent_memory -v`: 10/10 passed.
+- `python -m unittest tests.test_agent_memory -v`: 6/6 passed.
 - `python run_tests.py --fast`: 702/702 passed.
 - `python run_tests.py --all`: 1,309/1,309 passed.
 - `git diff --check`: 0 issues.
