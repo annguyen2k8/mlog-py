@@ -4,6 +4,8 @@ LACCESS_ALL = ['totalItems', 'firstItem', 'totalLiquids', 'totalPower', 'itemCap
 
 SENSEABLE_PROPERTIES = ['totalItems', 'firstItem', 'totalLiquids', 'totalPower', 'itemCapacity', 'liquidCapacity', 'powerCapacity', 'powerNetStored', 'powerNetCapacity', 'powerNetIn', 'powerNetOut', 'ammo', 'ammoCapacity', 'currentAmmoType', 'memoryCapacity', 'health', 'maxHealth', 'heat', 'shield', 'armor', 'efficiency', 'progress', 'timescale', 'rotation', 'x', 'y', 'velocityX', 'velocityY', 'shootX', 'shootY', 'displayWidth', 'displayHeight', 'bufferSize', 'operations', 'size', 'solid', 'dead', 'range', 'shooting', 'boosting', 'mineX', 'mineY', 'mining', 'buildX', 'buildY', 'pingX', 'pingY', 'pingText', 'building', 'breaking', 'speed', 'team', 'type', 'flag', 'flying', 'controlled', 'controller', 'name', 'payloadCount', 'payloadType', 'totalPayload', 'payloadCapacity', 'maxUnits', 'id', 'selectedBlock', 'selectedRotation', 'bulletLifetime', 'bulletTime', 'enabled', 'config', 'color']
 
+SENSEABLE_PROPERTIES_PRIVILEGED = ['cameraX', 'cameraY', 'cameraWidth', 'cameraHeight']
+
 CONTROL_PROPERTIES = ['enabled', 'shoot', 'shootp', 'config', 'color']
 
 UNIT_CONTROL_ACTIONS = ['idle', 'stop', 'move', 'approach', 'pathfind', 'autoPathfind', 'boost', 'target', 'targetp', 'itemDrop', 'itemTake', 'payDrop', 'payTake', 'payEnter', 'mine', 'flag', 'build', 'deconstruct', 'getBlock', 'within', 'unbind']

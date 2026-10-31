@@ -89,6 +89,20 @@ def _assert_no_reserved_temporaries(case, py: str) -> None:
             case.assertFalse(node.name.startswith(RESERVED_PREFIX))
 
 
+class TestStatusBooleanLiteralRoundTrip(unittest.TestCase):
+    """status token 1 is a Java boolean literal, not a numeric flag."""
+
+    def test_status_boolean_literals_roundtrip_byte_exact(self):
+        for mlog in (
+            "status true @status-burning u 5\n",
+            "status false @status-burning u 5\n",
+            "status true @status-wet u 0\n",
+            "status false @status-wet u 0\n",
+        ):
+            with self.subTest(mlog=mlog.strip()):
+                self.assertEqual(_roundtrip_status(mlog), "RT-OK")
+
+
 class TestInlineExpressionPredicate(unittest.TestCase):
     """The renderer/inliner predicate deciding what may be emitted as an expression."""
 

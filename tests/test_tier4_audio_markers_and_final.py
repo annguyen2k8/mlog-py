@@ -19,6 +19,29 @@ from src.mlog import compile_py
 from src.mlog_registry import MarkerControl, MarkerType
 
 
+class TestMarkerTextureCompilation(unittest.TestCase):
+    """marker.texture(id, name, print_flush) maps to the engine's p1/p2 order."""
+
+    def test_texture_operand_order(self):
+        source = """
+from mlog import marker
+marker.texture(0, "my-tex")
+marker.texture(1, "other-tex", True)
+marker.texture(2, "third-tex", False)
+marker.texture(3, "var-tex", flag)
+"""
+        res = compile_py(source)
+        lines = [line.strip() for line in res.mlog.splitlines()]
+        self.assertIn('setmarker texture 0 0 "my-tex" 0', lines)
+        self.assertIn('setmarker texture 1 1 "other-tex" 0', lines)
+        self.assertIn('setmarker texture 2 0 "third-tex" 0', lines)
+        self.assertIn('setmarker texture 3 flag "var-tex" 0', lines)
+
+    def test_texture_requires_name(self):
+        with self.assertRaises(Exception):
+            compile_py('from mlog import marker\nmarker.texture(0)')
+
+
 @unittest.skipUnless(is_mindustry_available(), "Mindustry validation harness unavailable")
 class TestTier4AudioMarkersAndFinal(unittest.TestCase):
     """Real JVM regression tests for Mindustry audio, markers, locale, and network data."""

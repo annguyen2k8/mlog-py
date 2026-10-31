@@ -72,8 +72,8 @@ def parse_enum_constants(text: str, enum_name: str) -> List[Tuple[str, Optional[
     return results
 
 
-def extract_laccess(java_dir: str) -> Tuple[List[str], List[str], List[str]]:
-    """Extract senseable, controllable, and all LAccess properties."""
+def extract_laccess(java_dir: str) -> Tuple[List[str], List[str], List[str], List[str]]:
+    """Extract senseable, privileged-senseable, controllable, and all LAccess properties."""
     path = os.path.join(java_dir, "logic", "LAccess.java")
     with open(path, "r", encoding="utf-8") as f:
         constants = parse_enum_constants(f.read(), "LAccess")
@@ -82,11 +82,14 @@ def extract_laccess(java_dir: str) -> Tuple[List[str], List[str], List[str]]:
     controls = [name for name, params in constants if params is not None and len(params.strip()) > 0]
     all_props = [name for name, _ in constants]
     # In Mindustry LAccess.java, senseable properties are all entries where
-    # params.length <= 1 and not privileged.
+    # params.length <= 1 and not privileged. The privileged subset
+    # (LAccess.senseablePrivileged) is senseable only in world processors.
     # Entries with 1 parameter (enabled, config, color) are BOTH controllable and senseable.
     senseable = []
+    senseable_privileged = []
     for name, params in constants:
         if name in privileged:
+            senseable_privileged.append(name)
             continue
         if params is None or len(params.strip()) == 0:
             senseable.append(name)
@@ -97,7 +100,7 @@ def extract_laccess(java_dir: str) -> Tuple[List[str], List[str], List[str]]:
             if len(args) <= 1:
                 senseable.append(name)
 
-    return all_props, senseable, controls
+    return all_props, senseable, senseable_privileged, controls
 
 
 def extract_unit_control(java_dir: str) -> List[str]:
@@ -231,7 +234,7 @@ def extract_builtin_constants() -> List[str]:
 def extract_all(mindustry_root: str) -> Dict[str, object]:
     """Extract all Mindustry Logic constants and enums into a dictionary."""
     java_dir = os.path.join(mindustry_root, "core", "src", "mindustry")
-    all_access, senseable, controls = extract_laccess(java_dir)
+    all_access, senseable, senseable_privileged, controls = extract_laccess(java_dir)
     ucontrol = extract_unit_control(java_dir)
     logic_ops = extract_logic_ops(java_dir)
     cond_ops = extract_condition_ops(java_dir)
@@ -246,6 +249,7 @@ def extract_all(mindustry_root: str) -> Dict[str, object]:
     return {
         "laccess_all": all_access,
         "senseable_properties": senseable,
+        "senseable_properties_privileged": senseable_privileged,
         "control_properties": controls,
         "unit_control_actions": ucontrol,
         "logic_operations": logic_ops,

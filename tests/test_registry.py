@@ -195,6 +195,32 @@ class TestRegistryAndEnums(unittest.TestCase):
         self.assertEqual(lines[3], "sensor copper1 block1 @copper")
         self.assertEqual(lines[4], "sensor copper2 block1 @copper")
 
+    def test_sensor_privileged_camera_properties(self):
+        """@cameraX/@cameraY/@cameraWidth/@cameraHeight are valid LAccess sensors."""
+        source = (
+            "from mlog import SensorProperty\n"
+            "cx = sensor(block1, SensorProperty.CAMERA_X)\n"
+            "cy = sensor(block1, SensorProperty.CAMERA_Y)\n"
+            "cw = sensor(block1, SensorProperty.CAMERA_WIDTH)\n"
+            "ch = sensor(block1, SensorProperty.CAMERA_HEIGHT)\n"
+            "cx2 = sensor(block1, \"@cameraX\")\n"
+            "cy2 = sensor(block1, \"cameraY\")\n"
+            "cw2 = sensor(block1, \"@cameraWidth\")\n"
+            "ch2 = sensor(block1, \"cameraHeight\")\n"
+        )
+        mlog = self.check_compile(source)
+        lines = mlog.splitlines()
+        self.assertEqual(lines[0], "sensor cx block1 @cameraX")
+        self.assertEqual(lines[1], "sensor cy block1 @cameraY")
+        self.assertEqual(lines[2], "sensor cw block1 @cameraWidth")
+        self.assertEqual(lines[3], "sensor ch block1 @cameraHeight")
+        self.assertEqual(lines[4], "sensor cx2 block1 @cameraX")
+        self.assertEqual(lines[5], "sensor cy2 block1 @cameraY")
+        self.assertEqual(lines[6], "sensor cw2 block1 @cameraWidth")
+        self.assertEqual(lines[7], "sensor ch2 block1 @cameraHeight")
+        self.assertEqual(SensorProperty.CAMERA_X.value, "@cameraX")
+        self.assertEqual(SensorProperty.CAMERA_WIDTH.value, "@cameraWidth")
+
     # -----------------------------------------------------------------------
     # 3. Typo Rejection (Sensor, Control, UnitControl, Draw, Op, etc.)
     # -----------------------------------------------------------------------

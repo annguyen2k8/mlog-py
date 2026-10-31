@@ -98,6 +98,23 @@ class TestPhase1E(unittest.TestCase):
         mlog, _ = Emitter(ir).emit()
         self.assertEqual(mlog.strip(), "uradar enemy any any distance 0 1 target")
 
+    def test_status_boolean_literals(self):
+        source = (
+            'status(True, "@status-burning", "u", 5)\n'
+            'status(1, "@status-wet", "u", 5)\n'
+            'status(False, "@status-burning", "u", 0)\n'
+            'status(0, "@status-wet", "u", 0)'
+        )
+        ir = compile_source_to_ir(source, "test.py")
+        mlog, _ = Emitter(ir).emit()
+        expected = (
+            "status true @status-burning u 5\n"
+            "status true @status-wet u 5\n"
+            "status false @status-burning u 0\n"
+            "status false @status-wet u 0"
+        )
+        self.assertEqual(mlog.strip(), expected)
+
     def test_wait_stop_end(self):
         source = 'wait(2.5)\nstop()\nend()'
         ir = compile_source_to_ir(source, "test.py")

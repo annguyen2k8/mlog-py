@@ -1924,10 +1924,12 @@ class Compiler:
                     call,
                 )
             clear_arg = str(self.format_intrinsic_arg(args[0], is_ident=False))
-            if clear_arg in ("True", "true"):
-                clear_val = "1"
-            elif clear_arg in ("False", "false"):
-                clear_val = "0"
+            # The engine parses token 1 with java.lang.Boolean.valueOf(), so only
+            # the literals "true"/"false" are meaningful here ("1" and "0" are false).
+            if clear_arg in ("True", "true", "1"):
+                clear_val = "true"
+            elif clear_arg in ("False", "false", "0"):
+                clear_val = "false"
             else:
                 clear_val = clear_arg
             effect_arg = self.format_intrinsic_arg(args[1], is_ident=True)
@@ -3344,6 +3346,24 @@ class Compiler:
             )
             return "0"
 
+        if method_name == "texture":
+            # marker.texture(id, name, [print_flush=False])
+            # Engine order is: setmarker texture <id> <printFlush> <name> <p3>
+            # where printFlush (p1) is a boolean and name is read from p2.
+            if not (2 <= len(args) <= 3):
+                self.error(
+                    "invalid arguments for marker.texture: expected marker.texture(id, name, [print_flush=False])",
+                    call,
+                )
+            id_ = str(self.format_intrinsic_arg(args[0], is_ident=True))
+            name = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            flush_arg = str(self.format_intrinsic_arg(args[2], is_ident=False)) if len(args) == 3 else "False"
+            print_flush = "1" if flush_arg in ("True", "true") else ("0" if flush_arg in ("False", "false") else flush_arg)
+            self.instructions.append(
+                IRRaw(opcode="setmarker", args=["texture", id_, print_flush, name, "0"], loc=loc)
+            )
+            return "0"
+
         ctrl_map = {
             "remove": ("remove", 0),
             "world": ("world", 1),
@@ -3374,7 +3394,6 @@ class Compiler:
             "lineAlign": ("lineAlign", 1),
             "label_flags": ("labelFlags", 2),
             "labelFlags": ("labelFlags", 2),
-            "texture": ("texture", 2),
             "texture_size": ("textureSize", 2),
             "textureSize": ("textureSize", 2),
             "posi": ("posi", 3),

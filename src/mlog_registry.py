@@ -33,6 +33,7 @@ from .mlog_registry_data import (
     RADAR_SORTS,
     RADAR_TARGETS,
     SENSEABLE_PROPERTIES,
+    SENSEABLE_PROPERTIES_PRIVILEGED,
     STATUS_EFFECTS,
     TEAMS,
     UNIT_CONTROL_ACTIONS,
@@ -131,6 +132,17 @@ class SensorPropertyRegistry(BaseRegistry):
                     source_name=src_name,
                     mlog_token=f"@{prop}",
                     category="laccess",
+                )
+            )
+        # Camera properties are only senseable from privileged (world) processors,
+        # but they are still valid LAccess sensor operands.
+        for prop in SENSEABLE_PROPERTIES_PRIVILEGED:
+            src_name = self._to_snake(prop).upper()
+            entries.append(
+                RegistryEntry(
+                    source_name=src_name,
+                    mlog_token=f"@{prop}",
+                    category="laccess_privileged",
                 )
             )
         for item in ITEMS:

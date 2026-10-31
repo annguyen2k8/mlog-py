@@ -193,7 +193,7 @@ b = bullet(Units.DAGGER, 0, 50, 50, 90, Teams.SHARDED)
         # 1. Compile DSL to mlog
         res = compile_py(dsl_code)
         self.assertIn("spawn @dagger 50 50 90 @sharded u 1", res.mlog)
-        self.assertIn("status 0 @status-burning u 10", res.mlog)
+        self.assertIn("status false @status-burning u 10", res.mlog)
         self.assertIn("explosion @sharded 50 50 20 50 1 1 0 1", res.mlog)
         self.assertIn("bullet b @dagger 0 50 50 90 @sharded null -1 1 1 -1 -1", res.mlog)
 
