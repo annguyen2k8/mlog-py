@@ -1,40 +1,28 @@
 # Task handoff
 
 - **Updated**: 2026-10-31
-- **Agent**: OpenCode / deepseek-v4.1-flash-free
+- **Agent**: Antigravity / Gemini 3.8 Flash
 - **Status**: done
-- **Goal**: Add a shared Markdown memory and handoff mechanism for Antigravity
-  (`agy`) and OpenCode V2 in this repository.
+- **Goal**: Audit Mindustry v160.7 opcode coverage documentation and complete `docs/mlog-command-coverage.md`.
 
 ## Done
 
-- Audited both tools' instruction discovery and existing memory mechanisms.
-- Confirmed OpenCode V2 loads `AGENTS.md`; Antigravity loads `AGENTS.md` and
-  `.agents/rules/*.md`.
-- Created the shared entry point, project context, task handoff, ADR index,
-  ADR-002, and usage documentation.
-- Added structural tests for the memory files.
-- Verified both CLIs auto-load `AGENTS.md`, read the handoff, and can write to
-  `.agents/memory/` (controlled scratch-file test, then removed).
+- Cross-referenced all 53 opcodes with `src/mlog_registry.py`, `src/compiler.py`, `src/decompiler/`, and Tier 3 / Tier 4 test suites.
+- Updated `docs/mlog-command-coverage.md`:
+  - Added clarification in Section 1.2 distinguishing VM bytecode support from high-level DSL convenience and privileged execution boundaries.
+  - Overhauled Section 2.7 (World Processor Statements): replaced 25 stale `Unimplemented` rows with full 7-column matrix documenting exact v160.7 MLog syntax, compiler intrinsics, source references, and regression tests.
+  - Corrected MLog argument ordering for `query`, `bullet`, `weatherset`, `makemarker`, `setmarker`, `playsound`, and `explosion`.
+  - Documented deliberate design boundaries: World Processor requirement (`#processor: world`), 1:1 compiler intrinsic mapping.
+  - Documented API gaps: `@queries` buffer protocol and absence of `Vars.queries`.
+  - Expanded Section 4 with Tier 4 architectural highlights (privilege enforcement, boolean literal serialization, marker texture alignment, message sentinel).
 - Changed files:
-  - `AGENTS.md`
-  - `.agents/memory/context.md`
+  - `docs/mlog-command-coverage.md`
   - `.agents/memory/handoff.md`
-  - `docs/adr/README.md`
-  - `docs/adr/0002-shared-agent-memory.md`
-  - `docs/agent-memory.md`
-  - `tests/test_agent_memory.py`
-  - `README.md`, `SKILL.md`, `run_tests.py`, `CHANGELOG.md` (documentation
-    and help updates)
-  - `src/metadata.py` (keep generated stubs LF-only on Windows)
-- No MCP server was added, and no existing tool configuration was modified.
 
 ## Next
 
-- No required follow-up for this task.
-- For future tasks, follow the memory protocol in `AGENTS.md`: read
-  `context.md` and this handoff before planning, then update this file at
-  checkpoints and before ending the session.
+- Ready for future compiler/decompiler features or refactoring.
+- Suggest ignoring `hs_err_pid*.log` in `.gitignore`.
 
 ## Blocked
 
@@ -44,10 +32,4 @@
 
 - `python -m unittest tests.test_agent_memory -v`: 6/6 passed.
 - `python run_tests.py --fast`: 702/702 passed.
-- `python run_tests.py --all`: 1309/1309 passed.
-- `python -m src.metadata`: regenerated both stubs without a diff (LF
-  preserved).
-- OpenCode fresh session: auto-loaded `AGENTS.md` and read this handoff.
-- Antigravity print mode: auto-loaded `AGENTS.md` and read this handoff.
-- Controlled write test: OpenCode appended `opencode-ok` and Antigravity
-  appended `agy-ok` to a scratch file; the scratch file was removed.
+- `git diff --check`: 0 issues.

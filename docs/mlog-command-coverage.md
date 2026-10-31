@@ -57,6 +57,13 @@ A strict distinction must be drawn between statements visible in the UI and opco
   - Supported in `mlog-py`: **53 / 53 opcodes** (**100.0%**)
   - JVM Runtime & Roundtrip Verified: **53 / 53 opcodes** (**100.0%**)
 
+> [!NOTE]
+> **Opcode Universe vs. High-Level DSL Scope**:
+> All 53 VM opcodes are supported at the bytecode compiler/decompiler level and verified against the Mindustry v160.7 engine. Full opcode coverage does not imply unrestricted runtime execution in standard survival processors or high-level DSL convenience:
+> 1. **Privileged runtime boundary**: All 25 World opcodes require a World Processor (`#processor: world`). Standard processors reject them as `InvalidStatement` at engine runtime.
+> 2. **API Gaps**: Certain engine-internal buffers (notably `@queries` populated by `query`) are not yet bound to typed constants in `Vars` (`Vars.queries` is absent), requiring raw string reference `"@queries"`.
+> 3. **Intrinsic Exposure**: World opcodes map to direct compiler intrinsics and namespaces (`cutscene.*`, `marker.*`) rather than synthesized high-level abstractions, preserving exact 1:1 bytecode equivalence under the Zero-Guessing contract.
+
 ```mermaid
 flowchart TD
     subgraph EngineRegistry["Mindustry LogicIO.allStatements (53 Entries)"]
@@ -168,35 +175,37 @@ flowchart TD
 ### 2.7. World Processor Statements (`LCategory.world` — 24 UI Statements + 1 Hidden)
 
 > [!IMPORTANT]
-> All statements below have `privileged() = true` in Mindustry Core (`LStatements.java`) and require World Processor permissions. They are mapmaker sandbox instructions not permitted in survival processors and are currently out-of-scope for standard compilation.
+> All 25 statements below have `privileged() = true` in Mindustry Core (`LStatements.java`) and require World Processor permissions (`#processor: world`). In standard survival processors (Micro, Logic, Hyper), the Mindustry VM rejects them as `InvalidStatement`.
+>
+> In `mlog-py`, all 25 statements are implemented as compiler intrinsics and dedicated namespaces, verified against the Mindustry v160.7 engine in Tier 4 tests. Note the intentional design boundaries and API gaps documented below (e.g. `@queries` buffer access).
 
-| # | UI Name | Opcode | Actual MLog Syntax | Status | Mindustry Engine Source |
-| :---: | :--- | :--- | :--- | :---: | :--- |
-| 1 | **Query** | `query` | `query <target> <filter> <filter2> <type> <p1> <p2> <p3> <p4>` | **Unimplemented** | `LStatements.java:1218`, `LExecutor.java:1894` |
-| 2 | **Get Block** | `getblock` | `getblock <layer> <result> <x> <y>` | **Unimplemented** | `LStatements.java:1270`, `LExecutor.java:1913` |
-| 3 | **Set Block** | `setblock` | `setblock <layer> <block> <x> <y> <team> <rotation>` | **Unimplemented** | `LStatements.java:1306`, `LExecutor.java:1931` |
-| 4 | **Spawn Unit** | `spawn` | `spawn <type> <x> <y> <rotation> <team> <result>` | **Unimplemented** | `LStatements.java:1357`, `LExecutor.java:1950` |
-| 5 | **Spawn Bullet** | `bullet` | `bullet <type> <team> <x> <y> <angle> <velocity> <lifetime>` | **Unimplemented** | `LStatements.java:1388`, `LExecutor.java:1967` |
-| 6 | **Apply Status** | `status` | `status <clear> <status> <unit> <duration>` | **Unimplemented** | `LStatements.java:1430`, `LExecutor.java:1984` |
-| 7 | **Weather Sense** | `weathersense` | `weathersense <result> <weather>` | **Unimplemented** | `LStatements.java:1494`, `LExecutor.java:2001` |
-| 8 | **Weather Set** | `weatherset` | `weatherset <active> <weather>` | **Unimplemented** | `LStatements.java:1548`, `LExecutor.java:2018` |
-| 9 | **Spawn Wave** | `spawnwave` | `spawnwave <x> <y> <natural>` | **Unimplemented** | `LStatements.java:1598`, `LExecutor.java:2035` |
-| 10 | **Set Rule** | `setrule` | `setrule <rule> <p1> <p2> <p3> <p4>` | **Unimplemented** | `LStatements.java:1625`, `LExecutor.java:2052` |
-| 11 | **Flush Message** | `message` | `message <type> <timeout> <field> <target>` | **Unimplemented** | `LStatements.java:1693`, `LExecutor.java:2070` |
-| 12 | **Cutscene** | `cutscene` | `cutscene <type> <p1> <p2> <p3> <p4>` | **Unimplemented** | `LStatements.java:1736`, `LExecutor.java:2087` |
-| 13 | **Effect** | `effect` | `effect <type> <x> <y> <rotation> <color> <p1>` | **Unimplemented** | `LStatements.java:1797`, `LExecutor.java:2104` |
-| 14 | **Explosion** | `explosion` | `explosion <team> <x> <y> <radius> <damage> <air> <ground> <pierce>` | **Unimplemented** | `LStatements.java:1858`, `LExecutor.java:2121` |
-| 15 | **Fetch** | `fetch` | `fetch <type> <result> <team> <index> <extra>` | **Unimplemented** | `LStatements.java:1911`, `LExecutor.java:2138` |
-| 16 | **Sync** | `sync` | `sync <target>` | **Unimplemented** | `LStatements.java:1968`, `LExecutor.java:2155` |
-| 17 | **Get Flag** | `getflag` | `getflag <result> <flag>` | **Unimplemented** | `LStatements.java:2029`, `LExecutor.java:2189` |
-| 18 | **Set Flag** | `setflag` | `setflag <flag> <value>` | **Unimplemented** | `LStatements.java:2061`, `LExecutor.java:2206` |
-| 19 | **Set Prop** | `setprop` | `setprop <property> <target> <value>` | **Unimplemented** | `LStatements.java:2092`, `LExecutor.java:2223` |
-| 20 | **Play Sound** | `playsound` | `playsound <pitch> <volume> <pan> <x> <y> <sound> <limit>` | **Unimplemented** | `LStatements.java:2212`, `LExecutor.java:2240` |
-| 21 | **Play Music** | `playmusic` | `playmusic <track> <interrupt>` | **Unimplemented** | `LStatements.java:2421`, `LExecutor.java:2257` |
-| 22 | **Set Marker** | `setmarker` | `setmarker <property> <id> <p1> <p2> <p3> <p4>` | **Unimplemented** | `LStatements.java:2450`, `LExecutor.java:2274` |
-| 23 | **Make Marker** | `makemarker` | `makemarker <id> <type> <x> <y> <replace>` | **Unimplemented** | `LStatements.java:2533`, `LExecutor.java:2291` |
-| 24 | **Locale Print** | `localeprint` | `localeprint <property>` | **Unimplemented** | `LStatements.java:2576`, `LExecutor.java:2308` |
-| *--* | *(Hidden UI)* | `clientdata` | `clientdata <channel> <value> <reliable>` | **Unimplemented** | `LStatements.java:1993` (`hidden() = true`) |
+| UI Name | Opcode | Actual MLog Syntax | Status | Support Level in `mlog-py` | Source Reference | Regression Tests |
+| :--- | :--- | :--- | :---: | :--- | :--- | :--- |
+| **Query** | `query` | `query <shape> <type> <team> <x> <y> <w> <h>` | **Supported** *(World)* | • **Intrinsic**: `query(shape, type, team, x, y, w, h)` with `QueryShape` and `QueryType`<br>• **API Gap**: Populates engine buffer `@queries`. `Vars.queries` is not currently exported in `mlog-py` registry; reading results requires `sensor(size, "@queries", SensorProperty.SIZE)` and `read(dest, "@queries", index)`. | Mindustry: `LStatements.java:1218`<br>mlog-py: `src/compiler.py:1754` | `tests/test_tier4_world_state.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Get Block** | `getblock` | `getblock <layer> <result> <x> <y>` | **Supported** *(World)* | • **Intrinsic**: `res = getblock(layer, x, y)` or `getblock(layer, result, x, y)` with `TileLayer`<br>• **Distinction**: Global infinite-range map query; distinct from unit-bound `ucontrol.get_block()`. | Mindustry: `LStatements.java:1270`<br>mlog-py: `src/compiler.py:1774` | `tests/test_tier4_world_state.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Set Block** | `setblock` | `setblock <layer> <block> <x> <y> <team> <rotation>` | **Supported** *(World)* | • **Intrinsic**: `setblock(layer, block, x, y, [team="@derelict"], [rotation=0])` with `TileLayer` and `Teams` enums. | Mindustry: `LStatements.java:1306`<br>mlog-py: `src/compiler.py:1801` | `tests/test_tier4_world_state.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Spawn Unit** | `spawn` | `spawn <type> <x> <y> <rotation> <team> <result> [effect]` | **Supported** *(World)* | • **Intrinsic**: `res = spawn(type, x, y, rotation, team, [effect=0])` or statement form `spawn(..., result, [effect=0])`. | Mindustry: `LStatements.java:1357`<br>mlog-py: `src/compiler.py:1819` | `tests/test_tier4_combat_spawning.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Spawn Bullet** | `bullet` | `bullet <result> <from> <index> <x> <y> <rotation> <team> <owner> <damage> <velocityScl> <lifeScl> <aimX> <aimY>` | **Supported** *(World)* | • **Intrinsic**: `res = bullet(from, index, x, y, rotation, team, ...)` or statement form `bullet(result, from, ...)`. Optional parameters default to standard values. | Mindustry: `LStatements.java:1388`<br>mlog-py: `src/compiler.py:1864` | `tests/test_tier4_combat_spawning.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Apply Status** | `status` | `status <clear> <status> <unit> <duration>` | **Supported** *(World)* | • **Intrinsic**: `status(clear, effect, unit, [duration=0])` with `StatusEffect`<br>• **Engine Constraint**: Emits literal `true`/`false` (`Boolean.valueOf()` in Mindustry VM rejects `1`/`0`). | Mindustry: `LStatements.java:1430`<br>mlog-py: `src/compiler.py:1919` | `tests/test_tier4_combat_spawning.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Weather Sense** | `weathersense` | `weathersense <result> <weather>` | **Supported** *(World)* | • **Intrinsic**: `res = weathersense(weather)` or statement form `weathersense(result, weather)` with `Weather` enum. | Mindustry: `LStatements.java:1494`<br>mlog-py: `src/compiler.py:2083` | `tests/test_tier4_weather_and_effects.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Weather Set** | `weatherset` | `weatherset <weather> <state>` | **Supported** *(World)* | • **Intrinsic**: `weatherset(weather, [state=1])` activates or deactivates global weather event. | Mindustry: `LStatements.java:1548`<br>mlog-py: `src/compiler.py:2116` | `tests/test_tier4_weather_and_effects.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Spawn Wave** | `spawnwave` | `spawnwave <x> <y> <natural>` | **Supported** *(World)* | • **Intrinsic**: `spawnwave(x, y, [natural=0])` triggers enemy spawn wave at target tile coordinates. | Mindustry: `LStatements.java:1598`<br>mlog-py: `src/compiler.py:2135` | `tests/test_tier4_weather_and_effects.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Set Rule** | `setrule` | `setrule <rule> <val> <p1> <p2> <p3> <p4>` | **Supported** *(World)* | • **Intrinsic**: `setrule(rule, value, [p1=0, p2=0, p3=0, p4=0])` with `LogicRules` enum. | Mindustry: `LStatements.java:1625`<br>mlog-py: `src/compiler.py:2065` | `tests/test_tier4_rules_and_queries.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Flush Message** | `message` | `message <type> <timeout> <field> <target>` | **Supported** *(World)* | • **Intrinsic**: `message(type, [duration=3], [out_success="@wait"])` or `res = message(...)` using `MessageType`<br>• **Sentinel**: Defaults to `@wait` for non-blocking message queueing. | Mindustry: `LStatements.java:1693`<br>mlog-py: `src/compiler.py:2174` | `tests/test_tier4_messaging_and_cutscene.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Cutscene** | `cutscene` | `cutscene <type> <p1> <p2> <p3> <p4>` | **Supported** *(World)* | • **Intrinsic & Namespace**: `cutscene.<method>(...)` (`pan`, `zoom`, `shake`, `set_hud`, `get_hud`, `active`, `stop`) or `cutscene(action, ...)`. | Mindustry: `LStatements.java:1736`<br>mlog-py: `src/compiler.py:2227`, `src/compiler.py:3151` | `tests/test_tier4_messaging_and_cutscene.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Effect** | `effect` | `effect <type> <x> <y> <rotation> <color> <p1>` | **Supported** *(World)* | • **Intrinsic**: `effect(type, x, y, [sizerot=0, color=0, data=0])` using `LogicFx` enum or string token. | Mindustry: `LStatements.java:1797`<br>mlog-py: `src/compiler.py:2154` | `tests/test_tier4_weather_and_effects.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Explosion** | `explosion` | `explosion <team> <x> <y> <radius> <damage> <air> <ground> <pierce> [effect]` | **Supported** *(World)* | • **Intrinsic**: `explosion(team, x, y, radius, damage, [air=1, ground=1, pierce=0, effect=1])` with `Teams`. | Mindustry: `LStatements.java:1858`<br>mlog-py: `src/compiler.py:1944` | `tests/test_tier4_combat_spawning.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Fetch** | `fetch` | `fetch <type> <result> <team> <index> <extra>` | **Supported** *(World)* | • **Intrinsic**: `res = fetch(type, team, [index=0], [extra=0])` or statement form with `FetchType`. | Mindustry: `LStatements.java:1911`<br>mlog-py: `src/compiler.py:2023` | `tests/test_tier4_rules_and_queries.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Sync** | `sync` | `sync <target>` | **Supported** *(World)* | • **Intrinsic**: `sync(variable)` triggers network synchronization. Rate-limited by Mindustry engine. | Mindustry: `LStatements.java:1968`<br>mlog-py: `src/compiler.py:2056` | `tests/test_tier4_rules_and_queries.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Get Flag** | `getflag` | `getflag <result> <flag>` | **Supported** *(World)* | • **Intrinsic**: `res = getflag(flag)` or `getflag(result, flag)` queries map objective flag. | Mindustry: `LStatements.java:2029`<br>mlog-py: `src/compiler.py:1974` | `tests/test_tier4_rules_and_queries.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Set Flag** | `setflag` | `setflag <flag> <value>` | **Supported** *(World)* | • **Intrinsic**: `setflag(flag, value)` sets objective flag state. | Mindustry: `LStatements.java:2061`<br>mlog-py: `src/compiler.py:1997` | `tests/test_tier4_rules_and_queries.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Set Prop** | `setprop` | `setprop <property> <target> <value>` | **Supported** *(World)* | • **Intrinsic**: `setprop(property, target, value)` mutates entity attributes via `SensorProperty`. | Mindustry: `LStatements.java:2092`<br>mlog-py: `src/compiler.py:2008` | `tests/test_tier4_rules_and_queries.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Play Sound** | `playsound` | `playsound <positional> <id> <volume> <pitch> <pan> <x> <y> <limit>` | **Supported** *(World)* | • **Intrinsic**: `playsound(positional, id, [volume=1, pitch=1, pan=0, x=0, y=0, limit=True])`. | Mindustry: `LStatements.java:2212`<br>mlog-py: `src/compiler.py:2267` | `tests/test_tier4_audio_markers_and_final.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Play Music** | `playmusic` | `playmusic <track> <interrupt>` | **Supported** *(World)* | • **Intrinsic**: `playmusic(name, [interrupt=True])`. | Mindustry: `LStatements.java:2421`<br>mlog-py: `src/compiler.py:2286` | `tests/test_tier4_audio_markers_and_final.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Set Marker** | `setmarker` | `setmarker <property> <id> <p1> <p2> <p3>` | **Supported** *(World)* | • **Intrinsic & Namespace**: `marker.<prop>(id, ...)` or `setmarker(property, id, [p1, p2, p3])` using `MarkerControl`<br>• **Alignment**: `marker.texture` emits `p1=printFlush` and `p2=name` per v160.7. | Mindustry: `LStatements.java:2450`<br>mlog-py: `src/compiler.py:2315`, `src/compiler.py:3350` | `tests/test_tier4_audio_markers_and_final.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Make Marker** | `makemarker` | `makemarker <type> <id> <x> <y> <replace>` | **Supported** *(World)* | • **Intrinsic & Namespace**: `marker.make(type, id, x, y, [replace=True])` or `makemarker(type, id, x, y, [replace=True])` with `MarkerType`. | Mindustry: `LStatements.java:2533`<br>mlog-py: `src/compiler.py:2298`, `src/compiler.py:3333` | `tests/test_tier4_audio_markers_and_final.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Locale Print** | `localeprint` | `localeprint <property>` | **Supported** *(World)* | • **Intrinsic**: `localeprint(value)` appends localized string by key to print buffer. | Mindustry: `LStatements.java:2576`<br>mlog-py: `src/compiler.py:2343` | `tests/test_tier4_audio_markers_and_final.py`<br>`tests/test_decompiler_full_coverage.py` |
+| **Client Data** | `clientdata` | `clientdata <channel> <value> <reliable>` | **Supported** *(World, Hidden)* | • **Intrinsic**: `clientdata(channel, value, [reliable=False])`. Hidden privileged statement (`hidden=true`). | Mindustry: `LStatements.java:1993`<br>mlog-py: `src/compiler.py:2352` | `tests/test_tier4_audio_markers_and_final.py`<br>`tests/test_decompiler_full_coverage.py` |
 
 ---
 
@@ -305,7 +314,7 @@ Supported via `DrawType` enum and `draw.<method>`:
 
 ---
 
-## 4. Architectural Highlights & Tier 3 Verification Evidence
+## 4. Architectural Highlights & Tier 3/4 Verification Evidence
 
 1. **Modulo Semantics (`op emod` vs `op mod`) — ADR-001**:
    - Python `%` and `%=` lower to `op emod` to preserve floored division modulo semantics.
@@ -323,3 +332,17 @@ Supported via `DrawType` enum and `draw.<method>`:
    - **Division by Zero**: Verified that Mindustry `LVar.setnum` converts `NaN`/`Infinity` to `null` (`isobj=true, objval=null`).
    - **Execution Lifecycle**: Verified `stop` immediately halts execution and `end` terminates the current pass cycle.
    - **Timing Accuracy**: Verified `wait` tick accumulator and execution rate clamping across processor tiers.
+6. **World Processor Privilege Enforcement**:
+   - Standard survival processors (Micro, Logic, Hyper) reject all 25 privileged world statements as `InvalidStatement` in the JVM engine.
+   - World processors (`#processor: world`) execute them cleanly with full sandbox mapmaker capabilities.
+7. **Spatial Query Protocol & `@queries` API Gap**:
+   - `query` operations (`circle`/`rect` on `unit`/`building`) populate Mindustry's internal `@queries` array buffer.
+   - Because `@queries` is not currently an exported symbol in `Vars` (`Vars.queries` absent), users access query results via raw string token `"@queries"` through `sensor(count, "@queries", SensorProperty.SIZE)` and `read(dest, "@queries", index)`.
+8. **Strict Boolean Serialization for Mindustry VM**:
+   - Mindustry's `LExecutor` parses boolean flag tokens (e.g. `status clear`, `playsound positional`, `playsound limit`, `playmusic interrupt`) using Java's `Boolean.valueOf()`.
+   - `mlog-py` emits literal `true`/`false` rather than numeric `1`/`0` (which `Boolean.valueOf()` treats as `false`), guaranteeing runtime fidelity and exact decompiler round-trips.
+9. **Marker Control Signature Alignment (v160.7)**:
+   - `setmarker texture` emits `p1=printFlush` and `p2=name` per upstream `LMarkerControl.texture` in Mindustry v160.7.
+   - Compiler validates marker properties via `MarkerControl` and `MarkerType` registries with dedicated `marker.<method>()` namespace helpers.
+10. **Sentinel `@wait` in Message Flushing**:
+    - `message` statement defaults to `@wait` for non-blocking message queueing on World Processors.
