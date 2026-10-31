@@ -4,7 +4,7 @@ Usage:
     python3 examples/compiler/roundtrip_demo.py
 """
 
-from src.mlog import compile_py
+from mlog import compile_py
 
 DEMOS = [
     (

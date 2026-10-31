@@ -4,7 +4,7 @@ Usage:
     python3 examples/decompiler/sourcemap_debug.py
 """
 
-from src.decompiler import decompile, decompile_with_source_map
+from mlog import decompile, decompile_with_source_map
 
 MLOG_PROGRAM = """sensor heat reactor1 @heat
 jump 4 lessThanEq heat 0.5

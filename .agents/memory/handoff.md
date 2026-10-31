@@ -2,27 +2,25 @@
 
 - **Updated**: 2026-10-31
 - **Agent**: Antigravity / Gemini 3.8 Flash
-- **Status**: done
-- **Goal**: Bump version to v0.7.0, audit all unpushed commits, verify test suites, push main branch and v0.7.0 tag, and publish official GitHub Release.
+- **Status**: in-progress
+- **Goal**: Implement unified API export (decompile via mlog), python -m mlog CLI runner, mlog CLI alias, and verify all suites.
 
 ## Done
 
-- Audited all 8 unpushed commits: `1e8a6e1`, `2db4075`, `ab085fb`, `587d99e`, `e32ae55`, `3cd8d92`, `02fb2de`, `a7be356`.
-- Verified 100% test pass on full suite (`python run_tests.py --all`: 1,309/1,309 passed in 50.12s on Mindustry v160.7 engine).
-- Verified `py_compile` on all `src` and `tests` packages.
-- Verified metadata stub generation consistency (`python -m src.metadata`: clean 0 diff).
-- Bumped version to `0.7.0` across `pyproject.toml`, `src/mlog.py`, and added release notes to `CHANGELOG.md`.
-- Maintained untracked JVM debug artifacts intact.
-- Changed files:
-  - `pyproject.toml`
-  - `src/mlog.py`
-  - `CHANGELOG.md`
-  - `.agents/memory/handoff.md`
+- Exported `decompile` and `decompile_with_source_map` through public `mlog` module and `__all__`.
+- Updated `src/metadata.py` SSOT and regenerated `mlog.pyi` and `src/mlog.pyi`.
+- Added `main()` entrypoint invocation to root `mlog.py` so `python -m mlog` works identically to the CLI.
+- Added `mlog = "src.mlog:main"` CLI script alias in `pyproject.toml` alongside `mlog-py`.
+- Preserved strict backward compatibility for `compile_py(..., allow_functions=False)`.
+- Updated demonstration scripts in `examples/` to use official `from mlog import ...` imports.
+- Added automated regression tests in `tests/test_imports_and_stub.py` covering decompiler exports and `python -m mlog` execution.
+- Verified 1,311 / 1,311 tests passing across full suite (`python run_tests.py --all`).
+- Maintained local unstaged `README.md` changes intact.
 
 ## Next
 
-- Push commits and tag `v0.7.0` to remote.
-- Publish GitHub Release `v0.7.0`.
+- Final verification and commit changes (excluding uncommitted README edits).
+- Do not push to remote.
 
 ## Blocked
 
@@ -31,6 +29,7 @@
 ## Verification
 
 - `python -m unittest tests.test_agent_memory -v`: 6/6 passed.
-- `python run_tests.py --fast`: 702/702 passed.
-- `python run_tests.py --all`: 1,309/1,309 passed.
+- `python -m unittest tests.test_imports_and_stub -v`: 16/16 passed.
+- `python run_tests.py --fast`: 704/704 passed.
+- `python run_tests.py --all`: 1,311/1,311 passed.
 - `git diff --check`: 0 issues.

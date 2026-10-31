@@ -37,6 +37,7 @@ Issues = "https://github.com/annguyen2k8/mlog-py/issues"
 
 [project.scripts]
 mlog-py = "src.mlog:main"
+mlog = "src.mlog:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

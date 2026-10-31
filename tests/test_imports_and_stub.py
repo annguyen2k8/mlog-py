@@ -248,6 +248,27 @@ class TestImportsAndIdeStub(unittest.TestCase):
         self.assertTrue(hasattr(mlog, "null"))
         self.assertIsNone(mlog.null)
 
+    def test_decompiler_exported_on_mlog(self):
+        """Verify decompiler entry points are exported on mlog module and in __all__."""
+        self.assertTrue(hasattr(mlog, "decompile"))
+        self.assertTrue(callable(mlog.decompile))
+        self.assertTrue(hasattr(mlog, "decompile_with_source_map"))
+        self.assertTrue(callable(mlog.decompile_with_source_map))
+        self.assertIn("decompile", mlog.__all__)
+        self.assertIn("decompile_with_source_map", mlog.__all__)
+
+    def test_python_m_mlog_entrypoint(self):
+        """Verify running 'python -m mlog --help' succeeds and prints CLI usage."""
+        import subprocess
+        import sys
+        proc = subprocess.run(
+            [sys.executable, "-m", "mlog", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("usage: mlog", proc.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

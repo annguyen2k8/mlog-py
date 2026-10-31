@@ -5,8 +5,7 @@ Usage:
 """
 
 import ast
-from src.decompiler import decompile
-from src.mlog import compile_py
+from mlog import compile_py, decompile
 
 TEST_CASES = [
     (

@@ -793,6 +793,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     """CLI entry point for Python-to-mlog compiler."""
     ...
 
+def decompile(mlog_text: str, filename: str = '<stdin>', *, debug: bool = False, return_source_map: bool = False) -> Union[str, Tuple[str, Any]]:
+    """Decompile vanilla Mindustry Logic (mlog) instructions into structured Python DSL."""
+    ...
+
+def decompile_with_source_map(mlog_text: str, filename: str = '<stdin>', *, debug: bool = False) -> Tuple[str, Any]:
+    """Decompile mlog text and return both Python DSL source code and bidirectional SourceMap."""
+    ...
+
 # ---------------------------------------------------------------------------
 # Compiler Intrinsics (Python DSL APIs)
 # ---------------------------------------------------------------------------
@@ -1926,6 +1934,8 @@ __all__ = [
     "compile_py",
     "control",
     "cutscene",
+    "decompile",
+    "decompile_with_source_map",
     "draw",
     "drawflush",
     "effect",

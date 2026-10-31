@@ -3002,6 +3002,8 @@ MLOG_EXPORTS: Set[str] = (
         "compile_py",
         "CompileResult",
         "ColorChannels",
+        "decompile",
+        "decompile_with_source_map",
         "IntEnum",
         "LocateResult",
         "OreLocateResult",
@@ -3118,6 +3120,18 @@ def generate_pyi() -> str:
     lines.append("")
     lines.append("def main(argv: Optional[List[str]] = None) -> int:")
     lines.append('    """CLI entry point for Python-to-mlog compiler."""')
+    lines.append("    ...")
+    lines.append("")
+    lines.append(
+        "def decompile(mlog_text: str, filename: str = '<stdin>', *, debug: bool = False, return_source_map: bool = False) -> Union[str, Tuple[str, Any]]:"
+    )
+    lines.append('    """Decompile vanilla Mindustry Logic (mlog) instructions into structured Python DSL."""')
+    lines.append("    ...")
+    lines.append("")
+    lines.append(
+        "def decompile_with_source_map(mlog_text: str, filename: str = '<stdin>', *, debug: bool = False) -> Tuple[str, Any]:"
+    )
+    lines.append('    """Decompile mlog text and return both Python DSL source code and bidirectional SourceMap."""')
     lines.append("    ...")
     lines.append("")
 

@@ -123,6 +123,7 @@ from .optimizer import PassThroughOptimizer
 from .parser import parse_and_validate
 from .validator import MlogValidator, ValidationError
 from .comments import transform_comments_to_print
+from .decompiler import decompile, decompile_with_source_map
 
 # Null constant representing null in Mindustry Logic
 
