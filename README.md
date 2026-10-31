@@ -73,7 +73,7 @@ mlog-py decompile
 **Common Decompiler Flags**:
 - `-o, --output <file>`: Output Python file path (`.py`). Prints to stdout if omitted (or prompts interactively in paste mode).
 - `--debug`: Include instruction provenance comments (`# mlog[<addr>]`).
-- **Dataflow Simplification** *(built-in)*: Expression inlining, constant folding, and alias elimination (previously noted as `--simplify-expressions`) are performed automatically by default.
+- **Dataflow Simplification** *(built-in)*: Expression inlining, constant folding, and alias elimination are performed automatically by default.
 
 Or via Python API:
 
@@ -84,32 +84,34 @@ mlog_code = """
 sensor heat reactor1 @heat
 jump 4 lessThanEq heat 0.5
 control enabled reactor1 0 0 0 0
-end
+jump 5 always 0 0
 control enabled reactor1 1 0 0 0
+wait 0.5
 """
 
 # Decompile to structured Python DSL
 py_code = decompile(mlog_code)
 print(py_code)
 
-# Decompile with debug comments showing original bytecode addresses
+# Decompile with debug comments showing bytecode provenance addresses
 debug_code = decompile(mlog_code, debug=True)
+print(debug_code)
 ```
 
 ---
 
 ## Example: Reactor Safety Controller
 
-A real-world example protecting a Thorium reactor from exploding due to overheating:
+A complete round-trip example protecting a Thorium reactor from overheating:
 
-### Python Source (`examples/compiler/reactor_safety.py`)
+### 1. Python Source (`examples/compiler/reactor_safety.py`)
 
 ```python
 from mlog import sensor, control, wait, SensorProperty, ControlProperty
 
 heat = sensor("reactor1", SensorProperty.HEAT)
 
-if heat > 0.8:
+if heat > 0.5:
     control(ControlProperty.ENABLED, "reactor1", 0)
 else:
     control(ControlProperty.ENABLED, "reactor1", 1)
@@ -117,24 +119,46 @@ else:
 wait(0.5)
 ```
 
-### Compile to MLog
+### 2. Compile to MLog
 
 ```bash
 mlog-py compile examples/compiler/reactor_safety.py
 ```
 
-### Resulting MLog Bytecode (`examples/compiler/reactor_safety.mlog`)
+Resulting MLog bytecode (`examples/compiler/reactor_safety.mlog`):
 
 ```text
 sensor heat reactor1 @heat
-jump 4 lessThanEq heat 0.8
+jump 4 lessThanEq heat 0.5
 control enabled reactor1 0 0 0 0
 jump 5 always 0 0
 control enabled reactor1 1 0 0 0
 wait 0.5
 ```
 
-### Load into Mindustry
+### 3. Decompile Back to Python DSL
+
+```bash
+mlog-py decompile examples/compiler/reactor_safety.mlog
+```
+
+Resulting decompiled Python DSL (`examples/decompiler/reactor_safety.py`):
+
+```python
+from mlog import control, sensor, wait
+
+heat = sensor("reactor1", '@heat')
+if heat > 0.5:
+    control.enabled("reactor1", 0)
+else:
+    control.enabled("reactor1", 1)
+wait(0.5)
+```
+
+> [!NOTE]
+> Decompilation recovers a **semantically equivalent** structured program rather than an exact character-for-character reconstruction of the original source. For instance, the decompiler automatically discovers minimal imports and recovers idiomatic method aliases such as `control.enabled(...)`.
+
+### 4. Load into Mindustry
 
 1. Copy the compiled `.mlog` content to your clipboard.
 2. In Mindustry, build a logic processor (Micro, Logic, or Hyper Processor) and link it to the reactor (`reactor1`).
