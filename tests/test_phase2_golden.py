@@ -6,7 +6,6 @@ Validates exact behavior and executes through Mindustry's real LParser & LAssemb
 """
 
 import unittest
-from src.errors import CompileError
 from src.mlog import compile_py
 from src.mindustry_validator import is_mindustry_available, validate_with_mindustry
 

@@ -12,14 +12,13 @@ import tempfile
 import time
 import tracemalloc
 import unittest
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List
 
 from src.decompiler import decompile, decompile_with_source_map
 from src.decompiler.cfg import build_cfg
-from src.decompiler.function_analyzer import FunctionAnalyzer
 from src.decompiler.sourcemap import SourceMap
 from src.decompiler.structured_ir import UnstructuredNode
-from src.decompiler.structurer import recover_expressions, structure_cfg
+from src.decompiler.structurer import structure_cfg
 from src.mlog import compile_py
 
 

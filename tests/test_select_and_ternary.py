@@ -11,14 +11,12 @@ Tests verify:
 8. Compile-time constant folding for IfExp
 """
 
-import shutil
-import subprocess
 import unittest
 from typing import List, Tuple
 
 from src.compiler import CompileError
 from src.decompiler import decompile
-from src.mindustry_validator import get_classpath, is_mindustry_available, run_with_mindustry
+from src.mindustry_validator import is_mindustry_available, run_with_mindustry
 from src.mlog import compile_py
 from src.metadata import _rt_select
 from src.validator import MlogValidator, ValidationError

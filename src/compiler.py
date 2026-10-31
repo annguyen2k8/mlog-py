@@ -36,8 +36,7 @@ from .mlog_registry import (
     BUILTIN_VARIABLES_DATA,
     to_snake,
 )
-from .mlog_registry_data import BUILTIN_CONSTANTS
-from .allocator import ArraySymbol, MemoryBlockAllocator
+from .allocator import MemoryBlockAllocator
 from .constants import NamedConstantRegistry
 from .parser import get_loc, parse_and_validate
 

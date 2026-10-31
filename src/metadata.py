@@ -6,7 +6,6 @@ and keeps runtime module, IDE stubs, and compiler passes strictly synchronized.
 """
 
 import math
-import sys
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set, Tuple, Union
@@ -22,7 +21,6 @@ from .mlog_registry import (
     LookupType,
     RadarSort,
     RadarTarget,
-    REG_ALIGN,
     SensorProperty,
     Teams,
     UnitControl,
@@ -41,7 +39,6 @@ from .mlog_registry import (
     MarkerControl,
     Vars,
     BuiltinVarToken,
-    BUILTIN_VARIABLES_DATA,
 )
 from .mlog_registry_data import BUILTIN_VARS_SPEC
 

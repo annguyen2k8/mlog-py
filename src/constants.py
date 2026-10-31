@@ -5,7 +5,7 @@ resolving user-defined IntEnums into literal values with zero runtime overhead.
 """
 
 import ast
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Dict, Optional, Set
 
 from .errors import CompileError, SourceLocation
 from .parser import get_loc

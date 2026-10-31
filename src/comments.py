@@ -13,7 +13,7 @@ Supports:
 import io
 import re
 import tokenize
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 
 # Mindustry processor maxTextBuffer is strictly 400 characters

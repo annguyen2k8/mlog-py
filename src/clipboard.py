@@ -15,7 +15,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Mapping, Optional, Tuple
+from typing import Callable, List, Mapping, Optional, Tuple
 
 
 @dataclass(frozen=True)

@@ -34,14 +34,6 @@ CMP_INVERSE_TO_PY = {
 }
 
 
-def is_float(s: str) -> bool:
-    try:
-        float(s)
-        return "." in s or "e" in s.lower()
-    except ValueError:
-        return False
-
-
 def is_compiler_temporary(name: str) -> bool:
     """Return True if variable name matches standard compiler temporary conventions."""
     if name.startswith("__tmp"):
