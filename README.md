@@ -197,6 +197,8 @@ Detailed architectural specifications:
 
 ```text
 mlog-py/
+├── AGENTS.md            # Shared agent instructions and memory protocol
+├── .agents/memory/      # Project context and task handoff
 ├── compiler.py          # Standalone CLI entry point
 ├── mlog.py / mlog.pyi   # Runtime DSL module and IDE typing stubs
 ├── pyproject.toml       # Package metadata and build configuration
@@ -237,7 +239,9 @@ python3 -m unittest discover -s tests -p "test_*.py"
 
 The JVM harness is auto-discovered from `Mindustry`/`Mindustry-source` and `Arc` checkouts (including local `build/libs` and the Gradle cache). Build it once with `python3 tools/build_harness.py --test`; explicit paths can be supplied through `MINDUSTRY_CORE_PATH`, `ARC_JARS_PATH`, `MINDUSTRY_HARNESS_BUILD`, and `MINDUSTRY_ASSETS_PATH`, or through a `.mindustry.json` config file. When a dependency is missing, JVM tests skip with the specific reason.
 
-- **1,298 Automated Tests**: 100% passing baseline across compiler, decompiler, registry, CFG, structuring, dataflow, function recovery, bitwise operators, min/max, for loops, memory arrays (int, float, bool), Memory Bank Header Protocol (inter-processor communication layout), Callable Namespace Objects (`draw.<method>`, `ucontrol.<method>`, `ulocate.<method>`, `op.<method>`), augmented assignment, constant folding, system clipboard, built-in variables (Vars API), Mindustry v8 modulo semantics, color packing/unpacking, printchar, format & f-strings, setrate, select & ternary expressions, comprehensive `is`/`is not` semantics, all 25 World Processor privileged statements, CLI stdin/paste decompile, user-defined `enum.IntEnum` named constants, source mapping, and real JVM runtime verification.
+Agents working in this repository should read [`AGENTS.md`](AGENTS.md) and [`.agents/memory/handoff.md`](.agents/memory/handoff.md) before starting. See [Shared Agent Memory and Handoff](docs/agent-memory.md) for the workflow.
+
+- **1,300+ Automated Tests**: 100% passing baseline across compiler, decompiler, registry, CFG, structuring, dataflow, function recovery, bitwise operators, min/max, for loops, memory arrays (int, float, bool), Memory Bank Header Protocol (inter-processor communication layout), Callable Namespace Objects (`draw.<method>`, `ucontrol.<method>`, `ulocate.<method>`, `op.<method>`), augmented assignment, constant folding, system clipboard, built-in variables (Vars API), Mindustry v8 modulo semantics, color packing/unpacking, printchar, format & f-strings, setrate, select & ternary expressions, comprehensive `is`/`is not` semantics, all 25 World Processor privileged statements, CLI stdin/paste decompile, user-defined `enum.IntEnum` named constants, source mapping, and real JVM runtime verification.
 - **Real-World Test Corpus**: 32 representative programs across handwritten scripts, compiler-generated programs, control flow patterns, and pathological edge cases.
 - **Round-Trip Verification**: Guarantees that `MLog → Decompiler → Compiler` produces valid, functionally equivalent instructions.
 
@@ -274,6 +278,8 @@ Detailed architecture specifications are available in [`docs/`](docs/):
 - [Source Mapping](docs/source-mapping.md): Provenance tracking, debug comments, and JSON export.
 - [Mindustry Logic Command Coverage](docs/mlog-command-coverage.md): Comprehensive mapping of 53 in-game UI commands and 28 standard opcodes in Mindustry v160.7.
 - [ADR-001: Modulo Operator Semantics](docs/adr/0001-modulo-semantics.md): Architectural decision on lowering `%` to `emod`.
+- [ADR-002: Shared Agent Memory](docs/adr/0002-shared-agent-memory.md): Filesystem Markdown memory and handoff for Antigravity and OpenCode.
+- [Shared Agent Memory and Handoff](docs/agent-memory.md): Setup, workflow, and verified limits for the shared memory files.
 - [Upstream Mindustry Sync Guide](docs/mindustry-updates.md): Guide for updating and syncing mlog-py when new Mindustry versions release.
 
 ---

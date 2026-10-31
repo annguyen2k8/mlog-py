@@ -3516,7 +3516,9 @@ def generate_pyi() -> str:
 if __name__ == "__main__":
     content = generate_pyi()
     for p in ("mlog.pyi", "src/mlog.pyi"):
-        with open(p, "w", encoding="utf-8") as f:
+        # Keep generated stubs LF-only so Git does not show line-ending churn
+        # when this command runs on Windows.
+        with open(p, "w", encoding="utf-8", newline="") as f:
             f.write(content)
     print("Updated mlog.pyi and src/mlog.pyi successfully.")
 

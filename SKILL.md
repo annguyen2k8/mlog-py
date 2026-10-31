@@ -16,6 +16,11 @@ Welcome to the **mlog-py Skill**. This document is the primary operational
 manual for AI agents working on `mlog-py`, governing both the
 **Python → MLog compiler** and the **MLog → Python DSL decompiler**.
 
+> **Shared agent workflow:** Read [`AGENTS.md`](AGENTS.md) and
+> [`.agents/memory/handoff.md`](.agents/memory/handoff.md) before working.
+> `AGENTS.md` defines the shared memory protocol and verification commands;
+> this manual covers compiler and decompiler internals.
+
 ---
 
 ## 1. Agent Golden Rules
@@ -41,8 +46,8 @@ non-negotiable rules:
    isolated unit test reproducing the issue before and verifying the solution
    after.
 7. **Run Full Test Suite Before Concluding**: Execute
-   `python3 -m unittest discover -s tests -p "test_*.py"` and verify all tests pass
-   (1,249/1,249 PASS) before completing any task.
+   `python run_tests.py --all` and verify all tests pass before completing any
+   task. Use `python run_tests.py --fast` while iterating.
 
 ---
 
@@ -69,7 +74,7 @@ mlog-py/
 │   ├── emitter.py           # Two-pass address resolution
 │   ├── validator.py         # Static grammar & processor limits
 │   └── decompiler/          # Decompiler subsystem (Phases 1–5)
-└── tests/                   # Comprehensive test suite (1,249 tests)
+└── tests/                   # Comprehensive test suite (1,300+ tests)
     └── corpus/              # 32-case real-world corpus
 ```
 
@@ -267,7 +272,7 @@ The framework provides guaranteed round-trip verification across three flows:
 
 ## 7. Testing Requirements & Corpus Structure
 
-- **Test Suite**: 1,249 automated tests in `tests/test_*.py`.
+- **Test Suite**: 1,300+ automated tests in `tests/test_*.py`.
 - **Hardening Corpus (`tests/corpus/`)**: 32 real-world programs across 6
   categories:
   - `handwritten/`: Real game controller scripts (turrets, mining drones,

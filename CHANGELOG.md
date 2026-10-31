@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Shared Markdown agent memory and handoff for Antigravity and OpenCode:
+  `AGENTS.md`, `.agents/memory/context.md`, `.agents/memory/handoff.md`,
+  an ADR index, and structural tests.
+
 ## [0.6.0] - 2026-10-19
 
 ### Added

@@ -4,7 +4,7 @@
 Provides fast feedback loops for development and full validation suites:
 - Fast tier: Pure Python tests (compiler, decompiler, AST, dataflow, optimizer, CLI) in ~6s.
 - JVM tier: Real Mindustry v160.7 engine integration tests in ~45s.
-- Full suite: All 1,298 tests discovered via unittest in ~60s.
+- Full suite: All discovered tests via unittest in ~60s.
 """
 
 import argparse
@@ -71,7 +71,7 @@ def main():
     group.add_argument(
         "--all", "-a",
         action="store_true",
-        help="Run full test suite (all 1,298 tests)",
+        help="Run full test suite (all discovered tests)",
     )
     parser.add_argument(
         "-v", "--verbose",
