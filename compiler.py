@@ -2,7 +2,7 @@
 """CLI entry point for the Python-to-mlog compiler."""
 
 import sys
-from src.mlog import main
+from mlog import main
 
 if __name__ == "__main__":
     sys.exit(main())

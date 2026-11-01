@@ -36,16 +36,13 @@ Repository = "https://github.com/annguyen2k8/mlog-py"
 Issues = "https://github.com/annguyen2k8/mlog-py/issues"
 
 [project.scripts]
-mlog-py = "src.mlog:main"
-mlog = "src.mlog:main"
+mlog-py = "mlog:main"
+mlog = "mlog:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
-namespaces = true
-
-[tool.setuptools]
-py-modules = ["compiler", "mlog"]
+include = ["mlog*"]
+exclude = ["src*", "tests*", "tools*", "examples*"]
 
 [tool.setuptools.package-data]
-"*" = ["*.pyi"]
+mlog = ["py.typed", "*.pyi"]

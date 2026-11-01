@@ -1,2 +1,4 @@
+include mlog/py.typed
+recursive-include mlog *.pyi
 include mlog.pyi
 include src/mlog.pyi

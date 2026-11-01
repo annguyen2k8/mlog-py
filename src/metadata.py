@@ -6,6 +6,7 @@ and keeps runtime module, IDE stubs, and compiler passes strictly synchronized.
 """
 
 import math
+import os
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set, Tuple, Union
@@ -3526,10 +3527,13 @@ def generate_pyi() -> str:
 
 if __name__ == "__main__":
     content = generate_pyi()
-    for p in ("mlog.pyi", "src/mlog.pyi"):
+    target_paths = ["mlog.pyi", "mlog/__init__.pyi", "mlog/mlog.pyi"]
+    if os.path.exists("src"):
+        target_paths.append("src/mlog.pyi")
+    for p in target_paths:
         # Keep generated stubs LF-only so Git does not show line-ending churn
         # when this command runs on Windows.
         with open(p, "w", encoding="utf-8", newline="") as f:
             f.write(content)
-    print("Updated mlog.pyi and src/mlog.pyi successfully.")
+    print("Updated mlog stubs successfully.")
 
