@@ -3,32 +3,29 @@
 - **Updated**: 2026-11-01
 - **Agent**: Antigravity / Gemini 3.8 Flash
 - **Status**: done
-- **Goal**: Audit and optimize .gitignore rules for the mlog-py repository.
+- **Goal**: Configure GitHub Actions workflow for PyPI Trusted Publishing via OIDC.
 
 ## Done
 
-- **Audit & Identification**:
-  - Examined all 185 tracked files, existing ignore patterns, untracked artifacts (`.pytest_cache/`, `build/`, `dist/`, `mlog_py.egg-info/`, `hs_err_pid10196.log`), and local discovery config references (`.mindustry.json`, `.build/harness`).
-  - Audited and verified safe boundaries: confirmed that critical golden files (`tests/corpus/**/*.mlog`, `tests/corpus/**/*.py`), fixtures (`tests/fixtures/*`), generated stubs (`mlog.pyi`, `src/mlog.pyi`, `mlog/__init__.pyi`, `mlog/py.typed`), examples (`examples/**/*`), docs, and agent memory are untouched and protected.
-- **Gitignore Optimization**:
-  - Confirmed each pattern is formatted on a separate line with no line concatenation issues.
-  - Added test & type check caches: `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `.hypothesis/`.
-  - Added test coverage & profiling artifacts: `.coverage`, `.coverage.*`, `htmlcov/`, `coverage.xml`, `*.cover`.
-  - Added packaging artifacts: `.eggs/`, `*.whl`.
-  - Added virtualenv backup patterns: `env.bak/`, `venv.bak/`.
-  - Added harness alternative build dir and local developer config: `.build/`, `.mindustry.json`.
-  - Refined IDE artifacts: ignored personal files with `.idea/*` and `.vscode/*` while preserving shared configurations (`.vscode/settings.json`, `.vscode/tasks.json`, `.vscode/launch.json`, `.vscode/extensions.json`, `.idea/runConfigurations/`, `.idea/codeStyles/`).
-  - Added editor and OS artifacts: `*~`, `*.sublime-project`, `*.sublime-workspace`, `Thumbs.db`, `Desktop.ini`, `ehthumbs.db`, `._*`.
-  - Normalized EOF newline to eliminate `git diff --check` warnings.
-- **Verification & Git State**:
-  - Verified with `git check-ignore -v` that 0 tracked files are ignored and all 58 test targets evaluate with 100% precision.
-  - Verified `git diff --check` passes cleanly.
-  - Amended clean commit `a4ef5c2` for `.gitignore`.
-  - Checked release status: `v0.8.0` is already tagged and released; no tags were overwritten, no force-push, no registry publish.
+- **GitHub Actions Workflow**:
+  - Created `.github/workflows/publish.yml` with `release: published` trigger and manual `workflow_dispatch`.
+  - Configured `pypa/gh-action-pypi-publish@release/v1` with `id-token: write` permission and `environment: pypi` for PyPI Trusted Publishing (OIDC), without API tokens or passwords.
+  - Implemented dual-job architecture:
+    - `build`: Isolated sdist & wheel build, `twine check --strict`, `check-wheel-contents`, and venv smoke testing (verifying `mlog`, `mlog-py`, and 0 `src` leaks).
+    - `publish-to-pypi`: Dedicated publish job scoped to environment `pypi` and OIDC token generation.
+- **Documentation**:
+  - Updated `README.md` to document `pip install mlog-py` under Installation.
+  - Added "Release & Publishing" section explaining PyPI Trusted Publisher configuration steps (Owner: `annguyen2k8`, Repo: `mlog-py`, Workflow: `publish.yml`, Environment: `pypi`).
+- **Verification**:
+  - Validated YAML syntax with `pyyaml`.
+  - Verified clean sdist and wheel build: `twine check --strict` passed, `check-wheel-contents` passed, 0 `src` leaks in wheel.
+  - Verified `git diff --check`: 0 issues.
+  - Created clean local commit. Did not push to remote.
 
 ## Next
 
-- none
+- User configures Trusted Publisher on PyPI (`mlog-py` -> GitHub -> `annguyen2k8/mlog-py`, `publish.yml`, environment `pypi`).
+- User creates GitHub environment `pypi` in repository settings.
 
 ## Blocked
 
@@ -36,8 +33,9 @@
 
 ## Verification
 
-- `git ls-files | git check-ignore -v --stdin`: 0 tracked files ignored.
+- `python -c "import yaml; yaml.safe_load(open('.github/workflows/publish.yml'))"`: valid YAML.
+- `twine check --strict` on clean build: PASSED.
+- `check-wheel-contents` on clean wheel: PASSED.
 - `python -m unittest tests.test_agent_memory -v`: 6/6 passed.
-- `python -m unittest tests.test_imports_and_stub -v`: 19/19 passed.
-- `python -m unittest tests.test_ux_and_cli_compile_stdin -v`: 34/34 passed.
+- `python -m unittest tests.test_compiler_examples -v`: 4/4 passed.
 - `git diff --check`: 0 issues.

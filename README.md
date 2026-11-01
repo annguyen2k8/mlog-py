@@ -21,6 +21,12 @@ In the strategy game **Mindustry**, logic processors execute low-level assembly-
 
 ### Installation
 
+From PyPI:
+
+```bash
+pip install mlog-py
+```
+
 From GitHub:
 
 ```bash
@@ -324,6 +330,27 @@ Detailed architecture specifications are available in [`docs/`](docs/):
 - [ADR-002: Shared Agent Memory](docs/adr/0002-shared-agent-memory.md): Filesystem Markdown memory and handoff for Antigravity and OpenCode.
 - [Shared Agent Memory and Handoff](docs/agent-memory.md): Setup, workflow, and verified limits for the shared memory files.
 - [Upstream Mindustry Sync Guide](docs/mindustry-updates.md): Guide for updating and syncing mlog-py when new Mindustry versions release.
+
+---
+
+## Release & Publishing
+
+The project uses GitHub Actions with **PyPI Trusted Publishing (OIDC)** to automatically build, verify, and publish packages when a GitHub Release is published (`release: published`).
+
+### PyPI Trusted Publisher Configuration
+
+To configure Trusted Publishing on PyPI:
+
+1. Log in to [PyPI](https://pypi.org/) and navigate to **Publishing** -> **Add a publisher** (or project settings if already registered).
+2. Select **GitHub**.
+3. Set the following publisher details:
+   - **PyPI Project Name**: `mlog-py`
+   - **Owner / Organization**: `annguyen2k8`
+   - **Repository name**: `mlog-py`
+   - **Workflow name**: `publish.yml`
+   - **Environment name**: `pypi`
+4. On GitHub, navigate to **Settings** -> **Environments** and create an environment named `pypi` (matching the environment configured on PyPI).
+5. When creating a GitHub Release, the `.github/workflows/publish.yml` workflow will automatically trigger, build the sdist/wheel, verify package integrity with `twine` and `check-wheel-contents`, and publish to PyPI using short-lived OIDC tokens without storing API keys or passwords in repository secrets.
 
 ---
 
