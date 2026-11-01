@@ -3,7 +3,9 @@ name: Publish to PyPI
 on:
   release:
     types: [published]
-  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -37,12 +39,11 @@ jobs:
           python -m venv test_env
           source test_env/bin/activate
           pip install dist/*.whl
-          mlog --help
-          mlog-py --help
-          python -c "import mlog; print('mlog version:', mlog.__version__)"
-          python -c "from mlog import Vars; print('Vars.tick:', Vars.tick)"
-          python -c "import sys; sys.exit(0 if 'src' not in sys.modules else 1)"
-          python -c "import sys; sys.exit(1) if __import__('importlib.util').util.find_spec('src') else sys.exit(0)"
+          (cd /tmp && mlog --help)
+          (cd /tmp && mlog-py --help)
+          (cd /tmp && python -c "import mlog; print('mlog version:', mlog.__version__)")
+          (cd /tmp && python -c "from mlog import Vars; print('Vars.tick:', Vars.tick)")
+          (cd /tmp && python -c "import importlib.util, sys; sys.exit(1 if importlib.util.find_spec('src') else 0)")
           deactivate
 
       - name: Store distribution packages

@@ -3,24 +3,20 @@
 - **Updated**: 2026-11-01
 - **Agent**: Antigravity / Gemini 3.8 Flash
 - **Status**: done
-- **Goal**: Configure GitHub Actions workflow for PyPI Trusted Publishing via OIDC.
+- **Goal**: Final audit and hardening of PyPI Trusted Publishing workflow.
 
 ## Done
 
-- **GitHub Actions Workflow**:
-  - Created `.github/workflows/publish.yml` with `release: published` trigger and manual `workflow_dispatch`.
-  - Configured `pypa/gh-action-pypi-publish@release/v1` with `id-token: write` permission and `environment: pypi` for PyPI Trusted Publishing (OIDC), without API tokens or passwords.
-  - Implemented dual-job architecture:
-    - `build`: Isolated sdist & wheel build, `twine check --strict`, `check-wheel-contents`, and venv smoke testing (verifying `mlog`, `mlog-py`, and 0 `src` leaks).
-    - `publish-to-pypi`: Dedicated publish job scoped to environment `pypi` and OIDC token generation.
-- **Documentation**:
-  - Updated `README.md` to document `pip install mlog-py` under Installation.
-  - Added "Release & Publishing" section explaining PyPI Trusted Publisher configuration steps (Owner: `annguyen2k8`, Repo: `mlog-py`, Workflow: `publish.yml`, Environment: `pypi`).
+- **Workflow Hardening**:
+  - Removed `workflow_dispatch` from `.github/workflows/publish.yml`; trigger restricted exclusively to `release: [published]`.
+  - Configured top-level least-privilege `permissions: contents: read`.
+  - Scoped `permissions: id-token: write` strictly to `publish-to-pypi` job.
+  - Hardened smoke test step to run CLI and import verification outside repository workspace (`/tmp`), preventing local directory module shadowing.
 - **Verification**:
-  - Validated YAML syntax with `pyyaml`.
-  - Verified clean sdist and wheel build: `twine check --strict` passed, `check-wheel-contents` passed, 0 `src` leaks in wheel.
-  - Verified `git diff --check`: 0 issues.
-  - Created clean local commit. Did not push to remote.
+  - Validated workflow using `actionlint` with active `shellcheck` and `pyflakes` linting: 0 errors.
+  - Verified package build: `twine check --strict` passed, `check-wheel-contents` passed, 0 `src` leaks in wheel.
+  - Confirmed `README.md` publishing and installation instructions remain accurate.
+  - Preserved commit `6401a21` and created follow-up commit for workflow hardening. Did not push to remote.
 
 ## Next
 
@@ -33,9 +29,8 @@
 
 ## Verification
 
-- `python -c "import yaml; yaml.safe_load(open('.github/workflows/publish.yml'))"`: valid YAML.
+- `actionlint -verbose .github/workflows/publish.yml`: 0 errors (with shellcheck & pyflakes).
 - `twine check --strict` on clean build: PASSED.
 - `check-wheel-contents` on clean wheel: PASSED.
 - `python -m unittest tests.test_agent_memory -v`: 6/6 passed.
-- `python -m unittest tests.test_compiler_examples -v`: 4/4 passed.
 - `git diff --check`: 0 issues.
