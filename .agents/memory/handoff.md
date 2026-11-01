@@ -3,25 +3,30 @@
 - **Updated**: 2026-11-01
 - **Agent**: Antigravity / Gemini 3.8 Flash
 - **Status**: done
-- **Goal**: Audit repository metadata and add professional Markdown status badges to README.md.
+- **Goal**: Audit GitHub Actions workflows and resolve Node.js 20 deprecation warnings by upgrading to verified Node.js 24 stable action versions.
 
 ## Done
 
-- **Repository Metadata Audit**:
-  - Audited `pyproject.toml` (package `mlog-py` v0.8.1, Python `>=3.9`, MIT License).
-  - Audited `LICENSE` (MIT License Copyright (c) 2026 Anzuno).
-  - Audited PyPI live package status (`mlog-py` v0.8.1 confirmed on PyPI).
-  - Audited GitHub Actions workflows (`.github/workflows/publish.yml` present with `build` status passing).
-  - Audited Shields.io badge availability and verified live responses (HTTP 200).
-  - Verified PyPI downloads badge is currently not indexed on pypistats (omitted to avoid broken badges).
-- **README Badges & Cache Resolution**:
-  - Added verified professional badges row at top of `README.md`.
-  - Fixed `last commit` badge by explicitly specifying default branch `main` (`/github/last-commit/annguyen2k8/mlog-py/main`), preventing branch lookup failure and busting stale Camo cache.
-  - Fixed `license` badge by using reliable PyPI metadata endpoint (`/pypi/l/mlog-py`), avoiding unauthenticated GitHub API rate limits and busting stale Camo cache.
-  - Verified all badges return valid SVG with HTTP 200.
-- **Testing & Packaging Verification**:
-  - Ran `test_packaging_and_wheel` (7/7 passed in 31.7s).
-  - Ran `test_imports_and_stub` & `test_agent_memory` (25/25 passed).
+- **GitHub Actions Workflow Audit**:
+  - Inspected `.github/workflows/publish.yml` (the only workflow in the repo).
+  - Identified 4 actions running on deprecated `node20`:
+    - `actions/checkout@v4` (Node 20)
+    - `actions/setup-python@v5` (Node 20)
+    - `actions/upload-artifact@v4` (Node 20)
+    - `actions/download-artifact@v4` (Node 20)
+  - Verified `pypa/gh-action-pypi-publish@release/v1` runs as a composite action delegating to container/Node 24 setup-python, maintaining Trusted Publishing (OIDC) without modification.
+- **Verification of Official Stable Releases on Node 24**:
+  - `actions/checkout`: upgraded to `@v7` (`v7.0.1`, `runs.using: node24`).
+  - `actions/setup-python`: upgraded to `@v7` (`v7.1.0`, `runs.using: 'node24'`).
+  - `actions/upload-artifact`: upgraded to `@v7` (`v7.0.2`, `runs.using: 'node24'`).
+  - `actions/download-artifact`: upgraded to `@v8` (`v8.0.2`, `runs.using: 'node24'`).
+- **Validation & Testing**:
+  - Ran `actionlint` (v1.7.12) with ShellCheck: 0 errors detected.
+  - Verified PyPI Trusted Publishing configuration and build/test/publish steps preserved intact.
+  - Ran pure-Python fast test tier: 748/748 tests passed.
+  - Ran JVM tier tests: 607/607 tests passed (0 failures, 0 errors).
+  - Ran packaging & wheel verification tests: 7/7 passed.
+  - Ran imports, stub, and agent memory test suites: 25/25 passed.
 
 ## Next
 
@@ -33,7 +38,8 @@
 
 ## Verification
 
-- `python -m unittest tests.test_packaging_and_wheel`: 7/7 passed.
-- `python -m unittest tests.test_imports_and_stub tests.test_agent_memory`: 25/25 passed.
-- Live Shields.io badge checks: HTTP 200 on all badge URLs and link targets.
-- `git diff --check`: 0 whitespace errors.
+- `actionlint -shellcheck=shellcheck .github/workflows/publish.yml`: passed (0 errors).
+- `python run_tests.py --fast`: 748 passed, 0 failures, 0 errors.
+- `python run_tests.py --jvm`: 607 passed, 0 failures, 0 errors.
+- `python -m unittest tests.test_packaging_and_wheel`: 7 passed, 0 failures.
+- `python -m unittest tests.test_imports_and_stub tests.test_agent_memory`: 25 passed.
