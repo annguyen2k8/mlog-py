@@ -14,15 +14,11 @@
   - Audited GitHub Actions workflows (`.github/workflows/publish.yml` present with `build` status passing).
   - Audited Shields.io badge availability and verified live responses (HTTP 200).
   - Verified PyPI downloads badge is currently not indexed on pypistats (omitted to avoid broken badges).
-- **README Badges**:
-  - Added verified professional badges row at top of `README.md` covering:
-    - PyPI package version (`v0.8.1`)
-    - Supported Python versions (`3.9 | 3.10 | 3.11 | 3.12 | 3.13 | 3.14`)
-    - Package status (`status: beta`)
-    - GitHub Actions workflow status (`build: passing`)
-    - License (`license: MIT`)
-    - GitHub repository stars (`Stars: 1`)
-    - GitHub last commit date
+- **README Badges & Cache Resolution**:
+  - Added verified professional badges row at top of `README.md`.
+  - Fixed `last commit` badge by explicitly specifying default branch `main` (`/github/last-commit/annguyen2k8/mlog-py/main`), preventing branch lookup failure and busting stale Camo cache.
+  - Fixed `license` badge by using reliable PyPI metadata endpoint (`/pypi/l/mlog-py`), avoiding unauthenticated GitHub API rate limits and busting stale Camo cache.
+  - Verified all badges return valid SVG with HTTP 200.
 - **Testing & Packaging Verification**:
   - Ran `test_packaging_and_wheel` (7/7 passed in 31.7s).
   - Ran `test_imports_and_stub` & `test_agent_memory` (25/25 passed).
