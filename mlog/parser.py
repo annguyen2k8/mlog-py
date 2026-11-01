@@ -286,17 +286,23 @@ class ASTValidator(ast.NodeVisitor):
                     "active", "pan", "zoom", "stop", "shake", "get_hud", "getHud", "set_hud", "setHud",
                 }
                 if node.attr not in CUTSCENE_METHODS:
-                    self.error(f"unknown cutscene method: 'cutscene.{node.attr}'", node)
+                    matches = difflib.get_close_matches(node.attr, CUTSCENE_METHODS, n=1)
+                    hint = f". Did you mean 'cutscene.{matches[0]}'?" if matches else f" (valid methods: {', '.join(sorted(CUTSCENE_METHODS))})"
+                    self.error(f"unknown cutscene method: 'cutscene.{node.attr}'{hint}", node)
                 return
             if node.value.id == "sound":
                 SOUND_METHODS = {"play", "play_at", "playAt"}
                 if node.attr not in SOUND_METHODS:
-                    self.error(f"unknown sound method: 'sound.{node.attr}'", node)
+                    matches = difflib.get_close_matches(node.attr, SOUND_METHODS, n=1)
+                    hint = f". Did you mean 'sound.{matches[0]}'?" if matches else f" (valid methods: {', '.join(sorted(SOUND_METHODS))})"
+                    self.error(f"unknown sound method: 'sound.{node.attr}'{hint}", node)
                 return
             if node.value.id == "music":
                 MUSIC_METHODS = {"play", "stop"}
                 if node.attr not in MUSIC_METHODS:
-                    self.error(f"unknown music method: 'music.{node.attr}'", node)
+                    matches = difflib.get_close_matches(node.attr, MUSIC_METHODS, n=1)
+                    hint = f". Did you mean 'music.{matches[0]}'?" if matches else f" (valid methods: {', '.join(sorted(MUSIC_METHODS))})"
+                    self.error(f"unknown music method: 'music.{node.attr}'{hint}", node)
                 return
             if node.value.id == "marker":
                 MARKER_METHODS = {
@@ -309,16 +315,27 @@ class ASTValidator(ast.NodeVisitor):
                     "texture", "texture_size", "textureSize", "posi", "uvi", "colori",
                 }
                 if node.attr not in MARKER_METHODS:
-                    self.error(f"unknown marker method: 'marker.{node.attr}'", node)
+                    matches = difflib.get_close_matches(node.attr, MARKER_METHODS, n=1)
+                    hint = f". Did you mean 'marker.{matches[0]}'?" if matches else f" (valid methods: {', '.join(sorted(MARKER_METHODS))})"
+                    self.error(f"unknown marker method: 'marker.{node.attr}'{hint}", node)
                 return
             if node.value.id in ENUM_CLASS_TO_REGISTRY:
                 return
             if self.constant_registry.has_namespace(node.value.id):
                 if not self.constant_registry.has_member(node.value.id, node.attr):
-                    self.error(f"enum '{node.value.id}' has no member '{node.attr}'", node)
+                    ns_members = list(self.constant_registry._namespaces.get(node.value.id, {}).keys())
+                    matches = difflib.get_close_matches(node.attr, ns_members, n=1)
+                    hint = f". Did you mean '{matches[0]}'?" if matches else ""
+                    self.error(f"enum '{node.value.id}' has no member '{node.attr}'{hint}", node)
                 return
+        SUPPORTED_NAMESPACES = {
+            "Vars", "draw", "control", "ucontrol", "ulocate",
+            "cutscene", "sound", "music", "marker", "op",
+        } | set(ENUM_CLASS_TO_REGISTRY.keys())
+        close = difflib.get_close_matches(node.value.id, SUPPORTED_NAMESPACES, n=1) if isinstance(node.value, ast.Name) else []
+        hint = f". Did you mean '{close[0]}'?" if close else ""
         self.error(
-            f"attribute access is only supported on DSL enum types ({', '.join(sorted(ENUM_CLASS_TO_REGISTRY.keys()))}), user-defined IntEnums, 'Vars', 'draw', 'control', 'ucontrol', 'ulocate', 'cutscene', 'sound', 'music', 'marker', and 'op'",
+            f"attribute access is only supported on DSL enum types ({', '.join(sorted(ENUM_CLASS_TO_REGISTRY.keys()))}), user-defined IntEnums, 'Vars', 'draw', 'control', 'ucontrol', 'ulocate', 'cutscene', 'sound', 'music', 'marker', and 'op'{hint}",
             node,
         )
 
@@ -497,21 +514,26 @@ class ASTValidator(ast.NodeVisitor):
             self.visit(stmt)
 
     def visit_Call(self, node: ast.Call):
-        if (
-            isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id in ("draw", "control", "ucontrol", "ulocate", "op", "cutscene", "sound", "music", "marker")
-        ):
-            self.visit(node.func)
-            for arg in node.args:
-                if isinstance(arg, ast.JoinedStr):
-                    self.error(f"f-strings are not supported in '{node.func.value.id}.{node.func.attr}()'; use print(f\"...\") instead", arg)
-                self.visit(arg)
-            for kw in node.keywords:
-                if isinstance(kw.value, ast.JoinedStr):
-                    self.error(f"f-strings are not supported in '{node.func.value.id}.{node.func.attr}()'; use print(f\"...\") instead", kw.value)
-                self.visit(kw.value)
-            return
+        CALLABLE_NAMESPACES = (
+            "draw", "control", "ucontrol", "ulocate", "op",
+            "cutscene", "sound", "music", "marker",
+        )
+        if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+            if node.func.value.id in CALLABLE_NAMESPACES:
+                self.visit(node.func)
+                for arg in node.args:
+                    if isinstance(arg, ast.JoinedStr):
+                        self.error(f"f-strings are not supported in '{node.func.value.id}.{node.func.attr}()'; use print(f\"...\") instead", arg)
+                    self.visit(arg)
+                for kw in node.keywords:
+                    if isinstance(kw.value, ast.JoinedStr):
+                        self.error(f"f-strings are not supported in '{node.func.value.id}.{node.func.attr}()'; use print(f\"...\") instead", kw.value)
+                    self.visit(kw.value)
+                return
+            else:
+                matches = difflib.get_close_matches(node.func.value.id, CALLABLE_NAMESPACES, n=1)
+                hint = f". Did you mean '{matches[0]}.{node.func.attr}()'?" if matches else ""
+                self.error(f"unknown namespace or function call: '{node.func.value.id}.{node.func.attr}()'{hint}", node)
 
         if not isinstance(node.func, ast.Name):
             self.error("only compiler intrinsic calls are supported", node)
@@ -534,7 +556,10 @@ class ASTValidator(ast.NodeVisitor):
             if self.allow_functions and func_name in self.defined_functions:
                 pass
             else:
-                matches = difflib.get_close_matches(func_name, ALLOWED_INTRINSICS, n=1)
+                candidates = list(ALLOWED_INTRINSICS)
+                if self.allow_functions and self.defined_functions:
+                    candidates.extend(self.defined_functions)
+                matches = difflib.get_close_matches(func_name, candidates, n=1)
                 hint = f". Did you mean '{matches[0]}'?" if matches else ""
                 self.error(
                     f"unsupported function call: '{func_name}'{hint}. "

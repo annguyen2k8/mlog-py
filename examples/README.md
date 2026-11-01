@@ -75,8 +75,11 @@ These examples show how raw Mindustry Logic (`.mlog`) decompiles back into clean
 From the repository root:
 
 ```bash
-# Decompile to console output
-mlog-py decompile examples/decompiler/reactor_safety.mlog
+# Decompile to console output (using mlog, mlog-py, or python -m mlog)
+mlog decompile examples/decompiler/reactor_safety.mlog
+
+# Or piped from stdin:
+cat examples/decompiler/reactor_safety.mlog | mlog decompile
 
 # Or run the round-trip verification suite
 python3 examples/decompiler/roundtrip_verify.py

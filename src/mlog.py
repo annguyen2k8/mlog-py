@@ -294,13 +294,20 @@ def _cli_compile(args: argparse.Namespace) -> int:
     except (CompileError, ValidationError) as e:
         _cli_print(f"Compilation error: {e}", file=sys.stderr)
         return 1
+    except KeyboardInterrupt:
+        _cli_print("\n[mlog-py] Compilation aborted by user.", file=sys.stderr)
+        return 130
 
     if args.mindustry:
         from .mindustry_validator import is_mindustry_available, validate_with_mindustry
         if not is_mindustry_available():
             _cli_print("Error: Mindustry engine or Java not available for validation", file=sys.stderr)
             return 1
-        ok, msg, count = validate_with_mindustry(result.mlog)
+        try:
+            ok, msg, count = validate_with_mindustry(result.mlog)
+        except KeyboardInterrupt:
+            _cli_print("\n[mlog-py] Compilation aborted by user.", file=sys.stderr)
+            return 130
         if not ok:
             _cli_print(f"Mindustry engine validation error: {msg}", file=sys.stderr)
             return 1

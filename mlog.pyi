@@ -3,7 +3,7 @@ Single Source of Truth: src/metadata.py and src/mlog_registry.py.
 Do not edit directly; regenerated and verified via test suite.
 """
 
-from enum import Enum, IntEnum
+from enum import Enum, IntEnum as IntEnum
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, overload
 
 # Package version

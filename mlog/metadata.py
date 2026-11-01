@@ -3047,7 +3047,7 @@ def generate_pyi() -> str:
     lines.append('Do not edit directly; regenerated and verified via test suite.')
     lines.append('"""')
     lines.append("")
-    lines.append("from enum import Enum, IntEnum")
+    lines.append("from enum import Enum, IntEnum as IntEnum")
     lines.append("from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, overload")
     lines.append("")
     lines.append("# Package version")

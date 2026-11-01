@@ -206,6 +206,35 @@ class TestImportsAndIdeStub(unittest.TestCase):
         except SyntaxError as e:
             self.fail(f"mlog.pyi contains syntax error: {e}")
 
+    def test_ide_stub_exports_all_public_symbols(self):
+        """Verify that mlog/__init__.pyi defines or re-exports all symbols in mlog.__all__."""
+        import ast
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        mlog_init_pyi_path = os.path.join(root_dir, "mlog", "__init__.pyi")
+        with open(mlog_init_pyi_path, "r", encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename="mlog/__init__.pyi")
+
+        stub_symbols = set()
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                stub_symbols.add(node.name)
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                stub_symbols.add(node.target.id)
+            elif isinstance(node, ast.Assign):
+                for t in node.targets:
+                    if isinstance(t, ast.Name):
+                        stub_symbols.add(t.id)
+            elif isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    stub_symbols.add(alias.asname or alias.name)
+
+        missing = set(mlog.__all__) - stub_symbols
+        self.assertEqual(
+            missing,
+            set(),
+            f"The following symbols in mlog.__all__ are missing from mlog/__init__.pyi: {missing}",
+        )
+
     # -----------------------------------------------------------------------
     # 4. Runtime Module Verification
     # -----------------------------------------------------------------------

@@ -1,6 +1,7 @@
 """Compiler: lowers validated Python AST to intermediate representation (IR)."""
 
 import ast
+import difflib
 import math
 from typing import List, Optional, Set, Tuple, Union
 
@@ -946,13 +947,18 @@ class Compiler:
                 reg = ENUM_CLASS_TO_REGISTRY[cls_name]
                 entry = reg.by_source_name.get(node.attr.upper())
                 if entry is None:
-                    self.error(f"unknown {cls_name} attribute '{node.attr}'", node)
+                    matches = difflib.get_close_matches(node.attr.upper(), list(reg.by_source_name.keys()), n=1)
+                    hint = f". Did you mean '{cls_name}.{matches[0]}'?" if matches else ""
+                    self.error(f"unknown {cls_name} attribute '{node.attr}'{hint}", node)
                 return entry.mlog_token
             if self.constant_registry.has_namespace(cls_name):
                 val = self.constant_registry.get_value(cls_name, node.attr)
                 if val is not None:
                     return str(val)
-                self.error(f"enum '{cls_name}' has no member '{node.attr}'", node)
+                ns_members = list(self.constant_registry._namespaces.get(cls_name, {}).keys())
+                matches = difflib.get_close_matches(node.attr, ns_members, n=1)
+                hint = f". Did you mean '{matches[0]}'?" if matches else ""
+                self.error(f"enum '{cls_name}' has no member '{node.attr}'{hint}", node)
         self.error(f"unsupported attribute access '{node.attr}'", node)
 
     def validate_arg(
