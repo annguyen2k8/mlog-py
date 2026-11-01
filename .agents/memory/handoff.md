@@ -2,8 +2,8 @@
 
 - **Updated**: 2026-11-01
 - **Agent**: Antigravity / Gemini 3.8 Flash
-- **Status**: in-progress
-- **Goal**: Finalize README documentation, commit separately, and push verified changes to origin/main.
+- **Status**: done
+- **Goal**: Finalize README documentation, commit, and push verified packaging & API migration to origin/main.
 
 ## Done
 
@@ -11,14 +11,12 @@
 - Verified packaging and wheel suite in clean isolated virtual environment: 6/6 passed.
 - Verified all memory, import, and stub tests: 24/24 passed.
 - Verified fast test tier (712 passed) and full test tier (1,319 passed with 0 skipped on real Mindustry v160.7 engine).
-- Prepared dedicated commit for README and documentation improvements.
+- Successfully pushed linear fast-forward sequence of 5 commits (`c0a6289`..`30f0dfd`) to `origin/main`.
+- Verified working tree is clean and `main` is up to date with `origin/main`.
 
 ## Next
 
-- Commit `README.md` and `handoff.md`.
-- Verify remote `origin/main` tracking.
-- Push `main` to `origin/main` without force-push or rewriting history.
-- Confirm remote synchronization and clean working tree.
+- None (all planned tasks completed).
 
 ## Blocked
 
@@ -32,4 +30,5 @@
 - `python run_tests.py --fast`: 712/712 passed (0 skipped).
 - `python run_tests.py --jvm`: 607/607 passed (0 skipped).
 - `python run_tests.py --all`: 1,319/1,319 passed (0 skipped).
+- `git status`: `Your branch is up to date with 'origin/main'. nothing to commit, working tree clean`.
 - `git diff --check`: 0 issues.
