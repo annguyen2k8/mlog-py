@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-01
+
+### Added
+- **PyPI Trusted Publishing (OIDC) Workflow**:
+  - Automated GitHub Actions workflow (`.github/workflows/publish.yml`) to build, verify, and publish releases to PyPI without API tokens or passwords using short-lived OIDC tokens.
+  - Multi-tier pre-publish validation: metadata verification with `twine check --strict`, wheel layout checks with `check-wheel-contents`, and isolated virtualenv smoke tests verifying CLI entrypoints and import cleanliness outside repository workspace.
+  - Least-privilege permissions: top-level `permissions: contents: read` and job-scoped `permissions: id-token: write`.
+  - Workflow validated using `actionlint` with active `shellcheck` and `pyflakes` rules.
+- **Repository Ignore Rules Audit & Hardening**:
+  - Comprehensive `.gitignore` audit adding test and type check caches (`.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `.hypothesis/`).
+  - Added test coverage artifacts (`.coverage`, `.coverage.*`, `htmlcov/`, `coverage.xml`, `*.cover`).
+  - Added packaging caches (`.eggs/`, `*.whl`) and virtualenv backups (`env.bak/`, `venv.bak/`).
+  - Added Mindustry harness local developer configurations (`.mindustry.json`) and alternate harness build directories (`.build/`).
+  - Added IDE whitelisting allowing shared configurations (`.vscode/settings.json`, `.vscode/tasks.json`, `.vscode/launch.json`, `.vscode/extensions.json`, `.idea/runConfigurations/`, `.idea/codeStyles/`) while ignoring personal workspace states.
+  - Added OS and editor artifacts (`*~`, `Thumbs.db`, `Desktop.ini`, `ehthumbs.db`, `._*`).
+- **Documentation**:
+  - Added official PyPI installation instructions (`pip install mlog-py`) in `README.md`.
+  - Documented PyPI Trusted Publisher configuration steps in `README.md`.
+
 ## [0.8.0] - 2026-11-01
 
 ### Added

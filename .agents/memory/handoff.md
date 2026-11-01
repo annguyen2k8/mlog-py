@@ -2,26 +2,27 @@
 
 - **Updated**: 2026-11-01
 - **Agent**: Antigravity / Gemini 3.8 Flash
-- **Status**: done
-- **Goal**: Final audit and hardening of PyPI Trusted Publishing workflow.
+- **Status**: in-progress
+- **Goal**: Release mlog-py v0.8.1 with PyPI Trusted Publishing and optimized ignore rules.
 
 ## Done
 
-- **Workflow Hardening**:
-  - Removed `workflow_dispatch` from `.github/workflows/publish.yml`; trigger restricted exclusively to `release: [published]`.
-  - Configured top-level least-privilege `permissions: contents: read`.
-  - Scoped `permissions: id-token: write` strictly to `publish-to-pypi` job.
-  - Hardened smoke test step to run CLI and import verification outside repository workspace (`/tmp`), preventing local directory module shadowing.
-- **Verification**:
-  - Validated workflow using `actionlint` with active `shellcheck` and `pyflakes` linting: 0 errors.
-  - Verified package build: `twine check --strict` passed, `check-wheel-contents` passed, 0 `src` leaks in wheel.
-  - Confirmed `README.md` publishing and installation instructions remain accurate.
-  - Preserved commit `6401a21` and created follow-up commit for workflow hardening. Did not push to remote.
+- **Version Bump & Release Notes**:
+  - Bumped version to `0.8.1` across `pyproject.toml`, `mlog/__init__.py`, `src/mlog.py`, and `tests/test_packaging_and_wheel.py`.
+  - Documented `[0.8.1] - 2026-11-01` in `CHANGELOG.md` covering PyPI Trusted Publishing OIDC workflow, `.gitignore` audit and hardening, and documentation updates.
+- **Workflow & Packaging Verification**:
+  - Validated `.github/workflows/publish.yml` with `actionlint` (using `shellcheck` & `pyflakes` rules): 0 errors.
+  - Verified clean sdist and wheel build: `twine check --strict` passed, `check-wheel-contents` passed, 0 `src` leaks in wheel.
+  - Smoke-tested installed wheel in isolated virtualenv: `mlog --version` prints `0.8.1`, imports verify cleanly, namespace isolation intact.
 
 ## Next
 
-- User configures Trusted Publisher on PyPI (`mlog-py` -> GitHub -> `annguyen2k8/mlog-py`, `publish.yml`, environment `pypi`).
-- User creates GitHub environment `pypi` in repository settings.
+- Commit version bump changes.
+- Push `main` to `origin/main`.
+- Tag annotated release tag `v0.8.1`.
+- Push tag `v0.8.1` to GitHub.
+- Create GitHub Release `v0.8.1` to trigger publish workflow.
+- Monitor GitHub Actions workflow run and PyPI package state.
 
 ## Blocked
 
@@ -29,8 +30,8 @@
 
 ## Verification
 
-- `actionlint -verbose .github/workflows/publish.yml`: 0 errors (with shellcheck & pyflakes).
+- `actionlint -verbose .github/workflows/publish.yml`: 0 errors.
 - `twine check --strict` on clean build: PASSED.
 - `check-wheel-contents` on clean wheel: PASSED.
-- `python -m unittest tests.test_agent_memory -v`: 6/6 passed.
+- `python -m unittest tests.test_agent_memory tests.test_imports_and_stub tests.test_ux_and_cli_compile_stdin -v`: 59/59 passed.
 - `git diff --check`: 0 issues.
