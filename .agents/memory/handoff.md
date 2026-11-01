@@ -3,21 +3,28 @@
 - **Updated**: 2026-11-01
 - **Agent**: Antigravity / Gemini 3.8 Flash
 - **Status**: done
-- **Goal**: Release mlog-py v0.8.0 with UX/DX improvements, typing overloads, and canonical mlog packaging.
+- **Goal**: Audit and optimize .gitignore rules for the mlog-py repository.
 
 ## Done
 
-- **Version Bump & Release Notes**:
-  - Bumped version to `0.8.0` across `pyproject.toml`, `mlog/__init__.py`, `src/mlog.py`, and `tests/test_packaging_and_wheel.py`.
-  - Documented `[0.8.0] - 2026-11-01` in `CHANGELOG.md` covering CLI compile stdin streaming, typo suggestions, Ctrl+C handling, `@overload` decompile typing, and canonical `mlog/` packaging.
-- **Packaging, Typing & Full Engine Verification**:
-  - Verified binary wheel build and clean venv installation: contains PEP 561 marker and typing assets, 0 leaks of `src`.
-  - Verified Pyright 1.1.414 type checking against installed wheel: 0 errors, 0 warnings.
-  - Verified full test suite (`python run_tests.py --all`): 1,355 / 1,355 tests passed (100% pass rate) on real Mindustry v160.7 engine.
-- **Git Release Tagging & GitHub Release**:
-  - Committed release metadata and created annotated tag `v0.8.0`.
-  - Pushed release commit and tag to `origin/main` using fast-forward.
-  - Published GitHub Release `v0.8.0` with wheel artifact attached.
+- **Audit & Identification**:
+  - Examined all 185 tracked files, existing ignore patterns, untracked artifacts (`.pytest_cache/`, `build/`, `dist/`, `mlog_py.egg-info/`, `hs_err_pid10196.log`), and local discovery config references (`.mindustry.json`, `.build/harness`).
+  - Audited and verified safe boundaries: confirmed that critical golden files (`tests/corpus/**/*.mlog`, `tests/corpus/**/*.py`), fixtures (`tests/fixtures/*`), generated stubs (`mlog.pyi`, `src/mlog.pyi`, `mlog/__init__.pyi`, `mlog/py.typed`), examples (`examples/**/*`), docs, and agent memory are untouched and protected.
+- **Gitignore Optimization**:
+  - Confirmed each pattern is formatted on a separate line with no line concatenation issues.
+  - Added test & type check caches: `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `.hypothesis/`.
+  - Added test coverage & profiling artifacts: `.coverage`, `.coverage.*`, `htmlcov/`, `coverage.xml`, `*.cover`.
+  - Added packaging artifacts: `.eggs/`, `*.whl`.
+  - Added virtualenv backup patterns: `env.bak/`, `venv.bak/`.
+  - Added harness alternative build dir and local developer config: `.build/`, `.mindustry.json`.
+  - Refined IDE artifacts: ignored personal files with `.idea/*` and `.vscode/*` while preserving shared configurations (`.vscode/settings.json`, `.vscode/tasks.json`, `.vscode/launch.json`, `.vscode/extensions.json`, `.idea/runConfigurations/`, `.idea/codeStyles/`).
+  - Added editor and OS artifacts: `*~`, `*.sublime-project`, `*.sublime-workspace`, `Thumbs.db`, `Desktop.ini`, `ehthumbs.db`, `._*`.
+  - Normalized EOF newline to eliminate `git diff --check` warnings.
+- **Verification & Git State**:
+  - Verified with `git check-ignore -v` that 0 tracked files are ignored and all 58 test targets evaluate with 100% precision.
+  - Verified `git diff --check` passes cleanly.
+  - Amended clean commit `a4ef5c2` for `.gitignore`.
+  - Checked release status: `v0.8.0` is already tagged and released; no tags were overwritten, no force-push, no registry publish.
 
 ## Next
 
@@ -29,8 +36,8 @@
 
 ## Verification
 
-- `python -m unittest tests.test_packaging_and_wheel -v`: 7/7 passed.
-- `python -m unittest tests.test_imports_and_stub tests.test_agent_memory -v`: 25/25 passed.
+- `git ls-files | git check-ignore -v --stdin`: 0 tracked files ignored.
+- `python -m unittest tests.test_agent_memory -v`: 6/6 passed.
+- `python -m unittest tests.test_imports_and_stub -v`: 19/19 passed.
 - `python -m unittest tests.test_ux_and_cli_compile_stdin -v`: 34/34 passed.
-- `python run_tests.py --all`: 1,355/1,355 passed (0 failures, 0 errors, 0 skipped).
 - `git diff --check`: 0 issues.
