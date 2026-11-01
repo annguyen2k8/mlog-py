@@ -12,20 +12,54 @@ dist/
 *.egg-info/
 .installed.cfg
 *.egg
+.eggs/
+*.whl
 
 # Virtual environments
 .venv/
 venv/
 ENV/
 env/
+env.bak/
+venv.bak/
 
-# Java compile artifacts
+# Testing, coverage and type checking
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+
+# Java compile artifacts, harness builds and local config
 *.class
+.build/
+.mindustry.json
 
-# IDE and OS artifacts
-.DS_Store
+# IDE and editor artifacts
+.idea/*
+!.idea/runConfigurations/
+!.idea/codeStyles/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 *.swp
 *.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# OS artifacts
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+ehthumbs.db
 
 # Logs
 *.log
