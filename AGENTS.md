@@ -31,7 +31,7 @@ contradicts the code, verify against the code and update the handoff.
   `python run_tests.py --all` (or record why the JVM tier was unavailable).
 - Do not commit unless the user asks. Never push unless explicitly requested.
 - Do not hand-edit generated files. Regenerate `mlog.pyi` and `src/mlog.pyi`
-  with `python -m src.metadata` when metadata changes.
+  with `python -m mlog.metadata` when metadata changes.
 - Preserve user work and existing configuration. Do not delete unfamiliar
   files without investigating them first.
 - Never store secrets, tokens, credentials, or personal data in memory files.
@@ -75,5 +75,5 @@ Use the structure in `.agents/memory/handoff.md`. Required fields:
 python run_tests.py --fast   # pure-Python tiers
 python run_tests.py --jvm    # real Mindustry v160.7 engine
 python run_tests.py --all    # full suite
-python -m src.metadata       # regenerate mlog.pyi and src/mlog.pyi
+python -m mlog.metadata      # regenerate mlog.pyi and src/mlog.pyi
 ```

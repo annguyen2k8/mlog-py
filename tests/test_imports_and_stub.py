@@ -324,16 +324,16 @@ class TestImportsAndIdeStub(unittest.TestCase):
             if hasattr(src.compiler, "_TEST_ATTR"):
                 delattr(src.compiler, "_TEST_ATTR")
 
-    def test_python_m_src_metadata_entrypoint(self):
-        """Verify running 'python -m src.metadata' regenerates stubs cleanly."""
+    def test_python_m_mlog_metadata_entrypoint(self):
+        """Verify running 'python -m mlog.metadata' regenerates stubs cleanly."""
         import subprocess
         import sys
         proc = subprocess.run(
-            [sys.executable, "-m", "src.metadata"],
+            [sys.executable, "-m", "mlog.metadata"],
             capture_output=True,
             text=True,
         )
-        self.assertEqual(proc.returncode, 0, f"python -m src.metadata failed:\n{proc.stderr}")
+        self.assertEqual(proc.returncode, 0, f"python -m mlog.metadata failed:\n{proc.stderr}")
         self.assertIn("Updated mlog stubs successfully", proc.stdout + proc.stderr)
 
 
