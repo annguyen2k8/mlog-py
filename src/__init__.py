@@ -31,9 +31,28 @@ _SUBMODULES = (
     "decompiler",
 )
 
+class _CompatLoader:
+    """Wrapper around module loader to allow execution under legacy 'src.*' names."""
+
+    def __init__(self, target_loader):
+        self._target_loader = target_loader
+
+    def get_code(self, fullname=None):
+        return self._target_loader.get_code(None)
+
+    def exec_module(self, module):
+        return self._target_loader.exec_module(module)
+
+    def __getattr__(self, name):
+        return getattr(self._target_loader, name)
+
+
 for _mod in _SUBMODULES:
     try:
         _loaded = importlib.import_module(f"mlog.{_mod}")
+        if hasattr(_loaded, "__spec__") and _loaded.__spec__ and _loaded.__spec__.loader:
+            if not isinstance(_loaded.__spec__.loader, _CompatLoader):
+                _loaded.__spec__.loader = _CompatLoader(_loaded.__spec__.loader)
         sys.modules[f"src.{_mod}"] = _loaded
         globals()[_mod] = _loaded
     except ImportError:

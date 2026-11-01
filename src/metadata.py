@@ -3527,7 +3527,7 @@ def generate_pyi() -> str:
 
 if __name__ == "__main__":
     content = generate_pyi()
-    target_paths = ["mlog.pyi", "mlog/__init__.pyi", "mlog/mlog.pyi"]
+    target_paths = ["mlog.pyi", "mlog/__init__.pyi"]
     if os.path.exists("src"):
         target_paths.append("src/mlog.pyi")
     for p in target_paths:

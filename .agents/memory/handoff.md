@@ -2,25 +2,28 @@
 
 - **Updated**: 2026-11-01
 - **Agent**: Antigravity / Gemini 3.8 Flash
-- **Status**: in-progress
-- **Goal**: Package architecture migration: eliminate global 'src' site-packages pollution, adopt top-level 'mlog' package with PEP 561 py.typed, stubs, and end-to-end wheel verification.
+- **Status**: ready-for-review
+- **Goal**: Final audit and hardening of packaging migration: eliminate duplicate stub, verify src shim identity and external isolation, and harden test coverage.
 
 ## Done
 
-- Migrated core package architecture to top-level `mlog/` package:
-  - `mlog/__init__.py`: official DSL, compiler, and decompiler public API entry points.
-  - `mlog/__main__.py`: CLI runner enabling `python -m mlog`.
-  - `mlog/py.typed`: official PEP 561 typing marker.
-  - `mlog/__init__.pyi` & `mlog/mlog.pyi`: official typing stubs.
-- Created `src/__init__.py` backward compatibility redirection shim so existing internal test imports (`from src.xxx import ...`) continue working without breaking changes.
-- Updated `pyproject.toml` to package solely `mlog*` and exclude `src*` from distribution wheel.
-- Updated `MANIFEST.in` to bundle PEP 561 `py.typed` and `*.pyi` stubs.
-- Added comprehensive end-to-end distribution test suite `tests/test_packaging_and_wheel.py` that builds real wheels, installs into clean virtualenvs, and verifies zero 'src/' pollution, clean public imports, CLI scripts, and resilience against local 'src/' name collisions.
-- Maintained local unstaged `README.md` changes intact.
+- Audited `src` shim for import compatibility, exception/module identity, circular imports, and monkey-patching resilience.
+- Added `_CompatLoader` in `src/__init__.py` so `python -m src.metadata` succeeds cleanly alongside `python -m mlog.metadata`.
+- Removed redundant duplicate typing stub `mlog/mlog.pyi`, preserving canonical `mlog/__init__.pyi` and saving wheel bundle size.
+- Updated SSOT stub generators in `mlog/metadata.py` and `src/metadata.py` to stop emitting `mlog/mlog.pyi`.
+- Hardened wheel distribution test suite `tests/test_packaging_and_wheel.py`:
+  - Verifies `mlog/__init__.pyi` and `py.typed` are present in wheel, while `mlog/mlog.pyi` is absent.
+  - Added `test_outside_project_cannot_import_internal_src` verifying clean venv cannot import `src` from an external directory.
+- Added regression tests in `tests/test_imports_and_stub.py`:
+  - Verified exact module, class, and exception identity between `src.*` and `mlog.*`.
+  - Verified bidirectional exception catching between `src` and `mlog` exception types.
+  - Verified monkey-patching propagation across `src` and `mlog`.
+  - Verified `python -m src.metadata` execution.
+- Strictly preserved local unstaged `README.md` edits untouched.
 
 ## Next
 
-- Commit package architecture improvements (excluding uncommitted README edits).
+- Await user review or instructions to push.
 - Do not push to remote.
 
 ## Blocked
@@ -30,7 +33,8 @@
 ## Verification
 
 - `python -m unittest tests.test_agent_memory -v`: 6/6 passed.
-- `python -m unittest tests.test_packaging_and_wheel -v`: 5/5 passed.
-- `python run_tests.py --fast`: 709/709 passed.
-- `python run_tests.py --all`: 1,316/1,316 passed.
+- `python -m unittest tests.test_imports_and_stub -v`: 18/18 passed.
+- `python -m unittest tests.test_packaging_and_wheel -v`: 6/6 passed.
+- `python run_tests.py --fast`: 712/712 passed.
+- `python run_tests.py --all`: 1,319/1,319 passed (204 skipped).
 - `git diff --check`: 0 issues.

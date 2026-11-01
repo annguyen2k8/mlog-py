@@ -89,12 +89,10 @@ class TestPackagingAndWheel(unittest.TestCase):
         self.assertIn("mlog/__init__.py", namelist)
         self.assertIn("mlog/__main__.py", namelist)
 
-        # 2. Must contain PEP 561 marker and stubs inside package
+        # 2. Must contain PEP 561 marker and canonical typing stub (no duplicate)
         self.assertIn("mlog/py.typed", namelist)
-        has_stub = any(
-            name in namelist for name in ("mlog/__init__.pyi", "mlog/mlog.pyi")
-        )
-        self.assertTrue(has_stub, "Wheel must include typing stub inside mlog/ package")
+        self.assertIn("mlog/__init__.pyi", namelist)
+        self.assertNotIn("mlog/mlog.pyi", namelist)
 
         # 3. Must NOT contain top-level 'src/' directory
         src_files = [f for f in namelist if f.startswith("src/")]
@@ -123,6 +121,26 @@ class TestPackagingAndWheel(unittest.TestCase):
             check=True,
         )
         self.assertEqual(proc.stdout.strip(), "CLEAN")
+
+    def test_outside_project_cannot_import_internal_src(self):
+        """In an outside project, 'import src' fails because 'src' is never installed."""
+        with tempfile.TemporaryDirectory(prefix="empty_project_") as proj_dir:
+            test_script = (
+                "import sys\n"
+                "try:\n"
+                "    import src\n"
+                "    print('UNEXPECTED_SRC_FOUND')\n"
+                "except ModuleNotFoundError:\n"
+                "    print('SRC_NOT_FOUND_AS_EXPECTED')\n"
+            )
+            proc = subprocess.run(
+                [self.venv_python, "-c", test_script],
+                cwd=proj_dir,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc.returncode, 0)
+            self.assertIn("SRC_NOT_FOUND_AS_EXPECTED", proc.stdout)
 
     def test_clean_venv_public_api_imports(self):
         """Verify official public APIs import cleanly from installed wheel."""

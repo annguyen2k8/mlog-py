@@ -163,9 +163,16 @@ class TestImportsAndIdeStub(unittest.TestCase):
         root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         mlog_pyi_path = os.path.join(root_dir, "mlog.pyi")
         src_mlog_pyi_path = os.path.join(root_dir, "src", "mlog.pyi")
+        mlog_init_pyi_path = os.path.join(root_dir, "mlog", "__init__.pyi")
+        redundant_mlog_pyi_path = os.path.join(root_dir, "mlog", "mlog.pyi")
 
         self.assertTrue(os.path.exists(mlog_pyi_path), "mlog.pyi must exist in project root")
         self.assertTrue(os.path.exists(src_mlog_pyi_path), "src/mlog.pyi must exist in src/")
+        self.assertTrue(os.path.exists(mlog_init_pyi_path), "mlog/__init__.pyi must exist in mlog/")
+        self.assertFalse(
+            os.path.exists(redundant_mlog_pyi_path),
+            "mlog/mlog.pyi must not exist (redundant duplicate of mlog/__init__.pyi)",
+        )
 
         with open(mlog_pyi_path, "r", encoding="utf-8") as f:
             actual_pyi = f.read()
@@ -181,6 +188,14 @@ class TestImportsAndIdeStub(unittest.TestCase):
             expected_pyi,
             actual_src_pyi,
             "src/mlog.pyi is out of sync with src/metadata.py SSOT! Run generate_pyi() to update.",
+        )
+
+        with open(mlog_init_pyi_path, "r", encoding="utf-8") as f:
+            actual_mlog_init_pyi = f.read()
+        self.assertEqual(
+            expected_pyi,
+            actual_mlog_init_pyi,
+            "mlog/__init__.pyi is out of sync with src/metadata.py SSOT! Run generate_pyi() to update.",
         )
 
     def test_ide_stub_parses_without_syntax_errors(self):
@@ -268,6 +283,58 @@ class TestImportsAndIdeStub(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 0)
         self.assertIn("usage: mlog", proc.stdout)
+
+    def test_src_shim_identity_and_cross_catch(self):
+        """Verify backward-compatible 'src' shim guarantees module and exception identity."""
+        import src
+        import src.compiler
+        import src.errors
+        import src.decompiler
+        import src.decompiler.cfg
+        import src.decompiler.errors
+        import src.metadata
+
+        # Module & Class identity
+        self.assertIs(src.compiler, mlog.compiler)
+        self.assertIs(src.compiler.Compiler, mlog.compiler.Compiler)
+        self.assertIs(src.errors, mlog.errors)
+        self.assertIs(src.errors.CompileError, mlog.errors.CompileError)
+        self.assertIs(src.decompiler, mlog.decompiler)
+        self.assertIs(src.decompiler.cfg, mlog.decompiler.cfg)
+        self.assertIs(src.decompiler.cfg.build_cfg, mlog.decompiler.cfg.build_cfg)
+        self.assertIs(src.decompiler.errors.DecompileError, mlog.decompiler.errors.DecompileError)
+        self.assertIs(src.metadata, mlog.metadata)
+        self.assertIs(src.mlog, mlog)
+
+        # Exception cross-catching
+        with self.assertRaises(src.errors.CompileError):
+            raise mlog.errors.CompileError("compiler error from mlog caught by src")
+
+        with self.assertRaises(mlog.errors.CompileError):
+            raise src.errors.CompileError("compiler error from src caught by mlog")
+
+        with self.assertRaises(src.decompiler.errors.DecompileError):
+            raise mlog.decompiler.errors.DecompileError("decompiler error caught by src")
+
+        # Monkey-patching reflection
+        try:
+            src.compiler._TEST_ATTR = "monkey_patched_val"
+            self.assertEqual(getattr(mlog.compiler, "_TEST_ATTR", None), "monkey_patched_val")
+        finally:
+            if hasattr(src.compiler, "_TEST_ATTR"):
+                delattr(src.compiler, "_TEST_ATTR")
+
+    def test_python_m_src_metadata_entrypoint(self):
+        """Verify running 'python -m src.metadata' regenerates stubs cleanly."""
+        import subprocess
+        import sys
+        proc = subprocess.run(
+            [sys.executable, "-m", "src.metadata"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(proc.returncode, 0, f"python -m src.metadata failed:\n{proc.stderr}")
+        self.assertIn("Updated mlog stubs successfully", proc.stdout + proc.stderr)
 
 
 if __name__ == "__main__":
