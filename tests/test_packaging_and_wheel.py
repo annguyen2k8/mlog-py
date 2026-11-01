@@ -228,6 +228,132 @@ class TestPackagingAndWheel(unittest.TestCase):
             )
             self.assertIn("SHADOWING_TEST_PASS", proc.stdout)
 
+    def test_pyright_clean_wheel_typing_verification(self):
+        """Verify installed wheel typing stubs using Pyright if available."""
+        # Find pyright binary or node runner
+        pyright_cmd = None
+        cli = shutil.which("pyright")
+        if cli:
+            pyright_cmd = [cli]
+        else:
+            node = shutil.which("node")
+            if node:
+                npm_npx = os.path.expanduser("~/.npm/_npx")
+                if os.path.isdir(npm_npx):
+                    for root, dirs, files in os.walk(npm_npx):
+                        if "index.js" in files and os.path.basename(root) == "pyright":
+                            pyright_cmd = [node, os.path.join(root, "index.js")]
+                            break
+
+        if not pyright_cmd:
+            self.skipTest("Pyright type checker is not installed in the environment.")
+
+        with tempfile.TemporaryDirectory(prefix="pyright_run_") as run_dir:
+            test_file = os.path.join(run_dir, "type_test.py")
+            with open(test_file, "w", encoding="utf-8") as f:
+                f.write(
+                    "from typing import Any, Tuple\n"
+                    "import mlog\n"
+                    "from mlog.errors import CompileError, SourceLocation\n"
+                    "from mlog import (\n"
+                    "    compile_py,\n"
+                    "    decompile,\n"
+                    "    decompile_with_source_map,\n"
+                    "    CompileResult,\n"
+                    "    null,\n"
+                    "    Vars,\n"
+                    "    draw,\n"
+                    "    control,\n"
+                    "    ucontrol,\n"
+                    "    ulocate,\n"
+                    "    op,\n"
+                    "    read,\n"
+                    "    write,\n"
+                    "    sensor,\n"
+                    "    wait,\n"
+                    "    stop,\n"
+                    "    end,\n"
+                    "    packcolor,\n"
+                    "    unpackcolor,\n"
+                    "    Array,\n"
+                    "    Items,\n"
+                    "    Liquids,\n"
+                    "    Units,\n"
+                    "    SensorProperty,\n"
+                    "    ControlProperty,\n"
+                    "    UnitControl,\n"
+                    "    DrawType,\n"
+                    "    LogicOp,\n"
+                    "    Condition,\n"
+                    "    RadarTarget,\n"
+                    "    RadarSort,\n"
+                    "    LookupType,\n"
+                    "    Align,\n"
+                    "    IntEnum,\n"
+                    ")\n"
+                    "\n"
+                    "# 1. Compile API\n"
+                    "res: CompileResult = compile_py('x = 10', filename='test.py', validate=True, allow_functions=True)\n"
+                    "mlog_code: str = res.mlog\n"
+                    "\n"
+                    "# 2. Decompile API with overload resolution\n"
+                    "py_code: str = decompile(mlog_code, filename='test.mlog', debug=False)\n"
+                    "source_map_res: Tuple[str, Any] = decompile_with_source_map(mlog_code)\n"
+                    "tuple_res: Tuple[str, Any] = decompile(mlog_code, return_source_map=True)\n"
+                    "\n"
+                    "# 3. Enum re-exports and sub-classing\n"
+                    "class CustomEnum(IntEnum):\n"
+                    "    ALPHA = 1\n"
+                    "    BETA = 2\n"
+                    "\n"
+                    "item_coal: Items = Items.COAL\n"
+                    "prop_hp: SensorProperty = SensorProperty.HEALTH\n"
+                    "\n"
+                    "# 4. Typed intrinsics\n"
+                    "r_val: Any = read('cell1', 0)\n"
+                    "write(r_val, 'cell1', 0)\n"
+                    "wait(0.5)\n"
+                    "stop()\n"
+                    "end()\n"
+                    "\n"
+                    "# 5. Array API\n"
+                    "arr: Array = Array('cell1', size=64, dtype=int)\n"
+                    "first_item: Any = arr[0]\n"
+                    "arr[1] = 42\n"
+                    "count: int = len(arr)\n"
+                    "\n"
+                    "# 6. Null and Vars\n"
+                    "null_val: Any = null\n"
+                    "var_this: Any = Vars.this\n"
+                    "\n"
+                    "# 7. Errors\n"
+                    "err: CompileError = CompileError('test error', SourceLocation('test.py', 1, 1))\n"
+                )
+
+            config_file = os.path.join(run_dir, "pyrightconfig.json")
+            venv_parent = os.path.dirname(self.venv_dir)
+            venv_name = os.path.basename(self.venv_dir)
+            with open(config_file, "w", encoding="utf-8") as f:
+                f.write(
+                    f'{{\n'
+                    f'  "include": ["type_test.py"],\n'
+                    f'  "venvPath": "{venv_parent}",\n'
+                    f'  "venv": "{venv_name}",\n'
+                    f'  "pythonVersion": "3.11"\n'
+                    f'}}\n'
+                )
+
+            proc = subprocess.run(
+                pyright_cmd + ["--project", run_dir],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(
+                proc.returncode,
+                0,
+                f"Pyright typing verification failed on clean wheel installation:\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

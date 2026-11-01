@@ -4,7 +4,7 @@ Do not edit directly; regenerated and verified via test suite.
 """
 
 from enum import Enum, IntEnum as IntEnum
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, overload
+from typing import Any, Dict, List, Literal, NamedTuple, Optional, Tuple, Union, overload
 
 # Package version
 __version__: str
@@ -793,6 +793,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     """CLI entry point for Python-to-mlog compiler."""
     ...
 
+@overload
+def decompile(mlog_text: str, filename: str = '<stdin>', *, debug: bool = False, return_source_map: Literal[False] = False) -> str: ...
+@overload
+def decompile(mlog_text: str, filename: str = '<stdin>', *, debug: bool = False, return_source_map: Literal[True]) -> Tuple[str, Any]: ...
+@overload
+def decompile(mlog_text: str, filename: str = '<stdin>', *, debug: bool = False, return_source_map: bool = False) -> Union[str, Tuple[str, Any]]: ...
 def decompile(mlog_text: str, filename: str = '<stdin>', *, debug: bool = False, return_source_map: bool = False) -> Union[str, Tuple[str, Any]]:
     """Decompile vanilla Mindustry Logic (mlog) instructions into structured Python DSL."""
     ...

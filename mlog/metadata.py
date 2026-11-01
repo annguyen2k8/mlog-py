@@ -3048,7 +3048,7 @@ def generate_pyi() -> str:
     lines.append('"""')
     lines.append("")
     lines.append("from enum import Enum, IntEnum as IntEnum")
-    lines.append("from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, overload")
+    lines.append("from typing import Any, Dict, List, Literal, NamedTuple, Optional, Tuple, Union, overload")
     lines.append("")
     lines.append("# Package version")
     lines.append("__version__: str")
@@ -3123,6 +3123,18 @@ def generate_pyi() -> str:
     lines.append('    """CLI entry point for Python-to-mlog compiler."""')
     lines.append("    ...")
     lines.append("")
+    lines.append("@overload")
+    lines.append(
+        "def decompile(mlog_text: str, filename: str = '<stdin>', *, debug: bool = False, return_source_map: Literal[False] = False) -> str: ..."
+    )
+    lines.append("@overload")
+    lines.append(
+        "def decompile(mlog_text: str, filename: str = '<stdin>', *, debug: bool = False, return_source_map: Literal[True]) -> Tuple[str, Any]: ..."
+    )
+    lines.append("@overload")
+    lines.append(
+        "def decompile(mlog_text: str, filename: str = '<stdin>', *, debug: bool = False, return_source_map: bool = False) -> Union[str, Tuple[str, Any]]: ..."
+    )
     lines.append(
         "def decompile(mlog_text: str, filename: str = '<stdin>', *, debug: bool = False, return_source_map: bool = False) -> Union[str, Tuple[str, Any]]:"
     )
