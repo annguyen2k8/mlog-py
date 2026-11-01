@@ -37,14 +37,17 @@ pip install .
 
 ### 1. Compile Python to MLog
 
-Use the `mlog-py compile` CLI:
+Use the `mlog compile` CLI (or `mlog-py compile` / `python -m mlog compile`):
 
 ```bash
 # Compile to stdout (auto-copies to clipboard by default)
-mlog-py compile input.py
+mlog compile input.py
 
 # Compile and save to file
-mlog-py compile input.py -o output.mlog
+mlog compile input.py -o output.mlog
+
+# Shorthand (defaults to compile command)
+mlog input.py -o output.mlog
 ```
 
 **Common Compiler Flags**:
@@ -54,20 +57,29 @@ mlog-py compile input.py -o output.mlog
 - `--no-functions`: Reject `def` function definitions and `return` statements (functions are allowed by default).
 - `--debug`: Print IR instructions, source locations, and resolved label addresses.
 
+Or via Python API:
+
+```python
+from mlog import compile_py
+
+result = compile_py("set(x, 10)\nwait(1.0)\n")
+print(result.mlog)
+```
+
 ### 2. Decompile MLog to Python DSL
 
-Use the `mlog-py decompile` CLI:
+Use the `mlog decompile` CLI (or `mlog-py decompile` / `python -m mlog decompile`):
 
 ```bash
 # Decompile from file (prints to stdout, or use -o to save)
-mlog-py decompile input.mlog -o output.py
+mlog decompile input.mlog -o output.py
 
 # Stream / piped input from stdin
-cat input.mlog | mlog-py decompile
-mlog-py decompile - < input.mlog
+cat input.mlog | mlog decompile
+mlog decompile - < input.mlog
 
 # Interactive paste in terminal (finish with Ctrl+D or type 'EOF' on an empty line)
-mlog-py decompile
+mlog decompile
 ```
 
 **Common Decompiler Flags**:
@@ -78,7 +90,7 @@ mlog-py decompile
 Or via Python API:
 
 ```python
-from src.decompiler import decompile
+from mlog import decompile, decompile_with_source_map
 
 mlog_code = """
 sensor heat reactor1 @heat
@@ -224,14 +236,16 @@ mlog-py/
 ├── AGENTS.md            # Shared agent instructions and memory protocol
 ├── .agents/memory/      # Project context and task handoff
 ├── compiler.py          # Standalone CLI entry point
-├── mlog.py / mlog.pyi   # Runtime DSL module and IDE typing stubs
-├── pyproject.toml       # Package metadata and build configuration
-├── src/                 # Core compiler and decompiler source code
+├── mlog/                # Canonical package (PEP 561, DSL, compiler, decompiler)
+│   ├── __init__.py      # Public API exports (compile_py, decompile, intrinsics)
+│   ├── __main__.py      # CLI runner (python -m mlog)
+│   ├── py.typed         # PEP 561 typing marker
 │   ├── compiler.py      # AST -> IR lowering
 │   ├── emitter.py       # Two-pass address resolution
 │   ├── metadata.py      # Single Source of Truth (SSOT)
-│   ├── validator.py     # Static verification & processor limits
 │   └── decompiler/      # Decompiler pipeline (CFG, structurer, dataflow)
+├── src/                 # Backward-compatibility import shim
+├── pyproject.toml       # Package metadata and build configuration
 ├── docs/                # Technical documentation and specifications
 ├── examples/            # Paired compiler and decompiler examples
 └── tests/               # Automated test suite and corpus
@@ -283,11 +297,16 @@ Agents working in this repository should read [`AGENTS.md`](AGENTS.md) and [`.ag
 
 ## Limitations
 
-- **Identity Semantics (`is` vs `strictEqual`)**: Python `is` maps to Mindustry `strictEqual` (`===`), which checks object vs double category and exact numeric equality without epsilon. `is not` is implemented across assignment (`op strictEqual` + `op equal dest 0`), ternary (`select` with inverted operands), `if`, and `while` via `strictEqual` to avoid Mindustry's engine quirk where `notEqual 0 null` evaluates to false. Note that because Mindustry booleans are numeric `1.0`/`0.0`, `true is 1` evaluates to true in Mindustry, whereas Python treats `True` and `1` as distinct types; Mindustry does not maintain Python heap object identities.
-- **Irreducible Control Flow**: Non-natural loops and indirect jumps (`set @counter ...`) are preserved as fallback comments and raw jumps instead of synthetic loops.
-- **Flat Memory Model**: Mindustry Logic has no heap or object system; object-oriented constructs, classes, and Python collections (`list`, `dict`) are not reconstructed.
-- **Multi-Use Temporaries**: Temporaries read multiple times or modified across basic blocks are preserved as explicit assignments to ensure semantic correctness.
-- **World Processor / Privileged Opcodes**: All 25 World Processor privileged statements (`query`, `getblock`, `setblock`, `spawn`, `bullet`, `status`, `explosion`, `setrule`, `getflag`, `setflag`, `setprop`, `fetch`, `sync`, `weathersense`, `weatherset`, `spawnwave`, `effect`, `message`, `cutscene`, `playsound`, `playmusic`, `makemarker`, `setmarker`, `localeprint`, `clientdata`) are fully supported by `mlog-py` for custom map scripting. At in-game runtime, Mindustry requires a World Processor (`#processor: world`); executing privileged opcodes on standard survival processors (Micro, Logic, Hyper) will be rejected by the engine as `InvalidStatement`.
+### Mindustry Platform Constraints
+
+- **Flat Memory Model**: Mindustry processors operate on flat registers and hardware memory blocks (Cell/Bank), with no heap, dynamic memory allocation, or garbage collector. Arbitrary Python objects, dynamic classes, and heap collections (`list`, `dict`, `set`) cannot be instantiated at runtime; use fixed-size hardware `Array` instances instead.
+- **Identity Semantics (`is` vs `strictEqual`)**: Python `is` compares heap identity (`id(a) == id(b)`), whereas Mindustry Logic has no heap object model. The compiler maps `is` to Mindustry `strictEqual` (`===`), which checks runtime type category (double vs object) and exact value without float epsilon tolerance. Because Mindustry represents booleans as numeric `1.0`/`0.0`, `True is 1` evaluates to true in compiled logic, whereas Python treats `True` and `1` as distinct types. For `is not`, the compiler uses inverted `strictEqual` checks to avoid Mindustry's engine quirk where `0 != null` evaluates to false.
+- **World Processor Privilege Requirements**: All 25 World Processor privileged statements (`query`, `getblock`, `setblock`, `spawn`, `bullet`, `status`, `explosion`, `setrule`, `getflag`, `setflag`, `setprop`, `fetch`, `sync`, `weathersense`, `weatherset`, `spawnwave`, `effect`, `message`, `cutscene`, `playsound`, `playmusic`, `makemarker`, `setmarker`, `localeprint`, `clientdata`) are supported for custom map scripting. However, standard survival processors (Micro, Logic, Hyper) reject them as `InvalidStatement` at runtime; they require a World Processor (`#processor: world`).
+
+### Compiler & Decompiler Constraints
+
+- **Irreducible Control Flow**: Non-natural loops, computed jumps, and indirect counter manipulation (`set @counter ...`) cannot be restructured into natural Python `while` loops. The decompiler preserves these via explicit `jump(...)` fallback nodes to guarantee execution equivalence.
+- **Multi-Use Temporaries**: Compiler temporaries that are read multiple times or cross side-effecting operations (such as memory `read` feeding `write`) are not inlined into compound expressions. They are retained as explicit assignments (`tmp_val_N = ...`) to prevent reordering or duplicate side effects.
 
 ---
 

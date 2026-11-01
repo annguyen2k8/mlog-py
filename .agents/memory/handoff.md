@@ -2,22 +2,23 @@
 
 - **Updated**: 2026-11-01
 - **Agent**: Antigravity / Gemini 3.8 Flash
-- **Status**: ready-for-review
-- **Goal**: Final audit after commit 270a6fb: evaluate _CompatLoader, resolve skipped JVM tests, verify full suite, and solidify packaging isolation.
+- **Status**: in-progress
+- **Goal**: Finalize README documentation, commit separately, and push verified changes to origin/main.
 
 ## Done
 
-- Evaluated `_CompatLoader` in `src/__init__.py`: removed loader monkey-patching in favor of clean import forwarding. Standardized canonical metadata generator invocation to `python -m mlog.metadata` across `AGENTS.md` and test suite.
-- Investigated 204 skipped tests: identified missing Mindustry Java harness build artifact in local checkout. Executed `python tools/build_harness.py` to compile `MindustryHarness.java`.
-- Auto-discovery resolved local `Mindustry` v160.7 engine classes and Arc dependencies. Ran JVM test tier: 607 / 607 tests passed (0 skipped).
-- Executed full suite: 1,319 / 1,319 tests passed with 0 skipped, 0 failures, 0 errors.
-- Verified packaging: clean wheel build, zero `src/` site-packages pollution, PEP 561 marker and canonical typing stubs intact, external project isolation confirmed.
-- Strictly preserved local unstaged `README.md` edits untouched.
+- Finalized `README.md` incorporating updated `mlog` CLI commands (`mlog`, `mlog-py`, `python -m mlog`), public API examples (`from mlog import compile_py, decompile, decompile_with_source_map`), canonical `mlog/` package structure diagram, and organized Mindustry platform & compiler/decompiler constraints under Limitations.
+- Verified packaging and wheel suite in clean isolated virtual environment: 6/6 passed.
+- Verified all memory, import, and stub tests: 24/24 passed.
+- Verified fast test tier (712 passed) and full test tier (1,319 passed with 0 skipped on real Mindustry v160.7 engine).
+- Prepared dedicated commit for README and documentation improvements.
 
 ## Next
 
-- Await user review or instructions to push.
-- Do not push to remote.
+- Commit `README.md` and `handoff.md`.
+- Verify remote `origin/main` tracking.
+- Push `main` to `origin/main` without force-push or rewriting history.
+- Confirm remote synchronization and clean working tree.
 
 ## Blocked
 
