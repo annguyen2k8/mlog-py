@@ -1,5 +1,13 @@
 # mlog-py: Python-to-Mindustry Logic (mlog) Compiler & Decompiler
 
+[![PyPI - Version](https://img.shields.io/pypi/v/mlog-py)](https://pypi.org/project/mlog-py/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mlog-py)](https://pypi.org/project/mlog-py/)
+[![PyPI - Status](https://img.shields.io/pypi/status/mlog-py)](https://pypi.org/project/mlog-py/)
+[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/annguyen2k8/mlog-py/publish.yml)](https://github.com/annguyen2k8/mlog-py/actions/workflows/publish.yml)
+[![License: MIT](https://img.shields.io/github/license/annguyen2k8/mlog-py)](https://github.com/annguyen2k8/mlog-py/blob/main/LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/annguyen2k8/mlog-py)](https://github.com/annguyen2k8/mlog-py/stargazers)
+[![GitHub Last Commit](https://img.shields.io/github/last-commit/annguyen2k8/mlog-py)](https://github.com/annguyen2k8/mlog-py/commits/main)
+
 A robust, verified compiler and decompiler suite connecting a strongly-typed subset of Python with vanilla Mindustry Logic (mlog).
 
 ---
