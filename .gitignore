@@ -26,3 +26,6 @@ env/
 .DS_Store
 *.swp
 *.swo
+
+# Logs
+*.log
