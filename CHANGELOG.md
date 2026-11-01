@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-01
+
+### Added
+- **CLI Compile Stdin Streaming & Shell Piping**:
+  - Full support for reading Python source code from standard input (`mlog compile -` or omitted input argument), bringing full symmetry with `mlog decompile`.
+  - Automatic piped fallback when piping input without arguments (e.g. `cat script.py | mlog`).
+  - Interactive TTY prompts with instructions, `Ctrl+D` (Unix) / `Ctrl+Z (Enter)` (Windows) guides, and `EOF` / `__EOF__` sentinel support on empty lines.
+  - Interactive output destination prompt when running in an interactive terminal.
+  - Dynamically configured CLI parser `prog` based on invoked script name (`mlog` or `mlog-py`).
+- **Compiler Error Diagnostics & Typo Suggestions**:
+  - Integrated `difflib.get_close_matches` across `ASTValidator` to suggest the closest matching identifier (`Did you mean '...'?`) on typos across `draw`, `control`, `ucontrol`, `ulocate`, `op`, `cutscene`, `sound`, `music`, `marker`, `Vars`, user-defined `IntEnum` members, and symbols imported from `mlog`.
+  - Added user-defined function typo suggestions when `allow_functions=True`.
+  - Added compiler-stage attribute typo suggestions for enum registry members (e.g. `Items.coall` -> `Items.COAL`).
+  - Added actionable diagnostic hints for unsupported Python heap collections (`list`, `dict`, `set`), explaining Mindustry's flat register/hardware memory model and directing developers to `Array('cell1', size, dtype=...)`.
+  - Preserved exact `CompileError` exception hierarchy, location metadata (`filename`, `line`, `col`), and error message prefixes for 100% backward compatibility.
+- **`decompile()` Overload Typing & Pyright Verification**:
+  - Added `@overload` signatures for `decompile()`: `return_source_map: Literal[False]` resolves strictly to `str`, `return_source_map: Literal[True]` resolves strictly to `Tuple[str, Any]`, and boolean fallback resolves to `Union[str, Tuple[str, Any]]`.
+  - PEP 484 explicit re-export `from enum import Enum, IntEnum as IntEnum` in typing stubs.
+  - Automated clean-wheel typing verification test (`test_pyright_clean_wheel_typing_verification`) validating the built wheel in an isolated virtual environment against Pyright 1.1.414 with 0 errors and 0 warnings.
+- **Canonical Top-Level `mlog/` Package Architecture**:
+  - Migrated primary distribution package to top-level `mlog/` namespace, eliminating internal `src` directory from wheel distribution and preventing site-packages pollution.
+  - Packaged PEP 561 `py.typed` marker and canonical `mlog/__init__.pyi` typing stubs.
+  - Maintained zero-breaking-change backward compatibility for existing `from src.mlog import ...` imports via transparent shim with exact object identity.
+  - Dual CLI entrypoints `mlog` and `mlog-py` registered in `pyproject.toml`.
+  - Full execution support for `python -m mlog` and `python -m mlog.metadata`.
+
+### Changed
+- CLI graceful cancellation: `KeyboardInterrupt` (Ctrl+C) during compilation, decompilation, and JVM engine validation cleanly exits with standard UNIX exit code `130` without raw stack traces.
+- Symmetrical documentation in `examples/README.md` showcasing modern `mlog compile` and `mlog decompile` commands alongside piped shell usage.
+
 ## [0.7.0] - 2026-10-31
 
 ### Added
