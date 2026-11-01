@@ -37,8 +37,11 @@ These examples show how to write Python code that compiles directly into Mindust
 From the repository root:
 
 ```bash
-# Compile to console output
-mlog-py compile examples/compiler/for_loop.py
+# Compile to console output (using mlog, mlog-py, or python -m mlog)
+mlog compile examples/compiler/for_loop.py
+
+# Or piped from stdin:
+cat examples/compiler/for_loop.py | mlog compile
 
 # Or run the integrated demonstration runner
 python3 examples/compiler/roundtrip_demo.py

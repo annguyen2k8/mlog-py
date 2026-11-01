@@ -226,17 +226,65 @@ def compile_py(
 
 def _cli_compile(args: argparse.Namespace) -> int:
     """Handle compile subcommand: Python DSL -> MLog."""
-    try:
-        with open(args.input_file, "r", encoding="utf-8") as f:
-            source = f.read()
-    except OSError as e:
-        _cli_print(f"Error reading file '{args.input_file}': {e}", file=sys.stderr)
+    input_source = args.input_file
+    is_stdin = (input_source is None or input_source == "-")
+
+    if is_stdin:
+        filename = "<stdin>"
+        is_tty = hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
+        if is_tty:
+            eof_key = "Ctrl+Z (Enter)" if sys.platform == "win32" else "Ctrl+D"
+            _cli_print(
+                "[mlog-py] Enter Python DSL code below.\n"
+                f"[mlog-py] Finish input with EOF ({eof_key}) or type 'EOF' on an empty line:",
+                file=sys.stderr,
+            )
+            lines: List[str] = []
+            try:
+                while True:
+                    line = sys.stdin.readline()
+                    if not line:
+                        break
+                    stripped = line.rstrip("\r\n")
+                    if stripped in ("EOF", "__EOF__"):
+                        break
+                    lines.append(line)
+                source = "".join(lines)
+            except KeyboardInterrupt:
+                _cli_print("\n[mlog-py] Compilation aborted by user.", file=sys.stderr)
+                return 130
+        else:
+            try:
+                raw_input = sys.stdin.read()
+                clean_lines = []
+                for line in raw_input.splitlines(True):
+                    if line.rstrip("\r\n") in ("EOF", "__EOF__"):
+                        break
+                    clean_lines.append(line)
+                source = "".join(clean_lines)
+            except KeyboardInterrupt:
+                _cli_print("\n[mlog-py] Compilation aborted by user.", file=sys.stderr)
+                return 130
+    else:
+        filename = input_source
+        try:
+            with open(input_source, "r", encoding="utf-8") as f:
+                source = f.read()
+        except OSError as e:
+            _cli_print(f"Error reading file '{input_source}': {e}", file=sys.stderr)
+            return 1
+        except KeyboardInterrupt:
+            _cli_print("\n[mlog-py] Compilation aborted by user.", file=sys.stderr)
+            return 130
+
+    if not source.strip():
+        _cli_print("Compilation error: input is empty", file=sys.stderr)
         return 1
 
     try:
         result = compile_py(
             source=source,
-            filename=args.input_file,
+            filename=filename,
             validate=not args.no_validate,
             allow_functions=not args.no_functions,
             fold_constants=not getattr(args, "no_fold_constants", False),
@@ -270,12 +318,30 @@ def _cli_compile(args: argparse.Namespace) -> int:
             _cli_print(f"  [{idx:3d}]: {line}")
         _cli_print()
 
-    if args.output_file:
+    output_target = args.output_file
+
+    if not output_target and is_stdin and is_tty:
         try:
-            with open(args.output_file, "w", encoding="utf-8") as f:
+            save_path = _read_interactive_line(
+                "[mlog-py] Enter output file path (.mlog) [press Enter to print to stdout]: "
+            )
+            if save_path:
+                output_target = save_path
+        except KeyboardInterrupt:
+            _cli_print("\n[mlog-py] Compilation aborted by user.", file=sys.stderr)
+            return 130
+
+    if output_target:
+        try:
+            parent_dir = os.path.dirname(output_target)
+            if parent_dir and not os.path.exists(parent_dir):
+                os.makedirs(parent_dir, exist_ok=True)
+            with open(output_target, "w", encoding="utf-8") as f:
                 f.write(result.mlog)
+            if not args.output_file:
+                _cli_print(f"[mlog-py] Saved compiled bytecode to '{output_target}'.", file=sys.stderr)
         except OSError as e:
-            _cli_print(f"Error writing output file '{args.output_file}': {e}", file=sys.stderr)
+            _cli_print(f"Error writing output file '{output_target}': {e}", file=sys.stderr)
             return 1
     elif not args.debug:
         try:
@@ -451,8 +517,12 @@ def _cli_decompile(args: argparse.Namespace) -> int:
 
 def _build_cli_parser() -> argparse.ArgumentParser:
     """Build the argument parser supporting 'compile' and 'decompile' subcommands."""
+    prog = "mlog"
+    if sys.argv and os.path.basename(sys.argv[0]) in ("mlog", "mlog-py"):
+        prog = os.path.basename(sys.argv[0])
+
     parser = argparse.ArgumentParser(
-        prog="mlog-py",
+        prog=prog,
         description="Compile a controlled Python subset into Mindustry Logic (mlog) or decompile mlog to Python DSL.",
     )
     parser.add_argument(
@@ -474,7 +544,12 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         help="Compile Python DSL -> MLog",
         description="Compile Python DSL into Mindustry Logic (mlog).",
     )
-    compile_p.add_argument("input_file", help="Input Python source file (.py)")
+    compile_p.add_argument(
+        "input_file",
+        nargs="?",
+        default=None,
+        help="Input Python source file (.py) or '-' / omitted to read from stdin",
+    )
     compile_p.add_argument(
         "-o", "--output", dest="output_file", help="Output file path (.mlog)"
     )
@@ -554,9 +629,16 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     raw_args = list(sys.argv[1:] if argv is None else argv)
 
+    # When no arguments are provided:
+    # If stdin is piped/redirected (not a TTY), default to compiling from stdin
+    if not raw_args:
+        is_tty = hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
+        if not is_tty:
+            raw_args = ["compile", "-"]
+
     # Backward compatibility:
     # If first argument is not a known subcommand ('compile', 'decompile', '-h', '--help', empty),
-    # default to the 'compile' command (e.g. `mlog-py script.py -o script.mlog`).
+    # default to the 'compile' command (e.g. `mlog-py script.py -o script.mlog` or `mlog -`).
     if raw_args and raw_args[0] not in ("compile", "decompile", "-h", "--help", "-V", "--version"):
         raw_args = ["compile"] + raw_args
 

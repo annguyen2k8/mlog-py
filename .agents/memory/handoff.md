@@ -3,20 +3,28 @@
 - **Updated**: 2026-11-01
 - **Agent**: Antigravity / Gemini 3.8 Flash
 - **Status**: done
-- **Goal**: Finalize README documentation, commit, and push verified packaging & API migration to origin/main.
+- **Goal**: Implement UX/DX improvements for `mlog-py` (compiler diagnostics, typo suggestions, CLI stdin streaming, onboarding examples).
 
 ## Done
 
-- Finalized `README.md` incorporating updated `mlog` CLI commands (`mlog`, `mlog-py`, `python -m mlog`), public API examples (`from mlog import compile_py, decompile, decompile_with_source_map`), canonical `mlog/` package structure diagram, and organized Mindustry platform & compiler/decompiler constraints under Limitations.
-- Verified packaging and wheel suite in clean isolated virtual environment: 6/6 passed.
-- Verified all memory, import, and stub tests: 24/24 passed.
-- Verified fast test tier (712 passed) and full test tier (1,319 passed with 0 skipped on real Mindustry v160.7 engine).
-- Successfully pushed linear fast-forward sequence of 5 commits (`c0a6289`..`30f0dfd`) to `origin/main`.
-- Verified working tree is clean and `main` is up to date with `origin/main`.
+- **Compiler Error Diagnostics & Typo Suggestions**:
+  - Enhanced `ASTValidator` in `mlog/parser.py` and `src/parser.py` using `difflib.get_close_matches` to suggest closest matching identifiers on typos across `draw`, `control`, `ucontrol`, `ulocate`, `op`, `Vars`, and symbols imported from `mlog`.
+  - Added actionable diagnostic hints for unsupported Python collections (`list`, `dict`, `set`), explaining Mindustry's flat register/hardware memory model and directing developers to `Array('cell1', size, dtype=...)` while preserving existing `CompileError` and exception types.
+- **CLI Compile Stdin Streaming**:
+  - Updated `mlog compile` in `mlog/__init__.py` and `src/mlog.py` to support stdin streaming via `-` or omitted input argument, matching `mlog decompile`.
+  - Added automatic piped fallback when running `mlog` with no arguments on non-TTY pipes (e.g. `cat script.py | mlog`).
+  - Added interactive TTY prompts with `Ctrl+D` / `EOF` termination and interactive output destination prompts.
+  - Dynamically configured CLI parser `prog` based on invoked name (`mlog` or `mlog-py`).
+- **Onboarding & Examples**:
+  - Updated `examples/README.md` with modern CLI commands (`mlog compile`, `cat ... | mlog compile`, `mlog decompile`).
+  - Verified all 21 example scripts in `examples/compiler/` compile cleanly with `allow_functions=True`.
+- **Testing & Verification**:
+  - Created regression suite in `tests/test_ux_and_cli_compile_stdin.py` (21 unit tests covering piped stdin, interactive TTY, EOF sentinels, empty input validation, typo suggestions, and diagnostic hints).
+  - Verified fast tier (733/733 passed) and JVM Mindustry v160.7 engine tier (607/607 passed).
 
 ## Next
 
-- None (all planned tasks completed).
+- none
 
 ## Blocked
 
@@ -24,11 +32,8 @@
 
 ## Verification
 
-- `python -m unittest tests.test_agent_memory -v`: 6/6 passed.
-- `python -m unittest tests.test_imports_and_stub -v`: 18/18 passed.
-- `python -m unittest tests.test_packaging_and_wheel -v`: 6/6 passed.
-- `python run_tests.py --fast`: 712/712 passed (0 skipped).
-- `python run_tests.py --jvm`: 607/607 passed (0 skipped).
-- `python run_tests.py --all`: 1,319/1,319 passed (0 skipped).
-- `git status`: `Your branch is up to date with 'origin/main'. nothing to commit, working tree clean`.
+- `python -m unittest tests.test_ux_and_cli_compile_stdin -v`: 21/21 passed.
+- `python -m unittest tests.test_imports_and_stub tests.test_agent_memory -v`: 24/24 passed.
+- `python run_tests.py --fast`: 733/733 passed (0 failures, 0 errors, 0 skipped).
+- `python run_tests.py --jvm`: 607/607 passed (0 failures, 0 errors, 0 skipped).
 - `git diff --check`: 0 issues.

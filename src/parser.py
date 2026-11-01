@@ -1,6 +1,7 @@
 """Python AST parser and validator for the controlled Mindustry Logic subset."""
 
 import ast
+import difflib
 from typing import Set, Union
 
 from .errors import CompileError, SourceLocation
@@ -41,6 +42,13 @@ UNSUPPORTED_NAMES = {
     ast.Await: "await expression",
     ast.Starred: "starred expression (*args)",
     ast.Slice: "slice",
+}
+
+UNSUPPORTED_HINTS = {
+    ast.List: " (Mindustry processors have no heap; use Array('cell1', size, dtype=...) for hardware memory cells/banks instead)",
+    ast.Dict: " (Mindustry processors have no heap memory or dynamic object collections)",
+    ast.Set: " (Mindustry processors have no heap memory or dynamic collections)",
+    ast.Lambda: " (use named function definitions 'def func(...):' instead)",
 }
 
 
@@ -122,7 +130,8 @@ class ASTValidator(ast.NodeVisitor):
                 pass
             else:
                 name = UNSUPPORTED_NAMES[node_type]
-                self.error(f"unsupported Python feature: {name}", node)
+                hint = UNSUPPORTED_HINTS.get(node_type, "")
+                self.error(f"unsupported Python feature: {name}{hint}", node)
 
         # Disallow any node that is not in the whitelist
         allowed_nodes = (
@@ -201,7 +210,9 @@ class ASTValidator(ast.NodeVisitor):
                 self.error(f"import aliasing ('as {alias.asname}') is not supported", node)
             if node.module in ("mlog", "src.mlog"):
                 if alias.name not in MLOG_EXPORTS:
-                    self.error(f"cannot import name '{alias.name}' from '{node.module}'", node)
+                    matches = difflib.get_close_matches(alias.name, MLOG_EXPORTS, n=1)
+                    hint = f". Did you mean '{matches[0]}'?" if matches else ""
+                    self.error(f"cannot import name '{alias.name}' from '{node.module}'{hint}", node)
             elif node.module in ("mlog_registry", "src.mlog_registry"):
                 from .mlog_registry import ENUM_CLASS_TO_REGISTRY
                 if alias.name not in ENUM_CLASS_TO_REGISTRY and not alias.name.startswith("REG_"):
@@ -212,7 +223,9 @@ class ASTValidator(ast.NodeVisitor):
         if isinstance(node.value, ast.Name):
             if node.value.id == "Vars":
                 if node.attr not in BUILTIN_VARIABLES_DATA:
-                    self.error(f"unknown Mindustry built-in variable: 'Vars.{node.attr}'", node)
+                    matches = difflib.get_close_matches(node.attr, BUILTIN_VARIABLES_DATA, n=1)
+                    hint = f". Did you mean 'Vars.{matches[0]}'?" if matches else ""
+                    self.error(f"unknown Mindustry built-in variable: 'Vars.{node.attr}'{hint}", node)
                 return
             if node.value.id == "draw":
                 DRAW_METHODS = {
@@ -221,12 +234,16 @@ class ASTValidator(ast.NodeVisitor):
                     "triangle", "image", "print", "translate", "scale", "rotate", "reset", "flush",
                 }
                 if node.attr not in DRAW_METHODS:
-                    self.error(f"unknown draw method: 'draw.{node.attr}'", node)
+                    matches = difflib.get_close_matches(node.attr, DRAW_METHODS, n=1)
+                    hint = f". Did you mean 'draw.{matches[0]}'?" if matches else f" (valid methods: {', '.join(sorted(DRAW_METHODS))})"
+                    self.error(f"unknown draw method: 'draw.{node.attr}'{hint}", node)
                 return
             if node.value.id == "control":
                 CONTROL_METHODS = {"enabled", "shoot", "shootp", "config", "color"}
                 if node.attr not in CONTROL_METHODS:
-                    self.error(f"unknown control method: 'control.{node.attr}'", node)
+                    matches = difflib.get_close_matches(node.attr, CONTROL_METHODS, n=1)
+                    hint = f". Did you mean 'control.{matches[0]}'?" if matches else f" (valid methods: {', '.join(sorted(CONTROL_METHODS))})"
+                    self.error(f"unknown control method: 'control.{node.attr}'{hint}", node)
                 return
             if node.value.id == "ucontrol":
                 UCONTROL_METHODS = {
@@ -236,12 +253,16 @@ class ASTValidator(ast.NodeVisitor):
                     "mine", "flag", "build", "deconstruct", "get_block", "getBlock", "within", "unbind",
                 }
                 if node.attr not in UCONTROL_METHODS:
-                    self.error(f"unknown ucontrol method: '{node.value.id}.{node.attr}'", node)
+                    matches = difflib.get_close_matches(node.attr, UCONTROL_METHODS, n=1)
+                    hint = f". Did you mean 'ucontrol.{matches[0]}'?" if matches else f" (valid methods: {', '.join(sorted(UCONTROL_METHODS))})"
+                    self.error(f"unknown ucontrol method: '{node.value.id}.{node.attr}'{hint}", node)
                 return
             if node.value.id == "ulocate":
                 ULOCATE_METHODS = {"ore", "building", "spawn", "damaged"}
                 if node.attr not in ULOCATE_METHODS:
-                    self.error(f"unknown ulocate method: '{node.value.id}.{node.attr}'", node)
+                    matches = difflib.get_close_matches(node.attr, ULOCATE_METHODS, n=1)
+                    hint = f". Did you mean 'ulocate.{matches[0]}'?" if matches else f" (valid methods: {', '.join(sorted(ULOCATE_METHODS))})"
+                    self.error(f"unknown ulocate method: '{node.value.id}.{node.attr}'{hint}", node)
                 return
             if node.value.id == "op":
                 OP_METHODS = {
@@ -256,7 +277,9 @@ class ASTValidator(ast.NodeVisitor):
                     "noise", "logn",
                 }
                 if node.attr not in OP_METHODS:
-                    self.error(f"unknown op method: 'op.{node.attr}'", node)
+                    matches = difflib.get_close_matches(node.attr, OP_METHODS, n=1)
+                    hint = f". Did you mean 'op.{matches[0]}'?" if matches else ""
+                    self.error(f"unknown op method: 'op.{node.attr}'{hint}", node)
                 return
             if node.value.id == "cutscene":
                 CUTSCENE_METHODS = {
@@ -511,8 +534,10 @@ class ASTValidator(ast.NodeVisitor):
             if self.allow_functions and func_name in self.defined_functions:
                 pass
             else:
+                matches = difflib.get_close_matches(func_name, ALLOWED_INTRINSICS, n=1)
+                hint = f". Did you mean '{matches[0]}'?" if matches else ""
                 self.error(
-                    f"unsupported function call: '{func_name}'. "
+                    f"unsupported function call: '{func_name}'{hint}. "
                     f"Allowed intrinsics: {', '.join(sorted(ALLOWED_INTRINSICS))}",
                     node,
                 )
