@@ -32,6 +32,9 @@
   - Ran pure-Python test suite (`python run_tests.py --fast`): 771/771 passed.
   - Ran Mindustry v160.7 JVM test suite (`python run_tests.py --jvm`): 607/607 passed.
   - Verified example byte-for-byte reproducibility (`tests.test_compiler_examples`): 100% passed.
+- **Review & Push**:
+  - Full diff review verified semantic equivalence with Mindustry v160.7 source.
+  - Pushed commit `0ef7370` to `origin/main` without force-push or history rewrite.
 
 ## Next
 
@@ -44,7 +47,8 @@
 ## Verification
 
 - `python -m unittest tests.test_p1_ergonomics`: 23/23 passed.
-- `python -m unittest tests.test_imports_and_stub tests.test_compiler_examples tests.test_agent_memory`: 29/29 passed.
+- `python -m unittest tests.test_imports_and_stub tests.test_compiler_examples tests.test_decompiler_examples tests.test_agent_memory`: 56/56 passed.
 - `python run_tests.py --jvm`: 607/607 passed.
 - `python run_tests.py --fast`: 771/771 passed.
 - `git diff --check`: 0 whitespace errors.
+- `git push origin main`: successfully pushed `0ef7370` to `origin/main`.
