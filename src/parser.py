@@ -319,6 +319,25 @@ class ASTValidator(ast.NodeVisitor):
                     hint = f". Did you mean 'marker.{matches[0]}'?" if matches else f" (valid methods: {', '.join(sorted(MARKER_METHODS))})"
                     self.error(f"unknown marker method: 'marker.{node.attr}'{hint}", node)
                 return
+            if node.value.id == "status":
+                STATUS_METHODS = {"apply", "clear"}
+                if node.attr not in STATUS_METHODS:
+                    matches = difflib.get_close_matches(node.attr, STATUS_METHODS, n=1)
+                    hint = f". Did you mean 'status.{matches[0]}'?" if matches else f" (valid methods: {', '.join(sorted(STATUS_METHODS))})"
+                    self.error(f"unknown status method: 'status.{node.attr}'{hint}", node)
+                return
+            if node.value.id == "fetch":
+                FETCH_METHODS = {
+                    "unit", "unit_count", "unitCount",
+                    "player", "player_count", "playerCount",
+                    "core", "core_count", "coreCount",
+                    "build", "build_count", "buildCount",
+                }
+                if node.attr not in FETCH_METHODS:
+                    matches = difflib.get_close_matches(node.attr, FETCH_METHODS, n=1)
+                    hint = f". Did you mean 'fetch.{matches[0]}'?" if matches else f" (valid methods: {', '.join(sorted(FETCH_METHODS))})"
+                    self.error(f"unknown fetch method: 'fetch.{node.attr}'{hint}", node)
+                return
             if node.value.id in ENUM_CLASS_TO_REGISTRY:
                 return
             if self.constant_registry.has_namespace(node.value.id):
@@ -330,12 +349,12 @@ class ASTValidator(ast.NodeVisitor):
                 return
         SUPPORTED_NAMESPACES = {
             "Vars", "draw", "control", "ucontrol", "ulocate",
-            "cutscene", "sound", "music", "marker", "op",
+            "cutscene", "sound", "music", "marker", "op", "status", "fetch",
         } | set(ENUM_CLASS_TO_REGISTRY.keys())
         close = difflib.get_close_matches(node.value.id, SUPPORTED_NAMESPACES, n=1) if isinstance(node.value, ast.Name) else []
         hint = f". Did you mean '{close[0]}'?" if close else ""
         self.error(
-            f"attribute access is only supported on DSL enum types ({', '.join(sorted(ENUM_CLASS_TO_REGISTRY.keys()))}), user-defined IntEnums, 'Vars', 'draw', 'control', 'ucontrol', 'ulocate', 'cutscene', 'sound', 'music', 'marker', and 'op'{hint}",
+            f"attribute access is only supported on DSL enum types ({', '.join(sorted(ENUM_CLASS_TO_REGISTRY.keys()))}), user-defined IntEnums, 'Vars', 'draw', 'control', 'ucontrol', 'ulocate', 'cutscene', 'sound', 'music', 'marker', 'op', 'status', and 'fetch'{hint}",
             node,
         )
 
@@ -516,7 +535,7 @@ class ASTValidator(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call):
         CALLABLE_NAMESPACES = (
             "draw", "control", "ucontrol", "ulocate", "op",
-            "cutscene", "sound", "music", "marker",
+            "cutscene", "sound", "music", "marker", "status", "fetch",
         )
         if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
             if node.func.value.id in CALLABLE_NAMESPACES:

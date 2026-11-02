@@ -377,13 +377,13 @@ select(res, flag, 1, 2)                     # Emits: select res notEqual flag 0 
 Mindustry Logic v7+ supports packing and unpacking 64-bit RGBA colors:
 
 ```python
-from mlog import packcolor, unpackcolor
+from mlog import draw, packcolor, unpackcolor
 
 # Pack RGBA channels in [0, 1] into a 64-bit packed double color
 col = packcolor(1.0, 0.5, 0.0, 1.0)           # Emits: packcolor col 1.0 0.5 0.0 1.0
 
 # packcolor can be nested directly in expressions and hardware calls
-draw("color", packcolor(1, 0, 0, 1))
+draw.col(packcolor(1, 0, 0, 1))               # Emits: draw col __tmp0 0 0 0 0 0
 
 # Unpack a packed double color into 4 destination variables
 unpackcolor(r, g, b, a, col)                  # Emits: unpackcolor r g b a col
@@ -502,6 +502,60 @@ ulocate.spawn(outX, outY, found)                                         # Emits
 ulocate.damaged(outX, outY, found, b)                                    # Emits: ulocate damaged core true @copper outX outY found b
 ```
 
+### Unit Radar with Ergonomic Defaults (`uradar`)
+
+The bound unit radar intrinsic `uradar` supports optional arguments matching upstream Mindustry v160.7 statement defaults (`target1='enemy'`, `target2='any'`, `target3='any'`, `sort='distance'`, `sort_order=1`):
+
+```python
+from mlog import uradar, RadarTarget, RadarSort
+
+# All trailing parameters default to standard scanning criteria:
+enemy = uradar()                                                 # Emits: uradar enemy any any distance 0 1 enemy
+closest_attacker = uradar(RadarTarget.ENEMY, RadarTarget.ATTACKER) # Emits: uradar enemy attacker any distance 0 1 closest_attacker
+boss = uradar("enemy", "boss", "any", RadarSort.MAX_HEALTH, 0)   # Emits: uradar enemy boss any maxHealth 0 0 boss
+
+# Legacy positional statements (6 and 7 operands) are 100% backward-compatible:
+uradar(RadarTarget.ENEMY, RadarTarget.ANY, RadarTarget.ANY, RadarSort.DISTANCE, 1, out_unit)
+```
+
+### Status Effect Helpers (`status.apply`, `status.clear`)
+
+The `status` callable namespace provides modern helpers for applying or clearing unit status effects with automatic literal boolean emission (`true`/`false`):
+
+```python
+from mlog import status, StatusEffects
+
+status.apply(my_unit, StatusEffects.BURNING)             # Emits: status false @status-burning my_unit 0
+status.apply(my_unit, "@status-freezing", 10)           # Emits: status false @status-freezing my_unit 10
+status.clear(my_unit, StatusEffects.BURNING)             # Emits: status true @status-burning my_unit 0
+
+# Legacy function-call syntax is 100% preserved:
+status(False, StatusEffects.BURNING, my_unit, 10)       # Emits: status false @status-burning my_unit 10
+status(True, "@status-burning", my_unit)                # Emits: status true @status-burning my_unit 0
+```
+
+### Entity Query Callable Namespace (`fetch.<method>`)
+
+The `fetch` callable namespace provides dedicated methods for world entity and entity count queries with automatic dummy operand filling:
+
+```python
+from mlog import fetch, Teams, Units, FetchType
+
+# Expression form:
+unit = fetch.unit(Teams.SHARDED, 0, Units.DAGGER)       # Emits: fetch unit unit @sharded 0 @dagger
+dagger_count = fetch.unit_count(Teams.SHARDED, Units.DAGGER) # Emits: fetch unitCount dagger_count @sharded 0 @dagger
+my_core = fetch.core(Teams.SHARDED, 0)                  # Emits: fetch core my_core @sharded 0 0
+core_count = fetch.core_count(Teams.SHARDED)            # Emits: fetch coreCount core_count @sharded 0 0
+player = fetch.player(Teams.SHARDED, 0)                 # Emits: fetch player player @sharded 0 0
+player_count = fetch.player_count(Teams.SHARDED)        # Emits: fetch playerCount player_count @sharded 0 0
+router = fetch.build(Teams.SHARDED, 0, "@router")       # Emits: fetch build router @sharded 0 @router
+router_count = fetch.build_count(Teams.SHARDED, "@router") # Emits: fetch buildCount router_count @sharded 0 @router
+
+# Legacy function-call syntax is 100% preserved:
+res = fetch(FetchType.UNIT, Teams.SHARDED, 0, Units.DAGGER)
+fetch(FetchType.CORE, res, Teams.SHARDED)
+```
+
 ### Building Control Callable Namespace Object (`control.<method>`)
 
 Mindustry v160.7 exposes exactly five building-control modes from `LAccess`: `enabled`, `shoot`, `shootp`, `config`, and `color`. The `control` symbol is both directly callable (legacy generic form) and an object with typed methods. Each method injects the trailing dummy operands required by the six-operand `control` instruction:
@@ -564,7 +618,7 @@ fl = op.floor(val)                           # Emits: op floor fl val 0
 # 3. Naming Aliases (snake_case and camelCase)
 diff = op.angle_diff(a1, a2)                 # Emits: op angleDiff diff a1 a2 (alias: angleDiff)
 hypot = op.len(dx, dy)                       # Emits: op len hypot dx dy (alias: length)
-l10 = op.log_10(val)                         # Emits: op log10 l10 val 0 (alias: log10)
+l10 = op.log10(val)                          # Emits: op log10 l10 val 0 (alias: log_10)
 neq = op.not_equal(a, b)                     # Emits: op notEqual neq a b (alias: notEqual)
 lte = op.less_than_eq(a, b)                  # Emits: op lessThanEq lte a b (alias: lessThanEq)
 

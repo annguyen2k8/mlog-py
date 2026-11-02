@@ -1123,6 +1123,10 @@ class Compiler:
                     return self.compile_music_method(call, target_dest=target_dest, is_statement=is_statement)
                 elif ns == "marker":
                     return self.compile_marker_method(call, target_dest=target_dest, is_statement=is_statement)
+                elif ns == "status":
+                    return self.compile_status_method(call, target_dest=target_dest, is_statement=is_statement)
+                elif ns == "fetch":
+                    return self.compile_fetch_method(call, target_dest=target_dest, is_statement=is_statement)
             self.error(
                 f"unsupported method call on '{call.func.value.id if isinstance(call.func.value, ast.Name) else 'object'}'",
                 call,
@@ -1513,13 +1517,13 @@ class Compiler:
                 )
 
         elif func_name == "uradar":
-            if len(args) == 5 and (target_dest is not None or not is_statement):
+            if 0 <= len(args) <= 5 and (target_dest is not None or not is_statement):
                 dest = target_dest if target_dest is not None else self.new_temp(loc)
-                t1 = self.validate_arg(self.format_intrinsic_arg(args[0], is_ident=True), REG_RADAR_TARGETS, self.loc(args[0]))
-                t2 = self.validate_arg(self.format_intrinsic_arg(args[1], is_ident=True), REG_RADAR_TARGETS, self.loc(args[1]))
-                t3 = self.validate_arg(self.format_intrinsic_arg(args[2], is_ident=True), REG_RADAR_TARGETS, self.loc(args[2]))
-                sort = self.validate_arg(self.format_intrinsic_arg(args[3], is_ident=True), REG_RADAR_SORTS, self.loc(args[3]))
-                sort_order = str(self.format_intrinsic_arg(args[4], is_ident=False))
+                t1 = self.validate_arg(self.format_intrinsic_arg(args[0], is_ident=True), REG_RADAR_TARGETS, self.loc(args[0])) if len(args) >= 1 else "enemy"
+                t2 = self.validate_arg(self.format_intrinsic_arg(args[1], is_ident=True), REG_RADAR_TARGETS, self.loc(args[1])) if len(args) >= 2 else "any"
+                t3 = self.validate_arg(self.format_intrinsic_arg(args[2], is_ident=True), REG_RADAR_TARGETS, self.loc(args[2])) if len(args) >= 3 else "any"
+                sort = self.validate_arg(self.format_intrinsic_arg(args[3], is_ident=True), REG_RADAR_SORTS, self.loc(args[3])) if len(args) >= 4 else "distance"
+                sort_order = str(self.format_intrinsic_arg(args[4], is_ident=False)) if len(args) >= 5 else "1"
                 self.instructions.append(
                     IRRaw(
                         opcode="uradar",
@@ -1560,7 +1564,7 @@ class Compiler:
                 return params[-1]
             else:
                 self.error(
-                    "invalid arguments for uradar: expected uradar(target1, target2, target3, sort, sort_order, output) or output = uradar(target1, target2, target3, sort, sort_order)",
+                    "invalid arguments for uradar: expected uradar([target1, target2, target3, sort, sort_order]) (expression form: 0-5 args) or uradar(target1, target2, target3, sort, sort_order, output) (statement form)",
                     call,
                 )
 
@@ -3430,6 +3434,308 @@ class Compiler:
             return "0"
 
         self.error(f"unknown marker method: 'marker.{method_name}'", call)
+
+    def compile_status_method(
+        self,
+        call: ast.Call,
+        target_dest: Optional[str] = None,
+        is_statement: bool = False,
+    ) -> str:
+        """Compile status.<method>(...) call into Mindustry 'status' instruction."""
+        loc = self.loc(call)
+        assert isinstance(call.func, ast.Attribute)
+        method_name = call.func.attr
+        args = call.args
+        ns = call.func.value.id if isinstance(call.func.value, ast.Name) else "status"
+
+        if method_name == "apply":
+            # status.apply(unit, effect, [duration=0]) (2 or 3 args, supports keyword arguments)
+            unit_node = None
+            effect_node = None
+            duration_node = None
+
+            kw_map = {kw.arg: kw.value for kw in call.keywords if kw.arg}
+            if any(k not in ("unit", "effect", "duration") for k in kw_map):
+                self.error(
+                    f"invalid keyword arguments for {ns}.apply: expected {ns}.apply(unit, effect, [duration=0])",
+                    call,
+                )
+
+            if len(args) == 0 and kw_map:
+                unit_node = kw_map.get("unit")
+                effect_node = kw_map.get("effect")
+                duration_node = kw_map.get("duration")
+            elif len(args) == 1:
+                unit_node = args[0]
+                effect_node = kw_map.get("effect")
+                duration_node = kw_map.get("duration")
+            elif len(args) == 2:
+                unit_node = args[0]
+                effect_node = args[1]
+                duration_node = kw_map.get("duration")
+            elif len(args) == 3 and not kw_map:
+                unit_node = args[0]
+                effect_node = args[1]
+                duration_node = args[2]
+
+            if unit_node is None or effect_node is None:
+                self.error(
+                    f"invalid arguments for {ns}.apply: expected {ns}.apply(unit, effect, [duration=0])",
+                    call,
+                )
+
+            unit = str(self.format_intrinsic_arg(unit_node, is_ident=True))
+            effect_arg = self.format_intrinsic_arg(effect_node, is_ident=True)
+            effect = (
+                self.validate_arg(effect_arg, REG_STATUS_EFFECTS, self.loc(effect_node))
+                if (effect_arg.startswith("@") or effect_arg.upper().replace("-", "_") in REG_STATUS_EFFECTS.by_source_name)
+                else str(effect_arg)
+            )
+            duration = str(self.format_intrinsic_arg(duration_node, is_ident=False)) if duration_node is not None else "0"
+
+            self.instructions.append(
+                IRRaw(opcode="status", args=["false", effect, unit, duration], loc=loc)
+            )
+            return "0"
+
+        elif method_name == "clear":
+            # status.clear(unit, effect) (2 args, supports keyword arguments)
+            unit_node = None
+            effect_node = None
+
+            kw_map = {kw.arg: kw.value for kw in call.keywords if kw.arg}
+            if any(k not in ("unit", "effect") for k in kw_map):
+                self.error(
+                    f"invalid keyword arguments for {ns}.clear: expected {ns}.clear(unit, effect)",
+                    call,
+                )
+
+            if len(args) == 0 and kw_map:
+                unit_node = kw_map.get("unit")
+                effect_node = kw_map.get("effect")
+            elif len(args) == 1:
+                unit_node = args[0]
+                effect_node = kw_map.get("effect")
+            elif len(args) == 2 and not kw_map:
+                unit_node = args[0]
+                effect_node = args[1]
+
+            if unit_node is None or effect_node is None:
+                self.error(
+                    f"invalid arguments for {ns}.clear: expected {ns}.clear(unit, effect)",
+                    call,
+                )
+
+            unit = str(self.format_intrinsic_arg(unit_node, is_ident=True))
+            effect_arg = self.format_intrinsic_arg(effect_node, is_ident=True)
+            effect = (
+                self.validate_arg(effect_arg, REG_STATUS_EFFECTS, self.loc(effect_node))
+                if (effect_arg.startswith("@") or effect_arg.upper().replace("-", "_") in REG_STATUS_EFFECTS.by_source_name)
+                else str(effect_arg)
+            )
+
+            self.instructions.append(
+                IRRaw(opcode="status", args=["true", effect, unit, "0"], loc=loc)
+            )
+            return "0"
+
+        else:
+            self.error(f"unknown status method: '{ns}.{method_name}'", call)
+
+    def compile_fetch_method(
+        self,
+        call: ast.Call,
+        target_dest: Optional[str] = None,
+        is_statement: bool = False,
+    ) -> str:
+        """Compile fetch.<method>(...) call into Mindustry 'fetch' instruction."""
+        loc = self.loc(call)
+        assert isinstance(call.func, ast.Attribute)
+        method_name = call.func.attr
+        args = call.args
+        ns = call.func.value.id if isinstance(call.func.value, ast.Name) else "fetch"
+
+        if call.keywords:
+            self.error(f"keyword arguments are not supported in {ns}.{method_name}()", call)
+
+        def _format_team(node: ast.AST) -> str:
+            team_arg = self.format_intrinsic_arg(node, is_ident=True)
+            return (
+                self.validate_arg(team_arg, REG_TEAMS, self.loc(node))
+                if (team_arg.startswith("@") or team_arg.upper() in REG_TEAMS.by_source_name)
+                else str(team_arg)
+            )
+
+        # 1. unit: fetch unit <dest> <team> <index> <type|0>
+        if method_name == "unit":
+            # Expression: res = fetch.unit(team, index, [type=0]) (2 or 3 args)
+            # Statement: fetch.unit(team, index, [type=0], dest) (3 or 4 args)
+            if len(args) in (2, 3) and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                team = _format_team(args[0])
+                index = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                extra = str(self.format_intrinsic_arg(args[2], is_ident=True)) if len(args) >= 3 else "0"
+            elif len(args) in (3, 4) and is_statement and target_dest is None:
+                team = _format_team(args[0])
+                index = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                if len(args) == 3:
+                    dest = str(self.format_intrinsic_arg(args[2], is_ident=True))
+                    extra = "0"
+                else:
+                    extra = str(self.format_intrinsic_arg(args[2], is_ident=True))
+                    dest = str(self.format_intrinsic_arg(args[3], is_ident=True))
+            else:
+                self.error(
+                    f"invalid arguments for {ns}.unit: expected {ns}.unit(team, index, [type=0])",
+                    call,
+                )
+            self.instructions.append(IRRaw(opcode="fetch", args=["unit", dest, team, index, extra], loc=loc))
+            return dest
+
+        # 2. unit_count / unitCount: fetch unitCount <dest> <team> 0 <type|0>
+        elif method_name in ("unit_count", "unitCount"):
+            # Expression: res = fetch.unit_count(team, [type=0]) (1 or 2 args)
+            # Statement: fetch.unit_count(team, [type=0], dest) (2 or 3 args)
+            if len(args) in (1, 2) and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                team = _format_team(args[0])
+                extra = str(self.format_intrinsic_arg(args[1], is_ident=True)) if len(args) >= 2 else "0"
+            elif len(args) in (2, 3) and is_statement and target_dest is None:
+                team = _format_team(args[0])
+                if len(args) == 2:
+                    dest = str(self.format_intrinsic_arg(args[1], is_ident=True))
+                    extra = "0"
+                else:
+                    extra = str(self.format_intrinsic_arg(args[1], is_ident=True))
+                    dest = str(self.format_intrinsic_arg(args[2], is_ident=True))
+            else:
+                self.error(
+                    f"invalid arguments for {ns}.{method_name}: expected {ns}.{method_name}(team, [type=0])",
+                    call,
+                )
+            self.instructions.append(IRRaw(opcode="fetch", args=["unitCount", dest, team, "0", extra], loc=loc))
+            return dest
+
+        # 3. player: fetch player <dest> <team> <index> 0
+        elif method_name == "player":
+            # Expression: res = fetch.player(team, index) (2 args)
+            # Statement: fetch.player(team, index, dest) (3 args)
+            if len(args) == 2 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                team = _format_team(args[0])
+                index = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            elif len(args) == 3 and is_statement and target_dest is None:
+                team = _format_team(args[0])
+                index = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                dest = str(self.format_intrinsic_arg(args[2], is_ident=True))
+            else:
+                self.error(
+                    f"invalid arguments for {ns}.player: expected {ns}.player(team, index)",
+                    call,
+                )
+            self.instructions.append(IRRaw(opcode="fetch", args=["player", dest, team, index, "0"], loc=loc))
+            return dest
+
+        # 4. player_count / playerCount: fetch playerCount <dest> <team> 0 0
+        elif method_name in ("player_count", "playerCount"):
+            # Expression: res = fetch.player_count(team) (1 arg)
+            # Statement: fetch.player_count(team, dest) (2 args)
+            if len(args) == 1 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                team = _format_team(args[0])
+            elif len(args) == 2 and is_statement and target_dest is None:
+                team = _format_team(args[0])
+                dest = str(self.format_intrinsic_arg(args[1], is_ident=True))
+            else:
+                self.error(
+                    f"invalid arguments for {ns}.{method_name}: expected {ns}.{method_name}(team)",
+                    call,
+                )
+            self.instructions.append(IRRaw(opcode="fetch", args=["playerCount", dest, team, "0", "0"], loc=loc))
+            return dest
+
+        # 5. core: fetch core <dest> <team> <index> 0
+        elif method_name == "core":
+            # Expression: res = fetch.core(team, index) (2 args)
+            # Statement: fetch.core(team, index, dest) (3 args)
+            if len(args) == 2 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                team = _format_team(args[0])
+                index = str(self.format_intrinsic_arg(args[1], is_ident=False))
+            elif len(args) == 3 and is_statement and target_dest is None:
+                team = _format_team(args[0])
+                index = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                dest = str(self.format_intrinsic_arg(args[2], is_ident=True))
+            else:
+                self.error(
+                    f"invalid arguments for {ns}.core: expected {ns}.core(team, index)",
+                    call,
+                )
+            self.instructions.append(IRRaw(opcode="fetch", args=["core", dest, team, index, "0"], loc=loc))
+            return dest
+
+        # 6. core_count / coreCount: fetch coreCount <dest> <team> 0 0
+        elif method_name in ("core_count", "coreCount"):
+            # Expression: res = fetch.core_count(team) (1 arg)
+            # Statement: fetch.core_count(team, dest) (2 args)
+            if len(args) == 1 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                team = _format_team(args[0])
+            elif len(args) == 2 and is_statement and target_dest is None:
+                team = _format_team(args[0])
+                dest = str(self.format_intrinsic_arg(args[1], is_ident=True))
+            else:
+                self.error(
+                    f"invalid arguments for {ns}.{method_name}: expected {ns}.{method_name}(team)",
+                    call,
+                )
+            self.instructions.append(IRRaw(opcode="fetch", args=["coreCount", dest, team, "0", "0"], loc=loc))
+            return dest
+
+        # 7. build: fetch build <dest> <team> <index> <block>
+        elif method_name == "build":
+            # Expression: res = fetch.build(team, index, block) (3 args)
+            # Statement: fetch.build(team, index, block, dest) (4 args)
+            if len(args) == 3 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                team = _format_team(args[0])
+                index = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                block = str(self.format_intrinsic_arg(args[2], is_ident=True))
+            elif len(args) == 4 and is_statement and target_dest is None:
+                team = _format_team(args[0])
+                index = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                block = str(self.format_intrinsic_arg(args[2], is_ident=True))
+                dest = str(self.format_intrinsic_arg(args[3], is_ident=True))
+            else:
+                self.error(
+                    f"invalid arguments for {ns}.build: expected {ns}.build(team, index, block)",
+                    call,
+                )
+            self.instructions.append(IRRaw(opcode="fetch", args=["build", dest, team, index, block], loc=loc))
+            return dest
+
+        # 8. build_count / buildCount: fetch buildCount <dest> <team> 0 <block>
+        elif method_name in ("build_count", "buildCount"):
+            # Expression: res = fetch.build_count(team, block) (2 args)
+            # Statement: fetch.build_count(team, block, dest) (3 args)
+            if len(args) == 2 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                team = _format_team(args[0])
+                block = str(self.format_intrinsic_arg(args[1], is_ident=True))
+            elif len(args) == 3 and is_statement and target_dest is None:
+                team = _format_team(args[0])
+                block = str(self.format_intrinsic_arg(args[1], is_ident=True))
+                dest = str(self.format_intrinsic_arg(args[2], is_ident=True))
+            else:
+                self.error(
+                    f"invalid arguments for {ns}.{method_name}: expected {ns}.{method_name}(team, block)",
+                    call,
+                )
+            self.instructions.append(IRRaw(opcode="fetch", args=["buildCount", dest, team, "0", block], loc=loc))
+            return dest
+
+        else:
+            self.error(f"unknown fetch method: '{ns}.{method_name}'", call)
 
 
     def compile_fstring_print(self, node: ast.JoinedStr, loc: SourceLocation) -> str:

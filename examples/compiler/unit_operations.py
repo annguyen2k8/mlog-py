@@ -24,9 +24,9 @@ core_x, core_y, found_core, core_build = ulocate.building("core", False)
 # ore_x, ore_y, found_ore = ulocate.ore(ore)
 ore_x, ore_y, found_ore = ulocate.ore("@copper")
 
-# 4. Search for closest enemy unit using radar
-# target = uradar(target1, target2, target3, sort, sort_order)
-enemy = uradar("enemy", "any", "any", "distance", 1)
+# 4. Search for closest enemy unit using radar (with ergonomic default arguments)
+# enemy = uradar("enemy")  # defaults: target2='any', target3='any', sort='distance', sort_order=1
+enemy = uradar("enemy")
 
 # 5. Read bound unit health using sensor (target, property)
 u_health = sensor("@unit", "@health")

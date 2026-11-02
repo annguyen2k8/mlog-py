@@ -3,29 +3,35 @@
 - **Updated**: 2026-11-02
 - **Agent**: Antigravity / Gemini 3.8 Flash
 - **Status**: done
-- **Goal**: Comprehensive documentation audit and improvement across README.md, docs/, SKILL.md, and examples.
+- **Goal**: Implement P1 API Ergonomics: status.apply/clear helpers, fetch callable namespace with dummy operand injection, and uradar default arguments matching Mindustry v160.7.
 
 ## Done
 
-- **Documentation & Example Audit**:
-  - Audited all 18 Markdown files and verified all 34 local file links (0 broken links).
-  - Audited all 21 compiler examples (100% compiled to .mlog) and 12 decompiler examples (100% decompiled to .py).
-  - Fixed import resolution in standalone example runner scripts (`examples/compiler/roundtrip_demo.py`, `examples/decompiler/roundtrip_verify.py`, `examples/decompiler/sourcemap_debug.py`), adding clean repo root discovery so they execute standalone without requiring prior global pip installation.
-- **Outdated Import Elimination**:
-  - Replaced deprecated `from src.` imports in documentation examples with canonical public `from mlog import ...` across:
-    - `docs/compiler.md`: `from mlog import compile_py`
-    - `docs/decompiler.md`: `from mlog import decompile, decompile_with_source_map`
-    - `docs/source-mapping.md`: `from mlog import decompile_with_source_map`
-    - `SKILL.md`: `from mlog import compile_py, decompile`
-  - Updated metadata stub regeneration instruction in `docs/mindustry-updates.md` to `python3 -m mlog.metadata`.
-- **README.md User-Facing Enhancements**:
-  - Added explicit Python compatibility requirements (`>=3.9`, tested on 3.9 through 3.14) under the Installation section.
-  - Confirmed `Release & Publishing` internal instructions remain cleanly removed.
-  - Verified 100% of links and badge endpoints return HTTP 200.
-- **Verification & Testing**:
-  - Ran `tests.test_agent_memory` and `tests.test_imports_and_stub`: 25/25 passed.
-  - Ran all 3 example runner scripts (`roundtrip_demo.py`, `roundtrip_verify.py`, `sourcemap_debug.py`): all passed.
-  - Ran `actionlint`: 0 errors.
+- **P1 API Ergonomics Implementation**:
+  - `status.apply(unit, effect, duration=0)` and `status.clear(unit, effect)`:
+    - Added `_StatusCallable` namespace object supporting both modern method calls (`status.apply`, `status.clear`) and legacy positional calls (`status(clear, effect, unit, [duration])`).
+    - Emits exact Mindustry literal booleans (`false`/`true`) required by engine `Boolean.valueOf()`.
+    - Added parser validation for `status` methods and keyword arguments support (`unit=...`, `effect=...`, `duration=...`).
+  - `fetch` callable namespace:
+    - Added `_FetchCallable` supporting methods: `unit`, `unit_count`/`unitCount`, `player`, `player_count`/`playerCount`, `core`, `core_count`/`coreCount`, `build`, `build_count`/`buildCount`.
+    - Automatically injects upstream Mindustry v160.7 dummy operands (`0`) into output token sequence.
+    - Supports both expression forms (`dest = fetch.unit(...)`) and statement forms (`fetch.unit(..., dest)`).
+    - Preserves 100% backward compatibility for legacy `fetch(type, ...)` positional calls.
+  - `uradar` default arguments:
+    - Expanded expression form to support 0 to 5 arguments with upstream defaults: `target1="enemy"`, `target2="any"`, `target3="any"`, `sort="distance"`, `sort_order=1`.
+    - Preserves 6-arg and 7-arg statement forms.
+- **SSOT Metadata & Typing Stubs**:
+  - Updated `src/metadata.py`, `mlog/metadata.py`, and `mlog/__init__.py`.
+  - Exported `_StatusCallable` and `_FetchCallable` in `MLOG_EXPORTS`.
+  - Regenerated typing stubs (`mlog.pyi`, `mlog/__init__.pyi`, `src/mlog.pyi`) via `python -m mlog.metadata`.
+- **Testing & Verification**:
+  - Created `tests/test_p1_ergonomics.py` with 23 comprehensive regression tests covering defaults, custom arguments, keyword arguments, dummy operands, statement forms, backward compatibility, invalid calls, and pure Python runtime callability.
+  - Validated generated mlog instructions against real Mindustry v160.7 JVM engine (`validate_with_jvm`).
+  - Updated `examples/compiler/unit_operations.py` demonstrating ergonomic `uradar("enemy")`.
+  - Synchronized documentation in `docs/compiler.md` and `docs/mlog-command-coverage.md`.
+  - Ran pure-Python test suite (`python run_tests.py --fast`): 771/771 passed.
+  - Ran Mindustry v160.7 JVM test suite (`python run_tests.py --jvm`): 607/607 passed.
+  - Verified example byte-for-byte reproducibility (`tests.test_compiler_examples`): 100% passed.
 
 ## Next
 
@@ -37,9 +43,8 @@
 
 ## Verification
 
-- `python -m unittest tests.test_agent_memory tests.test_imports_and_stub`: 25/25 passed.
-- `actionlint -shellcheck=shellcheck .github/workflows/publish.yml`: passed (0 errors).
-- `python examples/compiler/roundtrip_demo.py`: passed.
-- `python examples/decompiler/roundtrip_verify.py`: passed.
-- `python examples/decompiler/sourcemap_debug.py`: passed.
+- `python -m unittest tests.test_p1_ergonomics`: 23/23 passed.
+- `python -m unittest tests.test_imports_and_stub tests.test_compiler_examples tests.test_agent_memory`: 29/29 passed.
+- `python run_tests.py --jvm`: 607/607 passed.
+- `python run_tests.py --fast`: 771/771 passed.
 - `git diff --check`: 0 whitespace errors.

@@ -967,17 +967,37 @@ def explosion(team: Union[Teams, str], x: Any, y: Any, radius: Any, damage: Any,
     """
     ...
 
-@overload
-def fetch(type: Union[FetchType, str], team: Union[Teams, str], index: Any = 0, extra: Any = 0) -> Any:
-    """Fetch entity or count and return result (expression form).
-    """
-    ...
+class _FetchCallable:
+    """Callable namespace object for Mindustry entity queries.
 
-@overload
-def fetch(type: Union[FetchType, str], result: Any, team: Union[Teams, str], index: Any = 0, extra: Any = 0) -> None:
-    """Fetch entity or count into result variable (statement form).
+    Supports both legacy function-call syntax:
+        val = fetch(FetchType.UNIT, Teams.SHARDED, 0)
+        fetch(FetchType.CORE, res, Teams.SHARDED)
+    and modern namespace method syntax:
+        val = fetch.unit(team, index, type=0)
+        count = fetch.unit_count(team, type=0)
+        val = fetch.player(team, index)
+        count = fetch.player_count(team)
+        val = fetch.core(team, index)
+        count = fetch.core_count(team)
+        val = fetch.build(team, index, block)
+        count = fetch.build_count(team, block)
     """
-    ...
+    def __call__(self, type: Union[FetchType, str], target_or_team: Any, team_or_index: Any = 0, index_or_extra: Any = 0, extra: Any = 0) -> Any: ...
+    def unit(self, team: Union[Teams, str], index: Any, type: Any = 0) -> Any: ...
+    def unit_count(self, team: Union[Teams, str], type: Any = 0) -> int: ...
+    def unitCount(self, team: Union[Teams, str], type: Any = 0) -> int: ...
+    def player(self, team: Union[Teams, str], index: Any) -> Any: ...
+    def player_count(self, team: Union[Teams, str]) -> int: ...
+    def playerCount(self, team: Union[Teams, str]) -> int: ...
+    def core(self, team: Union[Teams, str], index: Any) -> Any: ...
+    def core_count(self, team: Union[Teams, str]) -> int: ...
+    def coreCount(self, team: Union[Teams, str]) -> int: ...
+    def build(self, team: Union[Teams, str], index: Any, block: Any) -> Any: ...
+    def build_count(self, team: Union[Teams, str], block: Any) -> int: ...
+    def buildCount(self, team: Union[Teams, str], block: Any) -> int: ...
+
+fetch: _FetchCallable
 
 def format(value: Any, *values: Any) -> None:
     """Replace placeholders {0}..{9} in the print buffer matching LExecutor.FormatI.
@@ -1618,16 +1638,23 @@ def spawnwave(x: Any, y: Any, natural: Any = 0) -> None:
     """
     ...
 
-def status(clear: Any, effect: Union[StatusEffects, str], unit: Any, duration: Any = 0) -> None:
-    """Applies or clears a status effect on the target unit.
+class _StatusCallable:
+    """Callable namespace object for Mindustry status effect operations.
 
-    Args:
-        clear: 1/True to unapply/clear, 0/False to apply.
-        effect: Status effect token (StatusEffects enum or string, e.g. StatusEffects.BURNING).
-        unit: Target unit variable.
-        duration: Effect duration in seconds (default 0).
+    Supports both legacy function-call syntax:
+        status(False, StatusEffects.BURNING, unit, 10)
+        status(True, "@burning", unit)
+    and modern namespace method syntax:
+        status.apply(unit, StatusEffects.BURNING, duration=10)
+        status.apply(unit, "@burning")
+        status.clear(unit, StatusEffects.BURNING)
+        status.clear(unit, "@burning")
     """
-    ...
+    def __call__(self, clear: Any, effect: Union[StatusEffects, str], unit: Any, duration: Any = 0) -> None: ...
+    def apply(self, unit: Any, effect: Union[StatusEffects, str], duration: Any = 0) -> None: ...
+    def clear(self, unit: Any, effect: Union[StatusEffects, str]) -> None: ...
+
+status: _StatusCallable
 
 def stop() -> None:
     """Halt processor execution completely until reset.
@@ -1762,6 +1789,42 @@ def unpackcolor(r: Any, g: Any, b: Any, a: Any, value: Any) -> None:
     ...
 
 @overload
+def uradar() -> Any:
+    """Scan bound unit radar with defaults (target1='enemy', target2='any', target3='any', sort='distance', sort_order=1).
+    """
+    ...
+
+@overload
+def uradar(target1: Union[RadarTarget, str]) -> Any:
+    """Scan bound unit radar with specified target1 and defaults.
+    """
+    ...
+
+@overload
+def uradar(target1: Union[RadarTarget, str], target2: Union[RadarTarget, str]) -> Any:
+    """Scan bound unit radar with specified target1, target2 and defaults.
+    """
+    ...
+
+@overload
+def uradar(target1: Union[RadarTarget, str], target2: Union[RadarTarget, str], target3: Union[RadarTarget, str]) -> Any:
+    """Scan bound unit radar with specified targets and default sort.
+    """
+    ...
+
+@overload
+def uradar(target1: Union[RadarTarget, str], target2: Union[RadarTarget, str], target3: Union[RadarTarget, str], sort: Union[RadarSort, str]) -> Any:
+    """Scan bound unit radar with specified targets, sort, and default sort_order=1.
+    """
+    ...
+
+@overload
+def uradar(target1: Union[RadarTarget, str], target2: Union[RadarTarget, str], target3: Union[RadarTarget, str], sort: Union[RadarSort, str], sort_order: Any) -> Any:
+    """Scan bound unit radar and return found unit (expression form: target = uradar(...)).
+    """
+    ...
+
+@overload
 def uradar(target1: Union[RadarTarget, str], target2: Union[RadarTarget, str], target3: Union[RadarTarget, str], sort: Union[RadarSort, str], sort_order: Any, output: Any) -> Any:
     """Scan bound unit radar and write found unit to output (statement form).
     """
@@ -1770,12 +1833,6 @@ def uradar(target1: Union[RadarTarget, str], target2: Union[RadarTarget, str], t
 @overload
 def uradar(target1: Union[RadarTarget, str], target2: Union[RadarTarget, str], target3: Union[RadarTarget, str], sort: Union[RadarSort, str], p1: Any, p2: Any, output: Any) -> Any:
     """Scan bound unit radar with extra parameters (extended statement form).
-    """
-    ...
-
-@overload
-def uradar(target1: Union[RadarTarget, str], target2: Union[RadarTarget, str], target3: Union[RadarTarget, str], sort: Union[RadarSort, str], sort_order: Any) -> Any:
-    """Scan bound unit radar and return found unit (expression form: target = uradar(...)).
     """
     ...
 
@@ -1928,10 +1985,12 @@ __all__ = [
     "_ControlCallable",
     "_CutsceneCallable",
     "_DrawCallable",
+    "_FetchCallable",
     "_MarkerCallable",
     "_MusicCallable",
     "_OpCallable",
     "_SoundCallable",
+    "_StatusCallable",
     "_UnitControlCallable",
     "_UnitLocateCallable",
     "__version__",

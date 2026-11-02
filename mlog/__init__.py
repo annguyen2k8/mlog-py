@@ -59,6 +59,8 @@ from .metadata import (
     _SoundCallable,
     _MusicCallable,
     _MarkerCallable,
+    _StatusCallable,
+    _FetchCallable,
     sound,
     music,
     marker,

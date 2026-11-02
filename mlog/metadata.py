@@ -895,8 +895,29 @@ def _rt_spawn(*args: Any) -> Any:
 def _rt_bullet(*args: Any) -> Any:
     return None
 
-def _rt_status(*args: Any) -> None:
-    return None
+class _StatusCallable:
+    """Callable namespace object for Mindustry unit status effect operations.
+
+    Supports both legacy function-call syntax:
+        status(False, StatusEffects.BURNING, unit, 10)
+        status(True, "@burning", unit)
+    and modern namespace method syntax:
+        status.apply(unit, StatusEffects.BURNING, duration=10)
+        status.apply(unit, "@burning")
+        status.clear(unit, StatusEffects.BURNING)
+        status.clear(unit, "@burning")
+    """
+
+    def __call__(self, clear: Any, effect: Any, unit: Any, duration: Any = 0) -> None:
+        return None
+
+    def apply(self, unit: Any, effect: Any, duration: Any = 0) -> None:
+        return None
+
+    def clear(self, unit: Any, effect: Any) -> None:
+        return None
+
+_rt_status = _StatusCallable()
 
 def _rt_explosion(*args: Any) -> None:
     return None
@@ -910,8 +931,63 @@ def _rt_setflag(*args: Any) -> None:
 def _rt_setprop(*args: Any) -> None:
     return None
 
-def _rt_fetch(*args: Any) -> Any:
-    return None
+class _FetchCallable:
+    """Callable namespace object for Mindustry world entity queries.
+
+    Supports both legacy function-call syntax:
+        val = fetch(FetchType.UNIT, Teams.SHARDED, 0)
+        fetch(FetchType.CORE, res, Teams.SHARDED)
+    and modern namespace method syntax:
+        val = fetch.unit(team, index, type=0)
+        count = fetch.unit_count(team, type=0)
+        val = fetch.player(team, index)
+        count = fetch.player_count(team)
+        val = fetch.core(team, index)
+        count = fetch.core_count(team)
+        val = fetch.build(team, index, block)
+        count = fetch.build_count(team, block)
+    """
+
+    def __call__(self, type_: Any, *params: Any) -> Any:
+        return None
+
+    def unit(self, team: Any, index: Any, type: Any = 0, *dest: Any) -> Any:
+        return None
+
+    def unit_count(self, team: Any, *params: Any) -> Any:
+        return 0
+
+    def unitCount(self, team: Any, *params: Any) -> Any:
+        return 0
+
+    def player(self, team: Any, index: Any, *dest: Any) -> Any:
+        return None
+
+    def player_count(self, team: Any, *dest: Any) -> Any:
+        return 0
+
+    def playerCount(self, team: Any, *dest: Any) -> Any:
+        return 0
+
+    def core(self, team: Any, index: Any, *dest: Any) -> Any:
+        return None
+
+    def core_count(self, team: Any, *dest: Any) -> Any:
+        return 0
+
+    def coreCount(self, team: Any, *dest: Any) -> Any:
+        return 0
+
+    def build(self, team: Any, index: Any, block: Any, *dest: Any) -> Any:
+        return None
+
+    def build_count(self, team: Any, block: Any, *dest: Any) -> Any:
+        return 0
+
+    def buildCount(self, team: Any, block: Any, *dest: Any) -> Any:
+        return 0
+
+_rt_fetch = _FetchCallable()
 
 def _rt_sync(*args: Any) -> None:
     return None
@@ -1722,19 +1798,69 @@ INTRINSIC_DEFINITIONS: List[IntrinsicDef] = [
         docstring=(
             "Locate units using the currently bound unit radar.\n\n"
             "Supported call conventions:\n"
-            "    1. Expression form: target = uradar(target1, target2, target3, sort, sort_order)\n"
+            "    1. Expression form (defaults supported): target = uradar([target1, target2, target3, sort, sort_order])\n"
             "    2. Statement form:  uradar(target1, target2, target3, sort, sort_order, target)\n"
             "    3. Extended statement: uradar(target1, target2, target3, sort, p1, p2, target)\n\n"
             "Args:\n"
-            "    target1, target2, target3: RadarTarget enum or string.\n"
-            "    sort: RadarSort enum or string.\n"
-            "    sort_order: Sort direction (1 = min, 0 = max).\n"
+            "    target1, target2, target3: RadarTarget enum or string (defaults: 'enemy', 'any', 'any').\n"
+            "    sort: RadarSort enum or string (default: 'distance').\n"
+            "    sort_order: Sort direction (1 = min, 0 = max, default: 1).\n"
             "    output: Target variable (in statement form)."
         ),
-        min_args=5,
+        min_args=0,
         max_args=7,
-        valid_arg_counts=(5, 6, 7),
+        valid_arg_counts=(0, 1, 2, 3, 4, 5, 6, 7),
         signatures=[
+            IntrinsicSignature(
+                params=[],
+                return_type="Any",
+                docstring="Scan bound unit radar with defaults (target1='enemy', target2='any', target3='any', sort='distance', sort_order=1).",
+            ),
+            IntrinsicSignature(
+                params=[
+                    IntrinsicParam("target1", "Union[RadarTarget, str]"),
+                ],
+                return_type="Any",
+                docstring="Scan bound unit radar with specified target1 and defaults.",
+            ),
+            IntrinsicSignature(
+                params=[
+                    IntrinsicParam("target1", "Union[RadarTarget, str]"),
+                    IntrinsicParam("target2", "Union[RadarTarget, str]"),
+                ],
+                return_type="Any",
+                docstring="Scan bound unit radar with specified target1, target2 and defaults.",
+            ),
+            IntrinsicSignature(
+                params=[
+                    IntrinsicParam("target1", "Union[RadarTarget, str]"),
+                    IntrinsicParam("target2", "Union[RadarTarget, str]"),
+                    IntrinsicParam("target3", "Union[RadarTarget, str]"),
+                ],
+                return_type="Any",
+                docstring="Scan bound unit radar with specified targets and default sort.",
+            ),
+            IntrinsicSignature(
+                params=[
+                    IntrinsicParam("target1", "Union[RadarTarget, str]"),
+                    IntrinsicParam("target2", "Union[RadarTarget, str]"),
+                    IntrinsicParam("target3", "Union[RadarTarget, str]"),
+                    IntrinsicParam("sort", "Union[RadarSort, str]"),
+                ],
+                return_type="Any",
+                docstring="Scan bound unit radar with specified targets, sort, and default sort_order=1.",
+            ),
+            IntrinsicSignature(
+                params=[
+                    IntrinsicParam("target1", "Union[RadarTarget, str]"),
+                    IntrinsicParam("target2", "Union[RadarTarget, str]"),
+                    IntrinsicParam("target3", "Union[RadarTarget, str]"),
+                    IntrinsicParam("sort", "Union[RadarSort, str]"),
+                    IntrinsicParam("sort_order", "Any"),
+                ],
+                return_type="Any",
+                docstring="Scan bound unit radar and return found unit (expression form: target = uradar(...)).",
+            ),
             IntrinsicSignature(
                 params=[
                     IntrinsicParam("target1", "Union[RadarTarget, str]"),
@@ -1759,17 +1885,6 @@ INTRINSIC_DEFINITIONS: List[IntrinsicDef] = [
                 ],
                 return_type="Any",
                 docstring="Scan bound unit radar with extra parameters (extended statement form).",
-            ),
-            IntrinsicSignature(
-                params=[
-                    IntrinsicParam("target1", "Union[RadarTarget, str]"),
-                    IntrinsicParam("target2", "Union[RadarTarget, str]"),
-                    IntrinsicParam("target3", "Union[RadarTarget, str]"),
-                    IntrinsicParam("sort", "Union[RadarSort, str]"),
-                    IntrinsicParam("sort_order", "Any"),
-                ],
-                return_type="Any",
-                docstring="Scan bound unit radar and return found unit (expression form: target = uradar(...)).",
             ),
         ],
         runtime_fn=_rt_uradar,
@@ -3022,6 +3137,8 @@ MLOG_EXPORTS: Set[str] = (
         "_SoundCallable",
         "_MusicCallable",
         "_MarkerCallable",
+        "_StatusCallable",
+        "_FetchCallable",
         "cutscene",
         "sound",
         "music",
@@ -3155,6 +3272,60 @@ def generate_pyi() -> str:
     lines.append("")
 
     for name in sorted(INTRINSICS.keys()):
+        if name == "status":
+            lines.append("class _StatusCallable:")
+            lines.append('    """Callable namespace object for Mindustry status effect operations.')
+            lines.append("")
+            lines.append("    Supports both legacy function-call syntax:")
+            lines.append('        status(False, StatusEffects.BURNING, unit, 10)')
+            lines.append('        status(True, "@burning", unit)')
+            lines.append("    and modern namespace method syntax:")
+            lines.append("        status.apply(unit, StatusEffects.BURNING, duration=10)")
+            lines.append('        status.apply(unit, "@burning")')
+            lines.append("        status.clear(unit, StatusEffects.BURNING)")
+            lines.append('        status.clear(unit, "@burning")')
+            lines.append('    """')
+            lines.append("    def __call__(self, clear: Any, effect: Union[StatusEffects, str], unit: Any, duration: Any = 0) -> None: ...")
+            lines.append("    def apply(self, unit: Any, effect: Union[StatusEffects, str], duration: Any = 0) -> None: ...")
+            lines.append("    def clear(self, unit: Any, effect: Union[StatusEffects, str]) -> None: ...")
+            lines.append("")
+            lines.append("status: _StatusCallable")
+            lines.append("")
+            continue
+        if name == "fetch":
+            lines.append("class _FetchCallable:")
+            lines.append('    """Callable namespace object for Mindustry entity queries.')
+            lines.append("")
+            lines.append("    Supports both legacy function-call syntax:")
+            lines.append('        val = fetch(FetchType.UNIT, Teams.SHARDED, 0)')
+            lines.append('        fetch(FetchType.CORE, res, Teams.SHARDED)')
+            lines.append("    and modern namespace method syntax:")
+            lines.append("        val = fetch.unit(team, index, type=0)")
+            lines.append("        count = fetch.unit_count(team, type=0)")
+            lines.append("        val = fetch.player(team, index)")
+            lines.append("        count = fetch.player_count(team)")
+            lines.append("        val = fetch.core(team, index)")
+            lines.append("        count = fetch.core_count(team)")
+            lines.append("        val = fetch.build(team, index, block)")
+            lines.append("        count = fetch.build_count(team, block)")
+            lines.append('    """')
+            lines.append("    def __call__(self, type: Union[FetchType, str], target_or_team: Any, team_or_index: Any = 0, index_or_extra: Any = 0, extra: Any = 0) -> Any: ...")
+            lines.append("    def unit(self, team: Union[Teams, str], index: Any, type: Any = 0) -> Any: ...")
+            lines.append("    def unit_count(self, team: Union[Teams, str], type: Any = 0) -> int: ...")
+            lines.append("    def unitCount(self, team: Union[Teams, str], type: Any = 0) -> int: ...")
+            lines.append("    def player(self, team: Union[Teams, str], index: Any) -> Any: ...")
+            lines.append("    def player_count(self, team: Union[Teams, str]) -> int: ...")
+            lines.append("    def playerCount(self, team: Union[Teams, str]) -> int: ...")
+            lines.append("    def core(self, team: Union[Teams, str], index: Any) -> Any: ...")
+            lines.append("    def core_count(self, team: Union[Teams, str]) -> int: ...")
+            lines.append("    def coreCount(self, team: Union[Teams, str]) -> int: ...")
+            lines.append("    def build(self, team: Union[Teams, str], index: Any, block: Any) -> Any: ...")
+            lines.append("    def build_count(self, team: Union[Teams, str], block: Any) -> int: ...")
+            lines.append("    def buildCount(self, team: Union[Teams, str], block: Any) -> int: ...")
+            lines.append("")
+            lines.append("fetch: _FetchCallable")
+            lines.append("")
+            continue
         if name == "control":
             lines.append("class _ControlCallable:")
             lines.append('    """Callable namespace object for Mindustry building control operations.')

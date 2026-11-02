@@ -14,13 +14,13 @@ from mlog import compile_py
 DEMOS = [
     (
         "Reactor Safety System (Sensors & Conditionals)",
-        """from mlog import sensor, control, wait, SensorProperty, ControlProperty
+        """from mlog import sensor, control, wait, SensorProperty
 
 heat = sensor("reactor1", SensorProperty.HEAT)
 if heat > 0.5:
-    control(ControlProperty.ENABLED, "reactor1", 0)
+    control.enabled("reactor1", 0)
 else:
-    control(ControlProperty.ENABLED, "reactor1", 1)
+    control.enabled("reactor1", 1)
 wait(0.5)
 """,
     ),

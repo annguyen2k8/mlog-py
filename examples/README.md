@@ -17,7 +17,7 @@ These examples show how to write Python code that compiles directly into Mindust
 | [`while_loop.py`](compiler/while_loop.py) | While Loops | Condition-based `while` loops with early `break` and loop skipping via `continue`. |
 | [`conditionals.py`](compiler/conditionals.py) | If / Elif / Else | Decision-making branching with short-circuit evaluation. |
 | [`nested_loops.py`](compiler/nested_loops.py) | Nested Loops | Multi-level matrix grid loops calculating 2D coordinates. |
-| [`reactor_safety.py`](compiler/reactor_safety.py) | Reactor Controller | Thorium reactor safety monitor: reading `@heat` and toggling `control(enabled, ...)`. |
+| [`reactor_safety.py`](compiler/reactor_safety.py) | Reactor Controller | Thorium reactor safety monitor: reading `@heat` and toggling `control.enabled(...)`. |
 | [`control_building.py`](compiler/control_building.py) | Building Control Modes | All five Mindustry v160.7 control modes (`enabled`, `shoot`, `shootp`, `config`, `color`) plus legacy `control(...)`. |
 | [`display_graphics.py`](compiler/display_graphics.py) | Logic Displays | Drawing shapes (`clear`, `color`, `rect`, `line`) and flushing to display screens. |
 | [`color_channels.py`](compiler/color_channels.py) | Color Channels | Packing RGBA with `packcolor` and unpacking it back with `r, g, b, a = unpackcolor(color)`. |
