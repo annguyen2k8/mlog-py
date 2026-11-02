@@ -90,7 +90,7 @@ Depending on the nature of the upstream changes, update the relevant modules:
    - Regenerate IDE typing stubs (`mlog.pyi`):
 
      ```bash
-     python3 src/metadata.py
+     python3 -m mlog.metadata
      ```
 
    - Update the Compiler (AST $\to$ IR lowering): `src/compiler.py`.

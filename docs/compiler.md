@@ -787,7 +787,7 @@ Upon successful compilation, the full MLog output is automatically copied to you
 ### Python API
 
 ```python
-from src.mlog import compile_py
+from mlog import compile_py
 
 python_source = """
 from mlog import printflush

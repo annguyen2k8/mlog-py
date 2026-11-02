@@ -133,7 +133,7 @@ operand of the structured tree:
 ## 7. Python API
 
 ```python
-from src.decompiler import decompile, decompile_with_source_map
+from mlog import decompile, decompile_with_source_map
 
 mlog_text = """
 sensor heat reactor1 @heat

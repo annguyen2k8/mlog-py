@@ -3,20 +3,28 @@
 - **Updated**: 2026-11-02
 - **Agent**: Antigravity / Gemini 3.8 Flash
 - **Status**: done
-- **Goal**: Clean up README.md by removing internal Release & Publishing instructions and PyPI Trusted Publishing configuration, keeping README strictly focused on library users.
+- **Goal**: Comprehensive documentation audit and improvement across README.md, docs/, SKILL.md, and examples.
 
 ## Done
 
-- **README.md Content Cleanup**:
-  - Removed entire `Release & Publishing` section and PyPI Trusted Publisher configuration steps from `README.md`.
-  - Kept `README.md` user-focused: introduction, quick start, installation, compiler & decompiler usage, examples, key features, architecture, test scorecards, limitations, and technical documentation links.
-  - Preserved `.github/workflows/publish.yml`, GitHub Environment, and all release configuration untouched.
-- **Link & Layout Validation**:
-  - Verified all 34 local Markdown file links exist.
-  - Verified all badge endpoints and external web links return HTTP 200.
-  - Verified clean Markdown layout and absence of trailing whitespace issues.
-- **Regression Testing**:
+- **Documentation & Example Audit**:
+  - Audited all 18 Markdown files and verified all 34 local file links (0 broken links).
+  - Audited all 21 compiler examples (100% compiled to .mlog) and 12 decompiler examples (100% decompiled to .py).
+  - Fixed import resolution in standalone example runner scripts (`examples/compiler/roundtrip_demo.py`, `examples/decompiler/roundtrip_verify.py`, `examples/decompiler/sourcemap_debug.py`), adding clean repo root discovery so they execute standalone without requiring prior global pip installation.
+- **Outdated Import Elimination**:
+  - Replaced deprecated `from src.` imports in documentation examples with canonical public `from mlog import ...` across:
+    - `docs/compiler.md`: `from mlog import compile_py`
+    - `docs/decompiler.md`: `from mlog import decompile, decompile_with_source_map`
+    - `docs/source-mapping.md`: `from mlog import decompile_with_source_map`
+    - `SKILL.md`: `from mlog import compile_py, decompile`
+  - Updated metadata stub regeneration instruction in `docs/mindustry-updates.md` to `python3 -m mlog.metadata`.
+- **README.md User-Facing Enhancements**:
+  - Added explicit Python compatibility requirements (`>=3.9`, tested on 3.9 through 3.14) under the Installation section.
+  - Confirmed `Release & Publishing` internal instructions remain cleanly removed.
+  - Verified 100% of links and badge endpoints return HTTP 200.
+- **Verification & Testing**:
   - Ran `tests.test_agent_memory` and `tests.test_imports_and_stub`: 25/25 passed.
+  - Ran all 3 example runner scripts (`roundtrip_demo.py`, `roundtrip_verify.py`, `sourcemap_debug.py`): all passed.
   - Ran `actionlint`: 0 errors.
 
 ## Next
@@ -31,5 +39,7 @@
 
 - `python -m unittest tests.test_agent_memory tests.test_imports_and_stub`: 25/25 passed.
 - `actionlint -shellcheck=shellcheck .github/workflows/publish.yml`: passed (0 errors).
-- Local and web link validation: 34/34 local links resolved, web endpoints verified.
+- `python examples/compiler/roundtrip_demo.py`: passed.
+- `python examples/decompiler/roundtrip_verify.py`: passed.
+- `python examples/decompiler/sourcemap_debug.py`: passed.
 - `git diff --check`: 0 whitespace errors.

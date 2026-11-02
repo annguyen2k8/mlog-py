@@ -260,8 +260,7 @@ The framework provides guaranteed round-trip verification across three flows:
    equivalent MLog instructions:
 
    ```python
-   from src.decompiler import decompile
-   from src.mlog import compile_py
+   from mlog import compile_py, decompile
 
    py_code = decompile(mlog_text)
    recompiled = compile_py(py_code, allow_functions=True)

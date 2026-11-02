@@ -52,7 +52,7 @@ wait(0.5)
 The `SourceMap` object (`src/decompiler/sourcemap.py`) provides constant-time $O(1)$ bi-directional querying:
 
 ```python
-from src.decompiler import decompile_with_source_map
+from mlog import decompile_with_source_map
 
 mlog_text = """
 sensor heat reactor1 @heat

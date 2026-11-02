@@ -30,6 +30,8 @@ In the strategy game **Mindustry**, logic processors execute low-level assembly-
 
 ### Installation
 
+**Requirements**: Python >=3.9 (supported and tested on Python 3.9, 3.10, 3.11, 3.12, 3.13, and 3.14).
+
 From PyPI:
 
 ```bash
