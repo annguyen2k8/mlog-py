@@ -1055,8 +1055,54 @@ def _rt_spawnwave(*args: Any) -> None:
 def _rt_effect(*args: Any) -> None:
     return None
 
-def _rt_message(*args: Any) -> Any:
-    return 1
+class _MessageCallable:
+    """Callable namespace object for Mindustry message operations.
+
+    Supports both legacy function-call syntax:
+        message(MessageType.ANNOUNCE, 3, "@wait")
+        success = message("toast", 5)
+    and modern namespace method syntax:
+        message.announce(duration=3, out_success="@wait")
+        message.toast(duration=3, out_success="@wait")
+        message.notify(duration=3, out_success="@wait")
+        success = message.announce(duration=5)
+    """
+
+    def __call__(
+        self,
+        type: Any,
+        duration: Any = 3,
+        out_success: Any = "@wait",
+        outSuccess: Any = "@wait",
+    ) -> Any:
+        return 1
+
+    def announce(
+        self,
+        duration: Any = 3,
+        out_success: Any = "@wait",
+        outSuccess: Any = "@wait",
+    ) -> Any:
+        return 1
+
+    def toast(
+        self,
+        duration: Any = 3,
+        out_success: Any = "@wait",
+        outSuccess: Any = "@wait",
+    ) -> Any:
+        return 1
+
+    def notify(
+        self,
+        duration: Any = 3,
+        out_success: Any = "@wait",
+        outSuccess: Any = "@wait",
+    ) -> Any:
+        return 1
+
+_rt_message = _MessageCallable()
+message = _rt_message
 
 
 class _CutsceneCallable:
@@ -3189,6 +3235,7 @@ MLOG_EXPORTS: Set[str] = (
         "_FetchCallable",
         "_LookupCallable",
         "_QueryCallable",
+        "_MessageCallable",
         "cutscene",
         "sound",
         "music",
@@ -3414,6 +3461,27 @@ def generate_pyi() -> str:
             lines.append("    def rect(self, type: Union[QueryType, str], team: Any, x: Any, y: Any, width: Any, height: Any) -> None: ...")
             lines.append("")
             lines.append("query: _QueryCallable")
+            lines.append("")
+            continue
+        if name == "message":
+            lines.append("class _MessageCallable:")
+            lines.append('    """Callable namespace object for Mindustry message operations.')
+            lines.append("")
+            lines.append("    Supports both legacy function-call syntax:")
+            lines.append('        message(MessageType.ANNOUNCE, 3, "@wait")')
+            lines.append('        success = message("toast", 5)')
+            lines.append("    and modern namespace method syntax:")
+            lines.append('        message.announce(duration=3, out_success="@wait")')
+            lines.append('        message.toast(duration=3, out_success="@wait")')
+            lines.append('        message.notify(duration=3, out_success="@wait")')
+            lines.append('        success = message.announce(duration=5)')
+            lines.append('    """')
+            lines.append("    def __call__(self, type: Union[MessageType, str], duration: Any = 3, out_success: Any = '@wait', outSuccess: Any = '@wait') -> Any: ...")
+            lines.append("    def announce(self, duration: Any = 3, out_success: Any = '@wait', outSuccess: Any = '@wait') -> Any: ...")
+            lines.append("    def toast(self, duration: Any = 3, out_success: Any = '@wait', outSuccess: Any = '@wait') -> Any: ...")
+            lines.append("    def notify(self, duration: Any = 3, out_success: Any = '@wait', outSuccess: Any = '@wait') -> Any: ...")
+            lines.append("")
+            lines.append("message: _MessageCallable")
             lines.append("")
             continue
         if name == "control":

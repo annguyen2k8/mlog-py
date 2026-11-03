@@ -6,7 +6,7 @@ C. message callable namespace methods (announce, notify, toast)
 
 import unittest
 import mlog
-from mlog import compile_py, lookup, LookupType, query, QueryType, QueryShape, Teams
+from mlog import compile_py, lookup, LookupType, query, QueryType, QueryShape, Teams, message, MessageType
 from mlog.errors import CompileError
 from mlog.validator import MlogValidator
 from mlog.mindustry_validator import is_mindustry_available, validate_with_mindustry
@@ -203,6 +203,95 @@ class TestP2Ergonomics(unittest.TestCase):
         self.assertIsNone(query.circle("unit", "@sharded", 0, 0, 10))
         self.assertIsNone(query.rect("building", "@crux", 0, 0, 10, 20))
         self.assertIsNone(query("circle", "unit", "@sharded", 0, 0, 10, 0))
+
+    # =========================================================================
+    # C. message namespace methods
+    # =========================================================================
+
+    def test_message_announce(self):
+        source = (
+            "from mlog import message\n"
+            "message.announce()\n"
+            "message.announce(5)\n"
+            "message.announce(10, my_success)\n"
+            "message.announce(duration=2, out_success='@wait')\n"
+            "message.announce(outSuccess=done)\n"
+            "res = message.announce()\n"
+            "res2 = message.announce(4)\n"
+        )
+        mlog = self.compile_code(source)
+        lines = mlog.splitlines()
+        self.assertEqual(lines[0], "message announce 3 @wait")
+        self.assertEqual(lines[1], "message announce 5 @wait")
+        self.assertEqual(lines[2], "message announce 10 my_success")
+        self.assertEqual(lines[3], "message announce 2 @wait")
+        self.assertEqual(lines[4], "message announce 3 done")
+        self.assertEqual(lines[5], "message announce 3 res")
+        self.assertEqual(lines[6], "message announce 4 res2")
+        self.validate_with_jvm(mlog)
+
+    def test_message_toast(self):
+        source = (
+            "from mlog import message\n"
+            "message.toast()\n"
+            "message.toast(2)\n"
+            "message.toast(5, out_s)\n"
+            "success = message.toast(2)\n"
+        )
+        mlog = self.compile_code(source)
+        lines = mlog.splitlines()
+        self.assertEqual(lines[0], "message toast 3 @wait")
+        self.assertEqual(lines[1], "message toast 2 @wait")
+        self.assertEqual(lines[2], "message toast 5 out_s")
+        self.assertEqual(lines[3], "message toast 2 success")
+        self.validate_with_jvm(mlog)
+
+    def test_message_notify(self):
+        source = (
+            "from mlog import message\n"
+            "message.notify()\n"
+            "message.notify(4, out_s)\n"
+            "done = message.notify()\n"
+        )
+        mlog = self.compile_code(source)
+        lines = mlog.splitlines()
+        self.assertEqual(lines[0], "message notify 3 @wait")
+        self.assertEqual(lines[1], "message notify 4 out_s")
+        self.assertEqual(lines[2], "message notify 3 done")
+        self.validate_with_jvm(mlog)
+
+    def test_message_reject_mission_and_invalid_calls(self):
+        # Specifically verify message.mission() is rejected per upstream contract
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import message\nmessage.mission()\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import message\nmessage.mission('objective')\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import message\nmessage.unknown()\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import message\nmessage.announce(1, 2, 3)\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import message\nmessage.announce(timeout=5)\n")
+
+    def test_message_backward_compatibility(self):
+        source = (
+            "from mlog import message, MessageType\n"
+            "message(MessageType.ANNOUNCE, 3, '@wait')\n"
+            "message('toast', 5)\n"
+            "res = message('notify')\n"
+        )
+        mlog = self.compile_code(source)
+        lines = mlog.splitlines()
+        self.assertEqual(lines[0], "message announce 3 @wait")
+        self.assertEqual(lines[1], "message toast 5 @wait")
+        self.assertEqual(lines[2], "message notify 3 res")
+        self.validate_with_jvm(mlog)
+
+    def test_message_pure_python_runtime(self):
+        self.assertEqual(message.announce(), 1)
+        self.assertEqual(message.toast(5), 1)
+        self.assertEqual(message.notify(), 1)
+        self.assertEqual(message("announce", 3), 1)
 
 
 if __name__ == "__main__":

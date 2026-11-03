@@ -556,6 +556,68 @@ res = fetch(FetchType.UNIT, Teams.SHARDED, 0, Units.DAGGER)
 fetch(FetchType.CORE, res, Teams.SHARDED)
 ```
 
+### Content Lookup Namespace (`lookup.<method>`)
+
+The `lookup` callable namespace provides dedicated methods for content lookups across the four Mindustry content registries (`item`, `block`, `unit`, `liquid`):
+
+```python
+from mlog import lookup, LookupType
+
+# Expression form:
+lead = lookup.item(1)              # Emits: lookup item lead 1
+router = lookup.block(5)           # Emits: lookup block router 5
+flare = lookup.unit(0)             # Emits: lookup flare unit 0
+water = lookup.liquid(0)           # Emits: lookup liquid water 0
+
+# Statement form with explicit target destination:
+lookup.item(1, out_item)           # Emits: lookup item out_item 1
+
+# Legacy function-call syntax is 100% preserved:
+item = lookup(LookupType.ITEM, 0)
+lookup(LookupType.BLOCK, out_block, 0)
+```
+
+### Spatial Query Namespace (`query.<method>`)
+
+The `query` callable namespace provides dedicated methods for World Processor spatial queries:
+
+```python
+from mlog import query, QueryType, Teams, QueryShape
+
+# Circle query (automatically fills trailing dummy height operand '0'):
+query.circle(QueryType.UNIT, Teams.SHARDED, x, y, radius)
+# Emits: query circle unit @sharded x y radius 0
+
+# Rectangular spatial query:
+query.rect(QueryType.BUILDING, Teams.CRUX, x, y, width, height)
+# Emits: query rect building @crux x y width height
+
+# Legacy 7-operand function syntax is 100% preserved:
+query(QueryShape.CIRCLE, QueryType.UNIT, Teams.SHARDED, x, y, radius, 0)
+```
+
+### Message Flush Namespace (`message.<method>`)
+
+The `message` callable namespace provides dedicated methods for flushing the processor text buffer to player announcements, HUD notifications, and info toasts on World Processors:
+
+```python
+from mlog import message, MessageType
+
+# Statement form (defaults to duration=3, out_success='@wait'):
+message.announce(5)                       # Emits: message announce 5 @wait
+message.toast(3)                          # Emits: message toast 3 @wait
+message.notify()                          # Emits: message notify 3 @wait
+
+# Expression form:
+success = message.announce(duration=5)    # Emits: message announce 5 success
+success = message.toast(2)                # Emits: message toast 2 success
+
+# Legacy function-call syntax is 100% preserved:
+message(MessageType.ANNOUNCE, 3, "@wait")
+```
+> [!NOTE]
+> Per Mindustry upstream semantics (`LStatements.FlushMessageStatement`), `mission` sets scenario rules rather than triggering a HUD popup; use game rule configuration instead. `message.mission` is intentionally not mapped.
+
 ### Building Control Callable Namespace Object (`control.<method>`)
 
 Mindustry v160.7 exposes exactly five building-control modes from `LAccess`: `enabled`, `shoot`, `shootp`, `config`, and `color`. The `control` symbol is both directly callable (legacy generic form) and an object with typed methods. Each method injects the trailing dummy operands required by the six-operand `control` instruction:

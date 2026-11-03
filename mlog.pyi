@@ -1101,15 +1101,24 @@ def max(a: Any, b: Any) -> Any:
     """
     ...
 
-def message(type: Any, duration: Any = 3, out_success: Any = "@wait") -> Any:
-    """Display an on-screen message or set mission text in World Processor.
+class _MessageCallable:
+    """Callable namespace object for Mindustry message operations.
 
-    Args:
-        type: Message display type (MessageType enum or string, e.g. MessageType.ANNOUNCE, 'notify', 'toast', 'mission').
-        duration: Display duration in seconds (default 3).
-        out_success: Variable receiving success status (1 or 0) or @wait (default '@wait').
+    Supports both legacy function-call syntax:
+        message(MessageType.ANNOUNCE, 3, "@wait")
+        success = message("toast", 5)
+    and modern namespace method syntax:
+        message.announce(duration=3, out_success="@wait")
+        message.toast(duration=3, out_success="@wait")
+        message.notify(duration=3, out_success="@wait")
+        success = message.announce(duration=5)
     """
-    ...
+    def __call__(self, type: Union[MessageType, str], duration: Any = 3, out_success: Any = '@wait', outSuccess: Any = '@wait') -> Any: ...
+    def announce(self, duration: Any = 3, out_success: Any = '@wait', outSuccess: Any = '@wait') -> Any: ...
+    def toast(self, duration: Any = 3, out_success: Any = '@wait', outSuccess: Any = '@wait') -> Any: ...
+    def notify(self, duration: Any = 3, out_success: Any = '@wait', outSuccess: Any = '@wait') -> Any: ...
+
+message: _MessageCallable
 
 def min(a: Any, b: Any) -> Any:
     """Compute the minimum of two values without compile-time evaluation.
@@ -1997,6 +2006,7 @@ __all__ = [
     "_FetchCallable",
     "_LookupCallable",
     "_MarkerCallable",
+    "_MessageCallable",
     "_MusicCallable",
     "_OpCallable",
     "_QueryCallable",

@@ -1131,6 +1131,8 @@ class Compiler:
                     return self.compile_lookup_method(call, target_dest=target_dest, is_statement=is_statement)
                 elif ns == "query":
                     return self.compile_query_method(call, target_dest=target_dest, is_statement=is_statement)
+                elif ns == "message":
+                    return self.compile_message_method(call, target_dest=target_dest, is_statement=is_statement)
             self.error(
                 f"unsupported method call on '{call.func.value.id if isinstance(call.func.value, ast.Name) else 'object'}'",
                 call,
@@ -3858,6 +3860,68 @@ class Compiler:
                 self.instructions.append(IRSet(to=target_dest, from_="0", loc=loc))
                 return target_dest
             return "0"
+
+    def compile_message_method(
+        self,
+        call: ast.Call,
+        target_dest: Optional[str] = None,
+        is_statement: bool = False,
+    ) -> str:
+        """Compile message.<method>(...) call into Mindustry 'message' instruction."""
+        loc = self.loc(call)
+        assert isinstance(call.func, ast.Attribute)
+        method_name = call.func.attr
+        args = call.args
+        ns = call.func.value.id if isinstance(call.func.value, ast.Name) else "message"
+
+        MESSAGE_METHODS = {"announce", "notify", "toast"}
+        if method_name not in MESSAGE_METHODS:
+            matches = difflib.get_close_matches(method_name, MESSAGE_METHODS, n=1)
+            hint = f". Did you mean '{ns}.{matches[0]}'?" if matches else f" (valid methods: {', '.join(sorted(MESSAGE_METHODS))})"
+            self.error(f"unknown message method: '{ns}.{method_name}'{hint}", call)
+
+        type_ = method_name
+
+        kwargs = {kw.arg: kw.value for kw in call.keywords} if call.keywords else {}
+        for k in kwargs:
+            if k not in ("duration", "out_success", "outSuccess"):
+                self.error(f"unexpected keyword argument '{k}' for {ns}.{method_name}", call)
+
+        if len(args) > 2:
+            self.error(f"too many positional arguments for {ns}.{method_name}: expected at most 2 (duration, out_success)", call)
+
+        # duration
+        if len(args) >= 1:
+            duration = str(self.format_intrinsic_arg(args[0], is_ident=False))
+        elif "duration" in kwargs:
+            duration = str(self.format_intrinsic_arg(kwargs["duration"], is_ident=False))
+        else:
+            duration = "3"
+
+        # out_success
+        if len(args) >= 2:
+            out_success = str(self.format_intrinsic_arg(args[1], is_ident=True))
+            dest = out_success
+        elif "out_success" in kwargs:
+            out_success = str(self.format_intrinsic_arg(kwargs["out_success"], is_ident=True))
+            dest = out_success
+        elif "outSuccess" in kwargs:
+            out_success = str(self.format_intrinsic_arg(kwargs["outSuccess"], is_ident=True))
+            dest = out_success
+        elif target_dest is not None or not is_statement:
+            dest = target_dest if target_dest is not None else self.new_temp(loc)
+            out_success = dest
+        else:
+            dest = "0"
+            out_success = "@wait"
+
+        self.instructions.append(
+            IRRaw(opcode="message", args=[type_, duration, out_success], loc=loc)
+        )
+        if target_dest is not None and dest != target_dest:
+            self.instructions.append(IRSet(to=target_dest, from_=dest, loc=loc))
+            return target_dest
+        return dest if (target_dest is not None or not is_statement) else "0"
 
 
     def compile_fstring_print(self, node: ast.JoinedStr, loc: SourceLocation) -> str:

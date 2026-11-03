@@ -63,6 +63,7 @@ from .metadata import (
     _FetchCallable,
     _LookupCallable,
     _QueryCallable,
+    _MessageCallable,
     sound,
     music,
     marker,
