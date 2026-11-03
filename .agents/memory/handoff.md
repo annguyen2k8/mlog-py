@@ -3,34 +3,40 @@
 - **Updated**: 2026-11-03
 - **Agent**: Antigravity / Gemini 3.8 Flash
 - **Status**: done
-- **Goal**: Implement P2.1 to resolve all 4 findings from independent review of P2 API Ergonomics (MED-01 lookup typing, MED-02 query team identifier collision, LOW-01 lookup.team, LOW-02 duplicate message arguments).
+- **Goal**: Implement comprehensive P3 API Ergonomics, Argument Binding validations, and Expression Forms for mlog-py based on Mindustry v160.7.
 
 ## Done
 
-- **P2.1 Fixes Implementation**:
-  - **MED-01 & LOW-01 (`lookup` namespace & typing)**:
-    - Added `lookup.team(index)` and statement form `lookup.team(index, dest)` to `_LookupCallable`.
-    - Added `team` to `LOOKUP_METHODS` in `src/parser.py` and `src/compiler.py`.
-    - Updated `generate_pyi()` in `src/metadata.py` to generate accurate `@overload` definitions for both expression form (`(index: Any) -> Any`) and statement form (`(index: Any, dest: Any) -> None`) across all 5 lookup methods (`item`, `block`, `unit`, `liquid`, `team`).
-    - Regenerated typing stubs (`mlog.pyi`, `mlog/__init__.pyi`, `src/mlog.pyi`).
-    - Added JVM validation and regression tests for `lookup.team`.
-    - Pushed in commit `6cb9b8a`.
-  - **MED-02 (`query` team collision fix)**:
-    - Updated `_format_team()` in `src/compiler.py` so that user variables (`ast.Name`) matching team names (`sharded`, `crux`, `green`, etc.) are preserved as runtime variable names rather than being erroneously hijacked into team constants (`@sharded`).
-    - Preserved normalization for `null`, `None`, `Teams.SHARDED`, string literals (`"sharded"` -> `@sharded`), and numbers.
-    - Added regression tests in `tests/test_p2_ergonomics.py` demonstrating variable preservation and JVM validity.
-    - Pushed in commit `c4d048b`.
-  - **LOW-02 (`message` duplicate argument validation)**:
-    - Implemented duplicate argument detection in `compile_message_method` and `func_name == "message"`.
-    - Detects and rejects with `CompileError` when `duration` or `out_success`/`outSuccess` is passed as both positional and keyword argument, or when both aliases `out_success` and `outSuccess` are passed simultaneously.
-    - Added 8 focused regression tests in `test_message_reject_mission_and_invalid_calls`.
-  - **Documentation**:
-    - Updated `docs/compiler.md` and `docs/mlog-command-coverage.md` to document all 5 lookable registries including `team`.
-- **Testing & Verification**:
-  - Ran pure-Python test suite (`python run_tests.py --fast`): 792/792 passed.
-  - Ran Mindustry v160.7 JVM test suite (`python run_tests.py --jvm`): 607/607 passed.
-  - Ran unit suites (`tests.test_p2_ergonomics`, `tests.test_p1_ergonomics`, `tests.test_imports_and_stub`, `tests.test_compiler_examples`, `tests.test_decompiler_examples`, `tests.test_agent_memory`): 77/77 passed.
-  - `git diff --check`: 0 whitespace errors.
+- **P3 API Ergonomics & Argument Binding**:
+  - **CRIT-01 (Reject invalid keywords on flat intrinsics and marker/sound/music)**:
+    - Added `validate_no_keywords(call, intrinsic_name)` across all flat intrinsics in `compile_call`.
+    - Enforced keyword rejection on `sound.play`, `sound.play_at`, `music.play`, `marker.make`, and all `marker.<method>` controls.
+  - **CRIT-02 (Duplicate argument validation in `status.apply` & `status.clear`)**:
+    - Added comprehensive duplicate checking between positional arguments and keyword arguments (`unit`, `effect`, `duration`).
+  - **CRIT-03 (Positional argument shifting fix in `Array()`)**:
+    - Fixed `_parse_array_call` to bind positional parameters (`block`, `size`, `dtype`) directly without list popping shifts.
+    - Added duplicate argument detection between positional and keyword arguments for `block`, `size`, and `dtype`.
+  - **MED-04 (Marker arity validation)**:
+    - Enforced parameter arity validation for all `marker.<method>` control sub-actions matching `expected_params` in `ctrl_map`.
+  - **Expression Forms (`ucontrol.within`)**:
+    - Added support for 3-argument expression form `ucontrol.within(x, y, radius)` binding directly into destination register (`target_dest`) or temp variable.
+    - Preserved 100% backward compatibility for 4-argument statement form `ucontrol.within(x, y, radius, out_result)`.
+  - **Tuple Unpacking & Keyword Support (`ucontrol.get_block` & `ulocate`)**:
+    - Added tuple unpacking support for `b_type, b_build, b_floor = ucontrol.get_block(x, y)` (and alias `getBlock`) with strict 3-target validation.
+    - Added keyword argument support for `ulocate.building(group=..., enemy=...)` and `ulocate.ore(ore=...)` tuple unpacking with duplicate argument detection.
+  - **Output Destination Keywords (`dest=` / `out=`)**:
+    - Added keyword destination support (`dest=` / `out=`) to `sensor`, `read`, and `uradar`.
+    - Enforced mutual exclusion between `dest` and `out`, duplicate argument detection against positional destinations, and unexpected keyword rejection.
+  - **Metadata & IDE Typing Stubs**:
+    - Added `@overload` statement forms for all `_FetchCallable` methods in `metadata.py`.
+    - Disambiguated `_MessageCallable` `@overload` signatures between canonical `out_success` and alias `outSuccess`.
+    - Added `@overload` expression and statement forms for `_UnitControlCallable.within` and `_UnitControlCallable.get_block`.
+    - Added keyword destination overloads for `sensor`, `read`, `uradar`.
+    - Updated runtime mock implementations in `metadata.py` (`_rt_sensor`, `_rt_read`, `_rt_uradar`, `get_block`, `within`) to return matching types without keyword errors.
+    - Regenerated `mlog.pyi`, `mlog/__init__.pyi`, and `src/mlog.pyi` via `python -m mlog.metadata`.
+  - **Documentation & Tests**:
+    - Added comprehensive regression suite `tests/test_p3_ergonomics.py` (15 test methods).
+    - Updated `docs/compiler.md` and `docs/mlog-command-coverage.md`.
 
 ## Next
 
@@ -42,7 +48,7 @@
 
 ## Verification
 
-- `python -m unittest tests.test_p2_ergonomics tests.test_p1_ergonomics tests.test_imports_and_stub tests.test_compiler_examples tests.test_decompiler_examples tests.test_agent_memory`: 77/77 passed.
+- `python run_tests.py --fast`: 807/807 passed.
 - `python run_tests.py --jvm`: 607/607 passed.
-- `python run_tests.py --fast`: 792/792 passed.
+- `python -m unittest tests.test_p3_ergonomics tests.test_unit_namespace tests.test_p2_ergonomics tests.test_p1_ergonomics`: 86/86 passed.
 - `git diff --check`: 0 whitespace errors.
