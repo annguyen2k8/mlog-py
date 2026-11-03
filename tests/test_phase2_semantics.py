@@ -102,7 +102,7 @@ curr = _counter
         self.assertIn("set x @counter", lines)
         self.assertIn("set @counter 5", lines)
         self.assertIn("set @counter 10", lines)
-        self.assertIn("set curr @counter", lines)
+        self.assertIn("set curr _counter", lines)
 
     def test_counter_in_branching(self):
         """Test dynamic @counter manipulation inside conditional logic."""

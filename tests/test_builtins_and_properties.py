@@ -60,7 +60,7 @@ e = Vars.e
         self.assertIn("set tm @time", lines)
         self.assertIn("set u @unit", lines)
         self.assertIn("set c @counter", lines)
-        self.assertIn("set c2 @counter", lines)
+        self.assertIn("set c2 counter", lines)
         self.assertIn("set th @this", lines)
         self.assertIn("set ipt @ipt", lines)
         self.assertIn("set lnk @links", lines)
@@ -91,10 +91,10 @@ Vars.counter += 1
         mlog = self.check_compile(source)
         lines = [line.strip() for line in mlog.splitlines()]
         self.assertIn("set @counter 10", lines)
-        self.assertIn("set @counter 20", lines)
+        self.assertIn("set counter 20", lines)
         self.assertIn("set @counter 30", lines)
         self.assertIn("set @counter 40", lines)
-        self.assertIn("op add @counter @counter 2", lines)
+        self.assertIn("op add counter counter 2", lines)
         self.assertIn("op add @counter @counter 1", lines)
 
     def test_augmented_assignment_counter(self):
@@ -106,7 +106,7 @@ Vars.counter += 2
 """
         mlog = self.check_compile(source)
         lines = [line.strip() for line in mlog.splitlines()]
-        self.assertIn("op add @counter @counter 5", lines)
+        self.assertIn("op add counter counter 5", lines)
         self.assertIn("op add @counter @counter 2", lines)
 
     # -----------------------------------------------------------------------
@@ -120,7 +120,7 @@ from mlog import Vars
 next_tick = Vars.tick + 10
 scaled_time = Vars.time * 2
 elapsed_wave = Vars.waveTime - 5.0
-half_counter = counter // 2
+half_counter = Vars.counter // 2
 """
         mlog = self.check_compile(source)
         lines = [line.strip() for line in mlog.splitlines()]
@@ -137,7 +137,7 @@ if Vars.unit == null:
     x = 1
 if Vars.tick > 100:
     y = 2
-if counter < 50:
+if Vars.counter < 50:
     z = 3
 """
         mlog = self.check_compile(source)
@@ -151,7 +151,7 @@ if counter < 50:
 from mlog import Vars, print, op, sensor, SensorProperty
 print(Vars.tick)
 print(Vars.unit)
-print(counter)
+print(Vars.counter)
 res = op("add", Vars.tick, 10)
 hp = sensor(Vars.unit, SensorProperty.HEALTH)
 """
@@ -296,7 +296,7 @@ print("@tick")
 print("@unit")
 print(Vars.tick)
 print(Vars.unit)
-print(counter)
+print(Vars.counter)
 """
         mlog = self.check_compile(source)
         lines = [line.strip() for line in mlog.splitlines()]

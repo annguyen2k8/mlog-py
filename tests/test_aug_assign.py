@@ -81,7 +81,7 @@ counter += 2
 Vars.counter += 1
 """
         res = compile_py(code)
-        self.assertIn("op add @counter @counter 2", res.mlog)
+        self.assertIn("op add counter counter 2", res.mlog)
         self.assertIn("op add @counter @counter 1", res.mlog)
         MlogValidator.validate(res.mlog)
 
@@ -674,8 +674,9 @@ flag_t1 = flag
 flag ^= 1
 flag_t2 = flag
 
+from mlog import Vars
 # 4. Program counter jump skipping instruction
-counter += 1
+Vars.counter += 1
 skipped = 999
 executed = 1
 end
