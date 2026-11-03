@@ -25,7 +25,7 @@ class TestP1Ergonomics(unittest.TestCase):
     def validate_with_jvm(self, mlog_text: str):
         """Validate generated mlog against real Mindustry v160.7 engine if available."""
         if is_mindustry_available():
-            valid, err = validate_with_mindustry(mlog_text)
+            valid, err, *_ = validate_with_mindustry(mlog_text)
             self.assertTrue(valid, f"JVM validation failed: {err}")
 
     # =========================================================================

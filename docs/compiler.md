@@ -558,7 +558,7 @@ fetch(FetchType.CORE, res, Teams.SHARDED)
 
 ### Content Lookup Namespace (`lookup.<method>`)
 
-The `lookup` callable namespace provides dedicated methods for content lookups across the four Mindustry content registries (`item`, `block`, `unit`, `liquid`):
+The `lookup` callable namespace provides dedicated methods for content lookups across the five Mindustry content registries (`item`, `block`, `unit`, `liquid`, `team`):
 
 ```python
 from mlog import lookup, LookupType
@@ -568,6 +568,7 @@ lead = lookup.item(1)              # Emits: lookup item lead 1
 router = lookup.block(5)           # Emits: lookup block router 5
 flare = lookup.unit(0)             # Emits: lookup flare unit 0
 water = lookup.liquid(0)           # Emits: lookup liquid water 0
+sharded = lookup.team(1)           # Emits: lookup team sharded 1
 
 # Statement form with explicit target destination:
 lookup.item(1, out_item)           # Emits: lookup item out_item 1

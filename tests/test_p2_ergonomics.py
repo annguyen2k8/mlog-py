@@ -25,7 +25,12 @@ class TestP2Ergonomics(unittest.TestCase):
     def validate_with_jvm(self, mlog_text: str):
         """Validate generated mlog against real Mindustry v160.7 engine if available."""
         if is_mindustry_available():
-            valid, err = validate_with_mindustry(mlog_text)
+            world_opcodes = ("query", "message", "spawn", "setrule", "weather", "effect", "explosion")
+            if any(op in mlog_text for op in world_opcodes) and "#processor" not in mlog_text:
+                test_mlog = "#processor: world\n" + mlog_text
+            else:
+                test_mlog = mlog_text
+            valid, err, *_ = validate_with_mindustry(test_mlog)
             self.assertTrue(valid, f"JVM validation failed: {err}")
 
     # =========================================================================
@@ -80,6 +85,18 @@ class TestP2Ergonomics(unittest.TestCase):
         self.assertEqual(lines[1], "lookup liquid out_liq 2")
         self.validate_with_jvm(mlog)
 
+    def test_lookup_team_expression_and_statement(self):
+        source = (
+            "from mlog import lookup\n"
+            "t = lookup.team(1)\n"
+            "lookup.team(2, out_t)\n"
+        )
+        mlog = self.compile_code(source)
+        lines = mlog.splitlines()
+        self.assertEqual(lines[0], "lookup team t 1")
+        self.assertEqual(lines[1], "lookup team out_t 2")
+        self.validate_with_jvm(mlog)
+
     def test_lookup_nested_expression(self):
         source = (
             "from mlog import lookup, print\n"
@@ -122,6 +139,7 @@ class TestP2Ergonomics(unittest.TestCase):
         self.assertEqual(lookup.block(0), 0)
         self.assertEqual(lookup.unit(0), 0)
         self.assertEqual(lookup.liquid(0), 0)
+        self.assertEqual(lookup.team(0), 0)
         self.assertEqual(lookup(LookupType.ITEM, 0), 0)
 
     # =========================================================================

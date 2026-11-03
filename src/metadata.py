@@ -813,6 +813,9 @@ class _LookupCallable:
     def liquid(self, index: Any, *dest: Any) -> Any:
         return 0
 
+    def team(self, index: Any, *dest: Any) -> Any:
+        return 0
+
 _rt_lookup = _LookupCallable()
 lookup = _rt_lookup
 
@@ -3432,15 +3435,21 @@ def generate_pyi() -> str:
             lines.append('        lookup(LookupType.BLOCK, out_block, 0)')
             lines.append("    and modern namespace method syntax:")
             lines.append('        res = lookup.item(index)')
+            lines.append('        lookup.item(index, out_res)')
             lines.append('        res = lookup.block(index)')
             lines.append('        res = lookup.unit(index)')
             lines.append('        res = lookup.liquid(index)')
+            lines.append('        res = lookup.team(index)')
             lines.append('    """')
-            lines.append("    def __call__(self, type: Union[LookupType, str], target_or_index: Any, index: Any = 0) -> Any: ...")
-            lines.append("    def item(self, index: Any) -> Any: ...")
-            lines.append("    def block(self, index: Any) -> Any: ...")
-            lines.append("    def unit(self, index: Any) -> Any: ...")
-            lines.append("    def liquid(self, index: Any) -> Any: ...")
+            lines.append("    @overload")
+            lines.append("    def __call__(self, type: Union[LookupType, str], dest: Any, index: Any) -> Any: ...")
+            lines.append("    @overload")
+            lines.append("    def __call__(self, type: Union[LookupType, str], index: Any) -> Any: ...")
+            for m in ("item", "block", "unit", "liquid", "team"):
+                lines.append("    @overload")
+                lines.append(f"    def {m}(self, index: Any) -> Any: ...")
+                lines.append("    @overload")
+                lines.append(f"    def {m}(self, index: Any, dest: Any) -> None: ...")
             lines.append("")
             lines.append("lookup: _LookupCallable")
             lines.append("")

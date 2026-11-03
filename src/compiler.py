@@ -3756,7 +3756,7 @@ class Compiler:
         args = call.args
         ns = call.func.value.id if isinstance(call.func.value, ast.Name) else "lookup"
 
-        if method_name not in ("item", "block", "unit", "liquid"):
+        if method_name not in ("item", "block", "unit", "liquid", "team"):
             self.error(f"unknown lookup method: '{ns}.{method_name}'", call)
 
         if call.keywords:

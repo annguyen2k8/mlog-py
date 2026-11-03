@@ -339,7 +339,7 @@ class ASTValidator(ast.NodeVisitor):
                     self.error(f"unknown fetch method: 'fetch.{node.attr}'{hint}", node)
                 return
             if node.value.id == "lookup":
-                LOOKUP_METHODS = {"item", "block", "unit", "liquid"}
+                LOOKUP_METHODS = {"item", "block", "unit", "liquid", "team"}
                 if node.attr not in LOOKUP_METHODS:
                     matches = difflib.get_close_matches(node.attr, LOOKUP_METHODS, n=1)
                     hint = f". Did you mean 'lookup.{matches[0]}'?" if matches else f" (valid methods: {', '.join(sorted(LOOKUP_METHODS))})"
