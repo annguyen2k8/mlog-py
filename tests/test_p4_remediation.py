@@ -31,7 +31,7 @@ class TestP4Remediation(unittest.TestCase):
     def validate_with_jvm(self, mlog_text: str):
         """Validate generated mlog against real Mindustry v160.7 engine if available."""
         if is_mindustry_available():
-            world_opcodes = ("query", "message", "spawn", "setrule", "weather", "effect", "explosion", "setmarker", "makemarker")
+            world_opcodes = ("query", "message", "spawn", "fetch", "setrule", "weather", "effect", "explosion", "setmarker", "makemarker")
             if any(op in mlog_text for op in world_opcodes) and "#processor" not in mlog_text:
                 test_mlog = "#processor: world\n" + mlog_text
             else:
@@ -173,6 +173,62 @@ a = (a > 0) and (a < 10) and (a + 5)
             run_res = run_with_mindustry(mlog, max_steps=50)
             # a > 0 is True, a < 10 is True, a + 5 is 7.0 -> a = 7.0
             self.assertEqual(run_res.vars.get("a"), 7.0)
+
+
+
+    # =========================================================================
+    # 3. HIGH-01: Team normalization & dynamic operands in spawn
+    # =========================================================================
+
+    def test_high01_fetch_team_identifier_collision(self):
+        """Verify user variables named after teams (e.g. sharded) are not converted to constants."""
+        source = """
+sharded = Teams.CRUX
+u = fetch.unit(sharded, 0)
+"""
+        mlog = self.compile_code(source)
+        self.assertIn("set sharded @crux", mlog)
+        self.assertIn("fetch unit u sharded 0 0", mlog)
+        self.assertNotIn("fetch unit u @sharded 0 0", mlog)
+        self.validate_with_jvm(mlog)
+
+        if is_mindustry_available():
+            test_mlog = "#processor: world\n" + mlog
+            run_res = run_with_mindustry(test_mlog, max_steps=10)
+            self.assertTrue(run_res.success, f"Fetch execution failed: {run_res.message}")
+            self.assertEqual(run_res.vars.get("sharded"), "crux")
+
+    def test_high01_spawn_dynamic_operands(self):
+        """Verify spawn supports runtime variables for unit type and team."""
+        source = """
+t = Teams.SHARDED
+u_type = Units.flare
+res = spawn(u_type, 10, 20, 0, t)
+"""
+        mlog = self.compile_code(source)
+        self.assertIn("set t @sharded", mlog)
+        self.assertIn("set u_type @flare", mlog)
+        self.assertIn("spawn u_type 10 20 0 t res 0", mlog)
+        self.validate_with_jvm(mlog)
+
+        if is_mindustry_available():
+            test_mlog = "#processor: world\n" + mlog
+            run_res = run_with_mindustry(test_mlog, max_steps=10)
+            self.assertTrue(run_res.success, f"Spawn execution failed: {run_res.message}")
+            self.assertEqual(run_res.vars.get("t"), "sharded")
+            self.assertEqual(run_res.vars.get("u_type"), "flare")
+
+    def test_high01_bullet_and_explosion_team_identifiers(self):
+        """Verify bullet and explosion preserve user variable names in team operands."""
+        source = """
+crux = Teams.SHARDED
+explosion(crux, 10, 20, 5, 50)
+b_res = bullet(None, 0, 10, 20, 0, crux)
+"""
+        mlog = self.compile_code(source)
+        self.assertIn("explosion crux 10 20 5 50 1 1 0 1", mlog)
+        self.assertIn("bullet b_res null 0 10 20 0 crux null -1 1 1 -1 -1", mlog)
+        self.validate_with_jvm(mlog)
 
 
 if __name__ == "__main__":

@@ -1058,6 +1058,40 @@ class Compiler:
         else:
             return self.compile_expr(arg)
 
+    def format_team_operand(self, node: ast.AST) -> str:
+        """Format and validate a team operand, preserving user identifiers (ast.Name)."""
+        if isinstance(node, ast.Constant):
+            if node.value in (None, "null", "None"):
+                return "null"
+            if isinstance(node.value, str):
+                return self.validate_arg(node.value, REG_TEAMS, self.loc(node))
+            return str(node.value)
+        if isinstance(node, ast.Name):
+            if node.id in ("null", "None"):
+                return "null"
+            return self.format_name(node.id, node)
+        team_val = self.format_intrinsic_arg(node, is_ident=True)
+        if isinstance(team_val, RawValue):
+            return str(team_val)
+        if isinstance(team_val, str) and team_val.startswith("@"):
+            return self.validate_arg(team_val, REG_TEAMS, self.loc(node))
+        return str(team_val)
+
+    def format_unit_type_operand(self, node: ast.AST) -> str:
+        """Format and validate a unit type operand, allowing runtime variables (ast.Name)."""
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, str):
+                return self.validate_arg(node.value, REG_UNIT_TYPES, self.loc(node))
+            return str(node.value)
+        if isinstance(node, ast.Name):
+            return self.format_name(node.id, node)
+        type_val = self.format_intrinsic_arg(node, is_ident=True)
+        if isinstance(type_val, RawValue):
+            return str(type_val)
+        if isinstance(type_val, str) and type_val.startswith("@"):
+            return self.validate_arg(type_val, REG_UNIT_TYPES, self.loc(node))
+        return str(type_val)
+
     def validate_control_at_token(self, value: str, node: ast.AST) -> None:
         """Validate a bare ``@`` token used as a control operand.
 
@@ -1949,13 +1983,11 @@ class Compiler:
             # Statement form: spawn(type, x, y, rotation, team, result, [effect=0]) (6 or 7 args)
             # Assignment form: result = spawn(type, x, y, rotation, team, [effect=0]) (5 or 6 args)
             if is_statement and target_dest is None and len(args) in (6, 7):
-                type_arg = self.format_intrinsic_arg(args[0], is_ident=True)
-                type_ = self.validate_arg(type_arg, REG_UNIT_TYPES, self.loc(args[0]))
+                type_ = self.format_unit_type_operand(args[0])
                 x = str(self.format_intrinsic_arg(args[1], is_ident=False))
                 y = str(self.format_intrinsic_arg(args[2], is_ident=False))
                 rotation = str(self.format_intrinsic_arg(args[3], is_ident=False))
-                team_arg = self.format_intrinsic_arg(args[4], is_ident=True)
-                team = self.validate_arg(team_arg, REG_TEAMS, self.loc(args[4]))
+                team = self.format_team_operand(args[4])
                 dest = str(self.format_intrinsic_arg(args[5], is_ident=True))
                 effect = str(self.format_intrinsic_arg(args[6], is_ident=False)) if len(args) == 7 else "0"
                 if effect in ("True", "true"):
@@ -1968,13 +2000,11 @@ class Compiler:
                 return dest
             elif (target_dest is not None or not is_statement) and len(args) in (5, 6):
                 dest = target_dest if target_dest is not None else self.new_temp(loc)
-                type_arg = self.format_intrinsic_arg(args[0], is_ident=True)
-                type_ = self.validate_arg(type_arg, REG_UNIT_TYPES, self.loc(args[0]))
+                type_ = self.format_unit_type_operand(args[0])
                 x = str(self.format_intrinsic_arg(args[1], is_ident=False))
                 y = str(self.format_intrinsic_arg(args[2], is_ident=False))
                 rotation = str(self.format_intrinsic_arg(args[3], is_ident=False))
-                team_arg = self.format_intrinsic_arg(args[4], is_ident=True)
-                team = self.validate_arg(team_arg, REG_TEAMS, self.loc(args[4]))
+                team = self.format_team_operand(args[4])
                 effect = str(self.format_intrinsic_arg(args[5], is_ident=False)) if len(args) == 6 else "0"
                 if effect in ("True", "true"):
                     effect = "1"
@@ -2001,8 +2031,7 @@ class Compiler:
                 x = str(self.format_intrinsic_arg(args[3], is_ident=False))
                 y = str(self.format_intrinsic_arg(args[4], is_ident=False))
                 rotation = str(self.format_intrinsic_arg(args[5], is_ident=False))
-                team_arg = self.format_intrinsic_arg(args[6], is_ident=True)
-                team = self.validate_arg(team_arg, REG_TEAMS, self.loc(args[6])) if (team_arg.startswith("@") or team_arg.upper() in REG_TEAMS.by_source_name) else str(team_arg)
+                team = self.format_team_operand(args[6])
                 owner = str(self.format_intrinsic_arg(args[7], is_ident=True)) if len(args) >= 8 else "null"
                 damage = str(self.format_intrinsic_arg(args[8], is_ident=False)) if len(args) >= 9 else "-1"
                 vel = str(self.format_intrinsic_arg(args[9], is_ident=False)) if len(args) >= 10 else "1"
@@ -2024,8 +2053,7 @@ class Compiler:
                 x = str(self.format_intrinsic_arg(args[2], is_ident=False))
                 y = str(self.format_intrinsic_arg(args[3], is_ident=False))
                 rotation = str(self.format_intrinsic_arg(args[4], is_ident=False))
-                team_arg = self.format_intrinsic_arg(args[5], is_ident=True)
-                team = self.validate_arg(team_arg, REG_TEAMS, self.loc(args[5])) if (team_arg.startswith("@") or team_arg.upper() in REG_TEAMS.by_source_name) else str(team_arg)
+                team = self.format_team_operand(args[5])
                 owner = str(self.format_intrinsic_arg(args[6], is_ident=True)) if len(args) >= 7 else "null"
                 damage = str(self.format_intrinsic_arg(args[7], is_ident=False)) if len(args) >= 8 else "-1"
                 vel = str(self.format_intrinsic_arg(args[8], is_ident=False)) if len(args) >= 9 else "1"
@@ -2080,8 +2108,7 @@ class Compiler:
                     "invalid arguments for explosion: expected explosion(team, x, y, radius, damage, [air, ground, pierce, effect])",
                     call,
                 )
-            team_arg = self.format_intrinsic_arg(args[0], is_ident=True)
-            team = self.validate_arg(team_arg, REG_TEAMS, self.loc(args[0])) if (team_arg.startswith("@") or team_arg.upper() in REG_TEAMS.by_source_name) else str(team_arg)
+            team = self.format_team_operand(args[0])
             x = str(self.format_intrinsic_arg(args[1], is_ident=False))
             y = str(self.format_intrinsic_arg(args[2], is_ident=False))
             radius = str(self.format_intrinsic_arg(args[3], is_ident=False))
@@ -2163,8 +2190,7 @@ class Compiler:
                 type_arg = self.format_intrinsic_arg(args[0], is_ident=True)
                 type_ = self.validate_arg(type_arg, REG_FETCH_TYPES, self.loc(args[0]))
                 dest = str(self.format_intrinsic_arg(args[1], is_ident=True))
-                team_arg = self.format_intrinsic_arg(args[2], is_ident=True)
-                team = self.validate_arg(team_arg, REG_TEAMS, self.loc(args[2])) if (team_arg.startswith("@") or team_arg.upper() in REG_TEAMS.by_source_name) else str(team_arg)
+                team = self.format_team_operand(args[2])
                 index = str(self.format_intrinsic_arg(args[3], is_ident=False)) if len(args) >= 4 else "0"
                 extra = str(self.format_intrinsic_arg(args[4], is_ident=True)) if len(args) >= 5 else "0"
                 self.instructions.append(
@@ -2175,8 +2201,7 @@ class Compiler:
                 dest = target_dest if target_dest is not None else self.new_temp(loc)
                 type_arg = self.format_intrinsic_arg(args[0], is_ident=True)
                 type_ = self.validate_arg(type_arg, REG_FETCH_TYPES, self.loc(args[0]))
-                team_arg = self.format_intrinsic_arg(args[1], is_ident=True)
-                team = self.validate_arg(team_arg, REG_TEAMS, self.loc(args[1])) if (team_arg.startswith("@") or team_arg.upper() in REG_TEAMS.by_source_name) else str(team_arg)
+                team = self.format_team_operand(args[1])
                 index = str(self.format_intrinsic_arg(args[2], is_ident=False)) if len(args) >= 3 else "0"
                 extra = str(self.format_intrinsic_arg(args[3], is_ident=True)) if len(args) >= 4 else "0"
                 self.instructions.append(
@@ -3764,12 +3789,7 @@ class Compiler:
             self.error(f"keyword arguments are not supported in {ns}.{method_name}()", call)
 
         def _format_team(node: ast.AST) -> str:
-            team_arg = self.format_intrinsic_arg(node, is_ident=True)
-            return (
-                self.validate_arg(team_arg, REG_TEAMS, self.loc(node))
-                if (team_arg.startswith("@") or team_arg.upper() in REG_TEAMS.by_source_name)
-                else str(team_arg)
-            )
+            return self.format_team_operand(node)
 
         # 1. unit: fetch unit <dest> <team> <index> <type|0>
         if method_name == "unit":
@@ -4004,22 +4024,7 @@ class Compiler:
             return self.validate_arg(type_arg, REG_QUERY_TYPES, self.loc(node))
 
         def _format_team(node: ast.AST) -> str:
-            if isinstance(node, ast.Constant):
-                if node.value in (None, "null", "None"):
-                    return "null"
-                if isinstance(node.value, str):
-                    return self.validate_arg(node.value, REG_TEAMS, self.loc(node))
-                return str(node.value)
-            if isinstance(node, ast.Name):
-                if node.id in ("null", "None"):
-                    return "null"
-                return self.format_name(node.id, node)
-            team_val = self.format_intrinsic_arg(node, is_ident=True)
-            if isinstance(team_val, RawValue):
-                return str(team_val)
-            if isinstance(team_val, str) and team_val.startswith("@"):
-                return self.validate_arg(team_val, REG_TEAMS, self.loc(node))
-            return str(team_val)
+            return self.format_team_operand(node)
 
         if method_name == "circle":
             # query.circle(type, team, x, y, radius) -> query circle <type> <team> <x> <y> <radius> 0
