@@ -39,7 +39,7 @@ class TestPhase1A(unittest.TestCase):
         source = "from mlog import Vars\nVars.counter = 5\ncounter = 0"
         ir = compile_source_to_ir(source, "test.py")
         mlog, _ = Emitter(ir).emit()
-        expected = "set @counter 5\nset @counter 0"
+        expected = "set @counter 5\nset counter 0"
         self.assertEqual(mlog.strip(), expected)
 
     def test_reserved_temp_name_rejected(self):

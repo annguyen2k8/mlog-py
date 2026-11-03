@@ -243,7 +243,7 @@ class TestPhase1F(unittest.TestCase):
         expected = [
             "set @counter 0",
             "set @counter 10",
-            "set @counter 5",
+            "set counter 5",
         ]
         self.assertEqual(mlog.splitlines(), expected)
 

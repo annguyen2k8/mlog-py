@@ -608,8 +608,6 @@ class Compiler:
                 f"variable name '{name}' is reserved for compiler temporaries",
                 node,
             )
-        if name in ("counter", "_counter"):
-            return "@counter"
         return name
 
     def format_constant(self, val: object, loc: SourceLocation, is_negated: bool = False) -> str:
