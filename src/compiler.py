@@ -779,26 +779,32 @@ class Compiler:
             return dest
 
         elif isinstance(expr, ast.BoolOp):
-            dest = target_dest if target_dest is not None else self.new_temp(loc)
+            # Use temporary accumulator to avoid prematurely overwriting target_dest
+            # if subsequent expressions read the target variable (CRIT-02).
+            accum = self.new_temp(loc)
             end_lbl = self.new_label("boolop_end")
             if isinstance(expr.op, ast.And):
                 for i, val in enumerate(expr.values):
                     v = self.compile_expr(val)
-                    self.instructions.append(IRSet(to=dest, from_=v, loc=loc))
+                    self.instructions.append(IRSet(to=accum, from_=v, loc=loc))
                     if i < len(expr.values) - 1:
                         self.instructions.append(
-                            IRJump(target=end_lbl, cond="equal", a=dest, b="0", loc=loc)
+                            IRJump(target=end_lbl, cond="equal", a=accum, b="0", loc=loc)
                         )
             elif isinstance(expr.op, ast.Or):
                 for i, val in enumerate(expr.values):
                     v = self.compile_expr(val)
-                    self.instructions.append(IRSet(to=dest, from_=v, loc=loc))
+                    self.instructions.append(IRSet(to=accum, from_=v, loc=loc))
                     if i < len(expr.values) - 1:
                         self.instructions.append(
-                            IRJump(target=end_lbl, cond="notEqual", a=dest, b="0", loc=loc)
+                            IRJump(target=end_lbl, cond="notEqual", a=accum, b="0", loc=loc)
                         )
             self.instructions.append(IRLabel(name=end_lbl, loc=loc))
-            return dest
+            if target_dest is not None:
+                if target_dest != accum:
+                    self.instructions.append(IRSet(to=target_dest, from_=accum, loc=loc))
+                return target_dest
+            return accum
 
         elif isinstance(expr, ast.Call):
             if isinstance(expr.func, ast.Name) and expr.func.id == "raw":

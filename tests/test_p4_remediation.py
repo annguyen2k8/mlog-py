@@ -99,5 +99,81 @@ Vars.counter += 2
         self.validate_with_jvm(mlog)
 
 
+
+    # =========================================================================
+    # 2. CRIT-02: Boolean short-circuit destination corruption
+    # =========================================================================
+
+    def test_crit02_boolop_and_destination_not_corrupted(self):
+        """Verify target_dest is not prematurely overwritten in 'and' chains."""
+        source = """
+x = 10
+x = (x > 5) and (x + 1)
+"""
+        mlog = self.compile_code(source)
+        self.validate_with_jvm(mlog)
+
+        if is_mindustry_available():
+            run_res = run_with_mindustry(mlog, max_steps=50)
+            # In standard Python: (10 > 5) is True, (10 + 1) is 11 -> x must be 11.0
+            self.assertEqual(run_res.vars.get("x"), 11.0)
+
+    def test_crit02_boolop_or_destination_not_corrupted(self):
+        """Verify target_dest is not prematurely overwritten in 'or' chains."""
+        source = """
+x = 10
+x = False or (x + 1)
+"""
+        mlog = self.compile_code(source)
+        self.validate_with_jvm(mlog)
+
+        if is_mindustry_available():
+            run_res = run_with_mindustry(mlog, max_steps=50)
+            # In standard Python: False is falsy, (10 + 1) is 11 -> x must be 11.0
+            self.assertEqual(run_res.vars.get("x"), 11.0)
+
+    def test_crit02_boolop_short_circuit_preserved(self):
+        """Verify short-circuiting skips subsequent branches when target_dest is used."""
+        source = """
+x = 10
+x = (x < 5) and (x + 1)
+"""
+        mlog = self.compile_code(source)
+        self.validate_with_jvm(mlog)
+
+        if is_mindustry_available():
+            run_res = run_with_mindustry(mlog, max_steps=50)
+            # (10 < 5) is 0 (False) -> short-circuit occurs, x receives 0.0
+            self.assertEqual(run_res.vars.get("x"), 0.0)
+
+    def test_crit02_boolop_nested_and_or(self):
+        """Verify nested and/or expressions correctly compute without target variable corruption."""
+        source = """
+x = 5
+x = ((x == 5) and (x * 2)) or (x + 100)
+"""
+        mlog = self.compile_code(source)
+        self.validate_with_jvm(mlog)
+
+        if is_mindustry_available():
+            run_res = run_with_mindustry(mlog, max_steps=50)
+            # (5 == 5) is True -> 5 * 2 = 10. 10 is truthy -> or short-circuits -> x = 10.0
+            self.assertEqual(run_res.vars.get("x"), 10.0)
+
+    def test_crit02_boolop_multiple_operands(self):
+        """Verify 3+ operand boolean chains preserve target variable across all steps."""
+        source = """
+a = 2
+a = (a > 0) and (a < 10) and (a + 5)
+"""
+        mlog = self.compile_code(source)
+        self.validate_with_jvm(mlog)
+
+        if is_mindustry_available():
+            run_res = run_with_mindustry(mlog, max_steps=50)
+            # a > 0 is True, a < 10 is True, a + 5 is 7.0 -> a = 7.0
+            self.assertEqual(run_res.vars.get("a"), 7.0)
+
+
 if __name__ == "__main__":
     unittest.main()
