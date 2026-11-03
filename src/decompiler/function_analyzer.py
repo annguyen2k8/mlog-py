@@ -126,6 +126,7 @@ class FunctionAnalyzer:
 
         # Step 2: Find all function candidates via calling convention handshakes
         candidates = self._discover_function_candidates(main_entry_jump_addr, global_start_addr)
+        self.candidates = candidates
 
         if not candidates:
             # No functions proven: fallback to standard Phase 2-3 structured program
@@ -593,6 +594,8 @@ class FunctionAnalyzer:
                     if a in self.instr_by_addr:
                         cand_i = self.instr_by_addr[a]
                         if cand_i.is_jump and cand_i.jump_target == curr_addr:
+                            if a in call_map:
+                                continue
                             matching_latch = a
                             latch_cand_i = cand_i
                             is_conditional_latch = cand_i.is_conditional_jump
@@ -769,14 +772,15 @@ class FunctionAnalyzer:
         call_start_map: Dict[int, Tuple[FunctionCandidate, CallSiteInfo]] = {}
         absorbed_addresses: Set[int] = set()
 
-        for cs in cand.call_sites:
-            if cs.call_jump_address <= cand.end_address:
-                call_map[cs.call_jump_address] = (cand, cs)
-                start_c = cs.parameter_set_addresses[0] if cs.parameter_set_addresses else cs.call_jump_address
-                call_start_map[start_c] = (cand, cs)
-                absorbed_addresses.update(cs.parameter_set_addresses)
-                if cs.target_var is not None:
-                    absorbed_addresses.add(cs.return_site_address)
+        for target_cand in getattr(self, "candidates", [cand]):
+            for cs in target_cand.call_sites:
+                if cand.entry_address <= cs.call_jump_address <= cand.end_address:
+                    call_map[cs.call_jump_address] = (target_cand, cs)
+                    start_c = cs.parameter_set_addresses[0] if cs.parameter_set_addresses else cs.call_jump_address
+                    call_start_map[start_c] = (target_cand, cs)
+                    absorbed_addresses.update(cs.parameter_set_addresses)
+                    if cs.target_var is not None:
+                        absorbed_addresses.add(cs.return_site_address)
 
         raw_nodes = self._structure_range(
             start_addr=cand.entry_address,

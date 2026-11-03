@@ -519,7 +519,7 @@ class CFGStructurer:
                 )
 
                 # Advance pointer to loop exit
-                curr_addr = loop.exit_address
+                curr_addr = max(loop.max_body_address + 1, curr_addr + 1)
                 continue
 
             # ---------------------------------------------------------------
