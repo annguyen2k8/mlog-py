@@ -154,6 +154,8 @@ class TestP2Ergonomics(unittest.TestCase):
             "query.circle(QueryType.UNIT, None, 0, 0, 100)\n"
             "query.circle(QueryType.UNIT, 'null', 0, 0, 100)\n"
             "query.circle(QueryType.UNIT, team_var, 0, 0, 100)\n"
+            "sharded = 42\n"
+            "query.circle(QueryType.UNIT, sharded, 0, 0, 100)\n"
         )
         mlog = self.compile_code(source)
         lines = mlog.splitlines()
@@ -162,6 +164,8 @@ class TestP2Ergonomics(unittest.TestCase):
         self.assertEqual(lines[2], "query circle unit null 0 0 100 0")
         self.assertEqual(lines[3], "query circle unit null 0 0 100 0")
         self.assertEqual(lines[4], "query circle unit team_var 0 0 100 0")
+        self.assertEqual(lines[5], "set sharded 42")
+        self.assertEqual(lines[6], "query circle unit sharded 0 0 100 0")
         self.validate_with_jvm(mlog)
 
     def test_query_rect(self):
@@ -170,12 +174,16 @@ class TestP2Ergonomics(unittest.TestCase):
             "query.rect(QueryType.BUILDING, Teams.CRUX, 10, 20, 30, 40)\n"
             "query.rect('unit', '@sharded', x, y, w, h)\n"
             "query.rect(QueryType.BUILDING, None, 1, 2, 3, 4)\n"
+            "crux = 99\n"
+            "query.rect(QueryType.BUILDING, crux, 1, 2, 3, 4)\n"
         )
         mlog = self.compile_code(source)
         lines = mlog.splitlines()
         self.assertEqual(lines[0], "query rect building @crux 10 20 30 40")
         self.assertEqual(lines[1], "query rect unit @sharded x y w h")
         self.assertEqual(lines[2], "query rect building null 1 2 3 4")
+        self.assertEqual(lines[3], "set crux 99")
+        self.assertEqual(lines[4], "query rect building crux 1 2 3 4")
         self.validate_with_jvm(mlog)
 
     def test_query_expression_fallback(self):

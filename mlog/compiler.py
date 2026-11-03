@@ -3811,12 +3811,14 @@ class Compiler:
                 if isinstance(node.value, str):
                     return self.validate_arg(node.value, REG_TEAMS, self.loc(node))
                 return str(node.value)
-            if isinstance(node, ast.Name) and node.id in ("null", "None"):
-                return "null"
+            if isinstance(node, ast.Name):
+                if node.id in ("null", "None"):
+                    return "null"
+                return self.format_name(node.id, node)
             team_val = self.format_intrinsic_arg(node, is_ident=True)
             if isinstance(team_val, RawValue):
                 return str(team_val)
-            if isinstance(team_val, str) and (team_val.startswith("@") or team_val in REG_TEAMS.by_source_name):
+            if isinstance(team_val, str) and team_val.startswith("@"):
                 return self.validate_arg(team_val, REG_TEAMS, self.loc(node))
             return str(team_val)
 
