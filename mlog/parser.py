@@ -446,19 +446,53 @@ class ASTValidator(ast.NodeVisitor):
                 )
             return
 
+        is_ucontrol_get_block = (
+            isinstance(call.func, ast.Attribute)
+            and isinstance(call.func.value, ast.Name)
+            and call.func.value.id == "ucontrol"
+            and call.func.attr in ("get_block", "getBlock")
+        )
+
+        if is_ucontrol_get_block:
+            if call.keywords:
+                self.error("ucontrol.get_block unpacking does not support keyword arguments", call)
+            if len(call.args) != 2:
+                self.error(
+                    f"invalid arguments for ucontrol.get_block unpacking: expected ucontrol.get_block(x, y), got {len(call.args)} arguments",
+                    call,
+                )
+            target_count = len(target.elts)
+            if target_count != 3:
+                self.error(
+                    f"cannot unpack {target_count} variables from ucontrol.get_block: expected exactly 3 (type, building, floor)",
+                    target,
+                )
+            return
+
         if not (is_ulocate_method or is_ulocate_call):
-            self.error("assignment target must be a simple variable name: tuple unpacking is only supported for 'ulocate' operations (e.g., core_x, core_y, found, building = ulocate.building(...)) and 'unpackcolor' (e.g., r, g, b, a = unpackcolor(color))", node.value)
+            self.error("assignment target must be a simple variable name: tuple unpacking is only supported for 'ulocate' operations (e.g., core_x, core_y, found, building = ulocate.building(...)), 'ucontrol.get_block' (e.g., type, building, floor = ucontrol.get_block(x, y)), and 'unpackcolor' (e.g., r, g, b, a = unpackcolor(color))", node.value)
 
         target_count = len(target.elts)
         if is_ulocate_method:
             method_name = call.func.attr
+            kw_map = {kw.arg: kw.value for kw in call.keywords if kw.arg}
             if method_name == "building":
-                if len(call.args) != 2 or call.keywords:
+                if any(k not in ("group", "enemy") for k in kw_map):
+                    self.error("invalid arguments for ulocate.building unpacking: expected ulocate.building(group, enemy)", call)
+                if len(call.args) >= 1 and "group" in kw_map:
+                    self.error("duplicate argument 'group' for ulocate.building unpacking (passed as both positional and keyword argument)", call)
+                if len(call.args) >= 2 and "enemy" in kw_map:
+                    self.error("duplicate argument 'enemy' for ulocate.building unpacking (passed as both positional and keyword argument)", call)
+                if len(call.args) + len(kw_map) != 2:
                     self.error("invalid arguments for ulocate.building unpacking: expected ulocate.building(group, enemy)", call)
                 if target_count not in (3, 4):
                     self.error(f"ulocate.building unpacking expects 3 or 4 target variables (out_x, out_y, out_found[, out_building]), got {target_count}", target)
             elif method_name == "ore":
-                if len(call.args) != 1 or call.keywords:
+                if any(k not in ("ore",) for k in kw_map):
+                    self.error("invalid arguments for ulocate.ore unpacking: expected ulocate.ore(ore)", call)
+                if len(call.args) >= 1 and "ore" in kw_map:
+                    self.error("duplicate argument 'ore' for ulocate.ore unpacking (passed as both positional and keyword argument)", call)
+                if len(call.args) + len(kw_map) != 1:
                     self.error("invalid arguments for ulocate.ore unpacking: expected ulocate.ore(ore)", call)
                 if target_count not in (3, 4):
                     self.error(f"ulocate.ore unpacking expects 3 or 4 target variables (out_x, out_y, out_found[, out_building]), got {target_count}", target)
@@ -606,7 +640,8 @@ class ASTValidator(ast.NodeVisitor):
                     f"Allowed intrinsics: {', '.join(sorted(ALLOWED_INTRINSICS))}",
                     node,
                 )
-        if node.keywords:
+        INTRINSICS_WITH_KEYWORDS = {"read", "sensor", "uradar"}
+        if node.keywords and func_name not in INTRINSICS_WITH_KEYWORDS:
             self.error("keyword arguments are not supported in intrinsics", node)
         if func_name != "print":
             for arg in node.args:
@@ -614,6 +649,10 @@ class ASTValidator(ast.NodeVisitor):
                     self.error(f"f-strings are not supported in '{func_name}()'; use print(f\"...\") instead", arg)
         for arg in node.args:
             self.visit(arg)
+        for kw in node.keywords:
+            if isinstance(kw.value, ast.JoinedStr):
+                self.error(f"f-strings are not supported in '{func_name}()'; use print(f\"...\") instead", kw.value)
+            self.visit(kw.value)
 
     def visit_Expr(self, node: ast.Expr):
         if isinstance(node.value, ast.JoinedStr):

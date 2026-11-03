@@ -259,15 +259,23 @@ def _parse_array_call(compiler: "Compiler", call: ast.Call, loc: SourceLocation)
             compiler.error(f"unexpected keyword argument '{kw.arg}' in Array()", kw)
 
     pos_args = list(call.args)
-    if block_node is None and pos_args:
-        block_node = pos_args.pop(0)
-    if size_node is None and pos_args:
-        size_node = pos_args.pop(0)
-    if dtype_node is None and pos_args:
-        dtype_node = pos_args.pop(0)
-
-    if pos_args:
+    if len(pos_args) > 3:
         compiler.error(f"Array() takes at most 3 arguments, got {len(call.args) + len(call.keywords)}", call)
+
+    # Positional mapping: pos 0 -> block, pos 1 -> size, pos 2 -> dtype
+    kw_names = {kw.arg for kw in call.keywords if kw.arg}
+    if len(pos_args) >= 1:
+        if "block" in kw_names:
+            compiler.error("duplicate argument 'block' in Array() (passed as both positional and keyword argument)", call)
+        block_node = pos_args[0]
+    if len(pos_args) >= 2:
+        if "size" in kw_names:
+            compiler.error("duplicate argument 'size' in Array() (passed as both positional and keyword argument)", call)
+        size_node = pos_args[1]
+    if len(pos_args) >= 3:
+        if "dtype" in kw_names:
+            compiler.error("duplicate argument 'dtype' in Array() (passed as both positional and keyword argument)", call)
+        dtype_node = pos_args[2]
 
     if block_node is None:
         compiler.error("missing required argument 'block' in Array()", call)
@@ -582,6 +590,16 @@ class Compiler:
     def error(self, msg: str, node: ast.AST):
         """Raise a CompileError at the AST node's source location."""
         raise CompileError(msg, self.loc(node))
+
+    def validate_no_keywords(self, call: ast.Call, intrinsic_name: str) -> None:
+        """Reject keyword arguments for intrinsics that do not accept them."""
+        if call.keywords:
+            first_kw = call.keywords[0]
+            kw_name = first_kw.arg or "**kwargs"
+            self.error(
+                f"'{intrinsic_name}' does not accept keyword arguments, got unexpected keyword '{kw_name}'",
+                first_kw,
+            )
 
     def format_name(self, name: str, node: ast.AST) -> str:
         """Format an identifier name."""
@@ -1171,6 +1189,7 @@ class Compiler:
             return "0"
 
         if func_name == "set":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 2:
                 self.error("invalid arguments for set: expected set(to, from)", call)
             to_str = str(self.format_intrinsic_arg(args[0], is_ident=True))
@@ -1183,6 +1202,7 @@ class Compiler:
             return to_str
 
         elif func_name == "op":
+            self.validate_no_keywords(call, func_name)
             if not args:
                 self.error(
                     "invalid arguments for op: expected op(op_name, dest, a, [b]) or dest = op(op_name, a, [b])",
@@ -1237,6 +1257,7 @@ class Compiler:
                 )
 
         elif func_name in ("min", "max"):
+            self.validate_no_keywords(call, func_name)
             if len(args) != 2:
                 self.error(
                     f"{func_name}() takes exactly 2 arguments ({len(args)} given)",
@@ -1251,6 +1272,7 @@ class Compiler:
             return dest
 
         elif func_name == "jump":
+            self.validate_no_keywords(call, func_name)
             if len(args) < 1 or len(args) > 4:
                 self.error("invalid arguments for jump: expected jump(target, [cond], [a], [b])", call)
             target = str(self.format_intrinsic_arg(args[0], is_ident=True))
@@ -1275,7 +1297,17 @@ class Compiler:
             return "0"
 
         elif func_name == "read":
+            kw_map = {kw.arg: kw.value for kw in call.keywords if kw.arg}
+            if any(k not in ("dest", "out") for k in kw_map):
+                first_bad = next(k for k in kw_map if k not in ("dest", "out"))
+                self.error(f"unexpected keyword argument '{first_bad}' in read()", call)
+            if "dest" in kw_map and "out" in kw_map:
+                self.error("cannot pass both 'dest' and 'out' to read()", call)
+            kw_dest_node = kw_map.get("dest") or kw_map.get("out")
+
             if len(args) == 3:
+                if kw_dest_node is not None:
+                    self.error("duplicate argument 'dest' for read() (passed as both positional and keyword argument)", call)
                 dest = str(self.format_intrinsic_arg(args[0], is_ident=True))
                 cell = str(self.format_intrinsic_arg(args[1], is_ident=True))
                 addr = str(self.format_intrinsic_arg(args[2], is_ident=False))
@@ -1283,13 +1315,24 @@ class Compiler:
                     IRRaw(opcode="read", args=[dest, cell, addr], loc=loc)
                 )
                 return dest
-            elif len(args) == 2 and (target_dest is not None or not is_statement):
-                dest = target_dest if target_dest is not None else self.new_temp(loc)
+            elif len(args) == 2:
+                if kw_dest_node is not None:
+                    dest = str(self.format_intrinsic_arg(kw_dest_node, is_ident=True))
+                elif target_dest is not None or not is_statement:
+                    dest = target_dest if target_dest is not None else self.new_temp(loc)
+                else:
+                    self.error(
+                        "invalid arguments for read: expected read(dest, cell, address) or dest = read(cell, address)",
+                        call,
+                    )
                 cell = str(self.format_intrinsic_arg(args[0], is_ident=True))
                 addr = str(self.format_intrinsic_arg(args[1], is_ident=False))
                 self.instructions.append(
                     IRRaw(opcode="read", args=[dest, cell, addr], loc=loc)
                 )
+                if target_dest is not None and dest != target_dest:
+                    self.instructions.append(IRSet(to=target_dest, from_=dest, loc=loc))
+                    return target_dest
                 return dest
             else:
                 self.error(
@@ -1298,6 +1341,7 @@ class Compiler:
                 )
 
         elif func_name == "write":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 3:
                 self.error("invalid arguments for write: expected write(input, cell, address)", call)
             val = str(self.format_intrinsic_arg(args[0], is_ident=False))
@@ -1309,6 +1353,7 @@ class Compiler:
             return "0"
 
         elif func_name == "draw":
+            self.validate_no_keywords(call, func_name)
             if len(args) < 1 or len(args) > 7:
                 self.error(
                     "invalid arguments for draw: expected draw(type, [x], [y], [p1], [p2], [p3], [p4])",
@@ -1344,6 +1389,7 @@ class Compiler:
             return "0"
 
         elif func_name == "drawflush":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 1:
                 self.error("invalid arguments for drawflush: expected drawflush(display)", call)
             target = str(self.format_intrinsic_arg(args[0], is_ident=True))
@@ -1353,6 +1399,7 @@ class Compiler:
             return "0"
 
         elif func_name == "print":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 1:
                 self.error("invalid arguments for print: expected print(value)", call)
             arg0 = args[0]
@@ -1367,6 +1414,7 @@ class Compiler:
             return "0"
 
         elif func_name == "printchar":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 1:
                 self.error("invalid arguments for printchar: expected printchar(value)", call)
             arg0 = args[0]
@@ -1380,6 +1428,7 @@ class Compiler:
             return "0"
 
         elif func_name == "format":
+            self.validate_no_keywords(call, func_name)
             if len(args) < 1:
                 self.error("invalid arguments for format: expected at least 1 value, e.g. format(val) or format(v1, v2, ...)", call)
             for arg in args:
@@ -1392,6 +1441,7 @@ class Compiler:
             return "0"
 
         elif func_name == "printflush":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 1:
                 self.error("invalid arguments for printflush: expected printflush(message)", call)
             target = str(self.format_intrinsic_arg(args[0], is_ident=True))
@@ -1401,7 +1451,17 @@ class Compiler:
             return "0"
 
         elif func_name == "sensor":
+            kw_map = {kw.arg: kw.value for kw in call.keywords if kw.arg}
+            if any(k not in ("dest", "out") for k in kw_map):
+                first_bad = next(k for k in kw_map if k not in ("dest", "out"))
+                self.error(f"unexpected keyword argument '{first_bad}' in sensor()", call)
+            if "dest" in kw_map and "out" in kw_map:
+                self.error("cannot pass both 'dest' and 'out' to sensor()", call)
+            kw_dest_node = kw_map.get("dest") or kw_map.get("out")
+
             if len(args) == 3:
+                if kw_dest_node is not None:
+                    self.error("duplicate argument 'dest' for sensor() (passed as both positional and keyword argument)", call)
                 dest = str(self.format_intrinsic_arg(args[0], is_ident=True))
                 block = str(self.format_intrinsic_arg(args[1], is_ident=True))
                 prop_arg = self.format_intrinsic_arg(args[2], is_ident=True)
@@ -1410,14 +1470,25 @@ class Compiler:
                     IRRaw(opcode="sensor", args=[dest, block, prop], loc=loc)
                 )
                 return dest
-            elif len(args) == 2 and (target_dest is not None or not is_statement):
-                dest = target_dest if target_dest is not None else self.new_temp(loc)
+            elif len(args) == 2:
+                if kw_dest_node is not None:
+                    dest = str(self.format_intrinsic_arg(kw_dest_node, is_ident=True))
+                elif target_dest is not None or not is_statement:
+                    dest = target_dest if target_dest is not None else self.new_temp(loc)
+                else:
+                    self.error(
+                        "invalid arguments for sensor: expected sensor(dest, block, prop) or dest = sensor(block, prop)",
+                        call,
+                    )
                 block = str(self.format_intrinsic_arg(args[0], is_ident=True))
                 prop_arg = self.format_intrinsic_arg(args[1], is_ident=True)
                 prop = self.validate_arg(prop_arg, REG_SENSOR_PROPERTIES, self.loc(args[1]))
                 self.instructions.append(
                     IRRaw(opcode="sensor", args=[dest, block, prop], loc=loc)
                 )
+                if target_dest is not None and dest != target_dest:
+                    self.instructions.append(IRSet(to=target_dest, from_=dest, loc=loc))
+                    return target_dest
                 return dest
             else:
                 self.error(
@@ -1426,6 +1497,7 @@ class Compiler:
                 )
 
         elif func_name == "control":
+            self.validate_no_keywords(call, func_name)
             if len(args) < 2 or len(args) > 6:
                 self.error(
                     "invalid arguments for control: expected control(type, target, [p1], [p2], [p3], [p4])",
@@ -1446,6 +1518,7 @@ class Compiler:
             return "0"
 
         elif func_name == "ubind":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 1:
                 self.error("invalid arguments for ubind: expected ubind(unit_type)", call)
             unit_arg = self.format_intrinsic_arg(args[0], is_ident=True)
@@ -1463,6 +1536,7 @@ class Compiler:
 
 
         elif func_name == "ucontrol":
+            self.validate_no_keywords(call, func_name)
             if len(args) < 1 or len(args) > 6:
                 self.error(
                     "invalid arguments for ucontrol: expected ucontrol(action, [p1], [p2], [p3], [p4], [p5])",
@@ -1484,6 +1558,7 @@ class Compiler:
             return "0"
 
         elif func_name == "radar":
+            self.validate_no_keywords(call, func_name)
             if len(args) == 6 and (target_dest is not None or not is_statement):
                 dest = target_dest if target_dest is not None else self.new_temp(loc)
                 t1 = self.validate_arg(self.format_intrinsic_arg(args[0], is_ident=True), REG_RADAR_TARGETS, self.loc(args[0]))
@@ -1523,8 +1598,21 @@ class Compiler:
                 )
 
         elif func_name == "uradar":
-            if 0 <= len(args) <= 5 and (target_dest is not None or not is_statement):
-                dest = target_dest if target_dest is not None else self.new_temp(loc)
+            kw_map = {kw.arg: kw.value for kw in call.keywords if kw.arg}
+            if any(k not in ("dest", "out") for k in kw_map):
+                first_bad = next(k for k in kw_map if k not in ("dest", "out"))
+                self.error(f"unexpected keyword argument '{first_bad}' in uradar()", call)
+            if "dest" in kw_map and "out" in kw_map:
+                self.error("cannot pass both 'dest' and 'out' to uradar()", call)
+            kw_dest_node = kw_map.get("dest") or kw_map.get("out")
+
+            if 0 <= len(args) <= 5 and (target_dest is not None or not is_statement or kw_dest_node is not None):
+                if kw_dest_node is not None:
+                    dest = str(self.format_intrinsic_arg(kw_dest_node, is_ident=True))
+                elif target_dest is not None:
+                    dest = target_dest
+                else:
+                    dest = self.new_temp(loc)
                 t1 = self.validate_arg(self.format_intrinsic_arg(args[0], is_ident=True), REG_RADAR_TARGETS, self.loc(args[0])) if len(args) >= 1 else "enemy"
                 t2 = self.validate_arg(self.format_intrinsic_arg(args[1], is_ident=True), REG_RADAR_TARGETS, self.loc(args[1])) if len(args) >= 2 else "any"
                 t3 = self.validate_arg(self.format_intrinsic_arg(args[2], is_ident=True), REG_RADAR_TARGETS, self.loc(args[2])) if len(args) >= 3 else "any"
@@ -1537,8 +1625,13 @@ class Compiler:
                         loc=loc,
                     )
                 )
+                if target_dest is not None and dest != target_dest:
+                    self.instructions.append(IRSet(to=target_dest, from_=dest, loc=loc))
+                    return target_dest
                 return dest
             elif len(args) == 6:
+                if kw_dest_node is not None:
+                    self.error("duplicate argument 'out' for uradar() (passed as both positional and keyword argument)", call)
                 t1 = self.validate_arg(self.format_intrinsic_arg(args[0], is_ident=True), REG_RADAR_TARGETS, self.loc(args[0]))
                 t2 = self.validate_arg(self.format_intrinsic_arg(args[1], is_ident=True), REG_RADAR_TARGETS, self.loc(args[1]))
                 t3 = self.validate_arg(self.format_intrinsic_arg(args[2], is_ident=True), REG_RADAR_TARGETS, self.loc(args[2]))
@@ -1554,6 +1647,8 @@ class Compiler:
                 )
                 return out
             elif len(args) == 7:
+                if kw_dest_node is not None:
+                    self.error("duplicate argument 'out' for uradar() (passed as both positional and keyword argument)", call)
                 t1 = self.validate_arg(self.format_intrinsic_arg(args[0], is_ident=True), REG_RADAR_TARGETS, self.loc(args[0]))
                 t2 = self.validate_arg(self.format_intrinsic_arg(args[1], is_ident=True), REG_RADAR_TARGETS, self.loc(args[1]))
                 t3 = self.validate_arg(self.format_intrinsic_arg(args[2], is_ident=True), REG_RADAR_TARGETS, self.loc(args[2]))
@@ -1575,6 +1670,7 @@ class Compiler:
                 )
 
         elif func_name == "lookup":
+            self.validate_no_keywords(call, func_name)
             if len(args) == 3:
                 type_arg = self.format_intrinsic_arg(args[0], is_ident=True)
                 type_str = self.validate_arg(type_arg, REG_LOOKUP_TYPES, self.loc(args[0]))
@@ -1600,6 +1696,7 @@ class Compiler:
                 )
 
         elif func_name == "packcolor":
+            self.validate_no_keywords(call, func_name)
             if len(args) == 5:
                 dest = str(self.format_intrinsic_arg(args[0], is_ident=True))
                 r = str(self.format_intrinsic_arg(args[1], is_ident=False))
@@ -1627,6 +1724,7 @@ class Compiler:
                 )
 
         elif func_name == "unpackcolor":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 5:
                 self.error(
                     "invalid arguments for unpackcolor: expected unpackcolor(r, g, b, a, value) or r, g, b, a = unpackcolor(value)",
@@ -1643,6 +1741,7 @@ class Compiler:
             return "0"
 
         elif func_name == "getlink":
+            self.validate_no_keywords(call, func_name)
             if len(args) == 2:
                 dest = str(self.format_intrinsic_arg(args[0], is_ident=True))
                 idx = str(self.format_intrinsic_arg(args[1], is_ident=False))
@@ -1664,6 +1763,7 @@ class Compiler:
                 )
 
         elif func_name == "select":
+            self.validate_no_keywords(call, func_name)
             if len(args) == 6:
                 dest = str(self.format_intrinsic_arg(args[0], is_ident=True))
                 cond_arg = self.format_intrinsic_arg(args[1], is_ident=True)
@@ -1713,6 +1813,7 @@ class Compiler:
                 )
 
         elif func_name == "ulocate":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 8:
                 self.error(
                     "invalid arguments for ulocate: expected ulocate(locate, flag, enemy, ore, outX, outY, outFound, outBuild)",
@@ -1727,6 +1828,7 @@ class Compiler:
             return "0"
 
         elif func_name == "wait":
+            self.validate_no_keywords(call, func_name)
             if len(args) > 1:
                 self.error("invalid arguments for wait: expected wait([seconds])", call)
             sec = (
@@ -1740,6 +1842,7 @@ class Compiler:
             return "0"
 
         elif func_name == "setrate":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 1:
                 self.error("invalid arguments for setrate: expected setrate(ipt)", call)
             ipt = str(self.format_intrinsic_arg(args[0], is_ident=False))
@@ -1749,24 +1852,28 @@ class Compiler:
             return "0"
 
         elif func_name == "noop":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 0:
                 self.error("invalid arguments for noop: expected noop()", call)
             self.instructions.append(IRRaw(opcode="noop", args=[], loc=loc))
             return "0"
 
         elif func_name == "stop":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 0:
                 self.error("invalid arguments for stop: expected stop()", call)
             self.instructions.append(IRRaw(opcode="stop", args=[], loc=loc))
             return "0"
 
         elif func_name == "end":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 0:
                 self.error("invalid arguments for end: expected end()", call)
             self.instructions.append(IRRaw(opcode="end", args=[], loc=loc))
             return "0"
 
         elif func_name == "query":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 7:
                 self.error(
                     "invalid arguments for query: expected query(shape, type, team, x, y, w, h)",
@@ -1787,6 +1894,7 @@ class Compiler:
             return "0"
 
         elif func_name == "getblock":
+            self.validate_no_keywords(call, func_name)
             if len(args) == 4:
                 layer_arg = self.format_intrinsic_arg(args[0], is_ident=True)
                 layer = self.validate_arg(layer_arg, REG_TILE_LAYERS, self.loc(args[0]))
@@ -1814,6 +1922,7 @@ class Compiler:
                 )
 
         elif func_name == "setblock":
+            self.validate_no_keywords(call, func_name)
             if len(args) < 4 or len(args) > 6:
                 self.error(
                     "invalid arguments for setblock: expected setblock(layer, block, x, y, [team, rotation])",
@@ -1832,6 +1941,7 @@ class Compiler:
             return "0"
 
         elif func_name == "spawn":
+            self.validate_no_keywords(call, func_name)
             # Statement form: spawn(type, x, y, rotation, team, result, [effect=0]) (6 or 7 args)
             # Assignment form: result = spawn(type, x, y, rotation, team, [effect=0]) (5 or 6 args)
             if is_statement and target_dest is None and len(args) in (6, 7):
@@ -1877,6 +1987,7 @@ class Compiler:
                 )
 
         elif func_name == "bullet":
+            self.validate_no_keywords(call, func_name)
             # Statement form: bullet(result, from_, index, x, y, rotation, team, [owner, damage, velocityScl, lifeScl, aimX, aimY]) (7 to 13 args)
             # Assignment form: result = bullet(from_, index, x, y, rotation, team, [owner, damage, velocityScl, lifeScl, aimX, aimY]) (6 to 12 args)
             if 7 <= len(args) <= 13 and is_statement and (target_dest is None):
@@ -1932,6 +2043,7 @@ class Compiler:
                 )
 
         elif func_name == "status":
+            self.validate_no_keywords(call, func_name)
             # status(clear, effect, unit, [duration=0]) (3 or 4 args)
             if len(args) not in (3, 4):
                 self.error(
@@ -1957,6 +2069,7 @@ class Compiler:
             return "0"
 
         elif func_name == "explosion":
+            self.validate_no_keywords(call, func_name)
             # explosion(team, x, y, radius, damage, [air=1, ground=1, pierce=0, effect=1]) (5 to 9 args)
             if not (5 <= len(args) <= 9):
                 self.error(
@@ -1987,6 +2100,7 @@ class Compiler:
             return "0"
 
         elif func_name == "getflag":
+            self.validate_no_keywords(call, func_name)
             # Statement form: getflag(result, flag) (2 args)
             # Expression form: result = getflag(flag) (1 arg)
             if len(args) == 2 and is_statement and (target_dest is None):
@@ -2010,6 +2124,7 @@ class Compiler:
                 )
 
         elif func_name == "setflag":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 2:
                 self.error("invalid arguments for setflag: expected setflag(flag, value)", call)
             flag = str(self.format_intrinsic_arg(args[0], is_ident=False))
@@ -2021,6 +2136,7 @@ class Compiler:
             return "0"
 
         elif func_name == "setprop":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 3:
                 self.error("invalid arguments for setprop: expected setprop(type, of, value)", call)
             type_arg = self.format_intrinsic_arg(args[0], is_ident=True)
@@ -2036,6 +2152,7 @@ class Compiler:
             return "0"
 
         elif func_name == "fetch":
+            self.validate_no_keywords(call, func_name)
             # Statement form: fetch(type, result, team, [index=0], [extra=0]) (3 to 5 args)
             # Expression form: result = fetch(type, team, [index=0], [extra=0]) (2 to 4 args)
             if 3 <= len(args) <= 5 and is_statement and (target_dest is None):
@@ -2069,6 +2186,7 @@ class Compiler:
                 )
 
         elif func_name == "sync":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 1:
                 self.error("invalid arguments for sync: expected sync(variable)", call)
             var_name = str(self.format_intrinsic_arg(args[0], is_ident=True))
@@ -2078,6 +2196,7 @@ class Compiler:
             return "0"
 
         elif func_name == "setrule":
+            self.validate_no_keywords(call, func_name)
             if not (2 <= len(args) <= 6):
                 self.error(
                     "invalid arguments for setrule: expected setrule(rule, value, [p1, p2, p3, p4])",
@@ -2096,6 +2215,7 @@ class Compiler:
             return "0"
 
         elif func_name == "weathersense":
+            self.validate_no_keywords(call, func_name)
             # Statement form: weathersense(to, weather) (2 args)
             # Expression form: to = weathersense(weather) (1 arg)
             if target_dest is not None and len(args) == 1:
@@ -2129,6 +2249,7 @@ class Compiler:
                 )
 
         elif func_name == "weatherset":
+            self.validate_no_keywords(call, func_name)
             # weatherset(weather, [state=1]) (1 or 2 args)
             if not (1 <= len(args) <= 2):
                 self.error(
@@ -2148,6 +2269,7 @@ class Compiler:
             return "0"
 
         elif func_name == "spawnwave":
+            self.validate_no_keywords(call, func_name)
             # spawnwave(x, y, [natural=0]) (2 or 3 args)
             if not (2 <= len(args) <= 3):
                 self.error(
@@ -2167,6 +2289,7 @@ class Compiler:
             return "0"
 
         elif func_name == "effect":
+            self.validate_no_keywords(call, func_name)
             # effect(type, x, y, [sizerot=0, color=0, data=0]) (3 to 6 args)
             if not (3 <= len(args) <= 6):
                 self.error(
@@ -2252,6 +2375,7 @@ class Compiler:
             return dest if (target_dest is not None or not is_statement) else "0"
 
         elif func_name == "cutscene":
+            self.validate_no_keywords(call, func_name)
             # cutscene(action, [p1=0, p2=0, p3=0, p4=0]) (1 to 5 args)
             if not (1 <= len(args) <= 5):
                 self.error("invalid arguments for cutscene: expected cutscene(action, [p1, p2, p3, p4])", call)
@@ -2292,6 +2416,7 @@ class Compiler:
             return "0"
 
         elif func_name == "playsound":
+            self.validate_no_keywords(call, func_name)
             # playsound(positional, id, [volume=1, pitch=1, pan=0, x=0, y=0, limit=True])
             if not (2 <= len(args) <= 8):
                 self.error("invalid arguments for playsound: expected playsound(positional, id, [volume, pitch, pan, x, y, limit])", call)
@@ -2311,6 +2436,7 @@ class Compiler:
             return "0"
 
         elif func_name == "playmusic":
+            self.validate_no_keywords(call, func_name)
             # playmusic(name, [interrupt=True])
             if not (1 <= len(args) <= 2):
                 self.error("invalid arguments for playmusic: expected playmusic(name, [interrupt=True])", call)
@@ -2323,6 +2449,7 @@ class Compiler:
             return "0"
 
         elif func_name == "makemarker":
+            self.validate_no_keywords(call, func_name)
             # makemarker(type, id, x, y, [replace=True])
             if not (4 <= len(args) <= 5):
                 self.error("invalid arguments for makemarker: expected makemarker(type, id, x, y, [replace=True])", call)
@@ -2340,6 +2467,7 @@ class Compiler:
             return "0"
 
         elif func_name == "setmarker":
+            self.validate_no_keywords(call, func_name)
             # setmarker(type, id, [p1=0, p2=0, p3=0])
             if not (2 <= len(args) <= 5):
                 self.error("invalid arguments for setmarker: expected setmarker(type, id, [p1, p2, p3])", call)
@@ -2368,6 +2496,7 @@ class Compiler:
             return "0"
 
         elif func_name == "localeprint":
+            self.validate_no_keywords(call, func_name)
             if len(args) != 1:
                 self.error("invalid arguments for localeprint: expected localeprint(value)", call)
             val = str(self.format_intrinsic_arg(args[0], is_ident=False))
@@ -2377,6 +2506,7 @@ class Compiler:
             return "0"
 
         elif func_name == "clientdata":
+            self.validate_no_keywords(call, func_name)
             # clientdata(channel, value, [reliable=False])
             if not (2 <= len(args) <= 3):
                 self.error("invalid arguments for clientdata: expected clientdata(channel, value, [reliable=False])", call)
@@ -2973,16 +3103,34 @@ class Compiler:
             return "0"
 
         elif method_name == "within":
-            if len(args) != 4 or call.keywords:
-                self.error(f"invalid arguments for {ns}.within: expected {ns}.within(x, y, radius, out_result)", call)
-            x = str(self.format_intrinsic_arg(args[0], is_ident=False))
-            y = str(self.format_intrinsic_arg(args[1], is_ident=False))
-            r = str(self.format_intrinsic_arg(args[2], is_ident=False))
-            out_res = str(self.format_intrinsic_arg(args[3], is_ident=True))
-            self.instructions.append(
-                IRRaw(opcode="ucontrol", args=["within", x, y, r, out_res, "0"], loc=loc)
-            )
-            return "0"
+            if call.keywords:
+                self.error(f"invalid arguments for {ns}.within: does not accept keyword arguments", call)
+            if len(args) == 3 and (target_dest is not None or not is_statement):
+                dest = target_dest if target_dest is not None else self.new_temp(loc)
+                x = str(self.format_intrinsic_arg(args[0], is_ident=False))
+                y = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                r = str(self.format_intrinsic_arg(args[2], is_ident=False))
+                self.instructions.append(
+                    IRRaw(opcode="ucontrol", args=["within", x, y, r, dest, "0"], loc=loc)
+                )
+                return dest
+            elif len(args) == 4:
+                x = str(self.format_intrinsic_arg(args[0], is_ident=False))
+                y = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                r = str(self.format_intrinsic_arg(args[2], is_ident=False))
+                out_res = str(self.format_intrinsic_arg(args[3], is_ident=True))
+                self.instructions.append(
+                    IRRaw(opcode="ucontrol", args=["within", x, y, r, out_res, "0"], loc=loc)
+                )
+                if target_dest is not None and target_dest != out_res:
+                    self.instructions.append(IRSet(to=target_dest, from_=out_res, loc=loc))
+                    return target_dest
+                return out_res
+            else:
+                self.error(
+                    f"invalid arguments for {ns}.within: expected {ns}.within(x, y, radius, out_result) or result = {ns}.within(x, y, radius)",
+                    call,
+                )
 
         elif method_name == "unbind":
             if len(args) != 0 or call.keywords:
@@ -3276,6 +3424,9 @@ class Compiler:
         method_name = call.func.attr
         args = call.args
 
+        if call.keywords:
+            self.error(f"sound.{method_name} does not accept keyword arguments", call.keywords[0])
+
         if method_name == "play":
             # sound.play(id, [volume=1, pitch=1, pan=0, limit=True])
             if not (1 <= len(args) <= 5):
@@ -3321,6 +3472,9 @@ class Compiler:
         method_name = call.func.attr
         args = call.args
 
+        if call.keywords:
+            self.error(f"music.{method_name} does not accept keyword arguments", call.keywords[0])
+
         if method_name == "play":
             # music.play(name, [interrupt=True])
             if not (1 <= len(args) <= 2):
@@ -3358,6 +3512,8 @@ class Compiler:
 
         if method_name == "make":
             # marker.make(type, id, x, y, [replace=True])
+            if call.keywords:
+                self.error("marker.make does not support keyword arguments", call.keywords[0])
             if not (4 <= len(args) <= 5):
                 self.error("invalid arguments for marker.make: expected marker.make(type, id, x, y, [replace=True])", call)
             type_arg = self.format_intrinsic_arg(args[0], is_ident=True)
@@ -3377,6 +3533,8 @@ class Compiler:
             # marker.texture(id, name, [print_flush=False])
             # Engine order is: setmarker texture <id> <printFlush> <name> <p3>
             # where printFlush (p1) is a boolean and name is read from p2.
+            if call.keywords:
+                self.error("marker.texture does not support keyword arguments", call.keywords[0])
             if not (2 <= len(args) <= 3):
                 self.error(
                     "invalid arguments for marker.texture: expected marker.texture(id, name, [print_flush=False])",
@@ -3429,11 +3587,18 @@ class Compiler:
         }
 
         if method_name in ctrl_map:
+            if call.keywords:
+                self.error(f"marker.{method_name} does not support keyword arguments", call.keywords[0])
             ctrl_type, expected_params = ctrl_map[method_name]
             if len(args) < 1:
                 self.error(f"marker.{method_name} requires at least an id argument", call)
-            id_ = str(self.format_intrinsic_arg(args[0], is_ident=True))
             p_args = args[1:]
+            if len(p_args) != expected_params:
+                self.error(
+                    f"invalid arguments for marker.{method_name}: expected {expected_params + 1} argument{'s' if expected_params != 0 else ''} (id, {expected_params} parameter{'s' if expected_params != 1 else ''}), got {len(args)}",
+                    call,
+                )
+            id_ = str(self.format_intrinsic_arg(args[0], is_ident=True))
             p1 = "0"
             p2 = "0"
             p3 = "0"
@@ -3484,14 +3649,26 @@ class Compiler:
                 effect_node = kw_map.get("effect")
                 duration_node = kw_map.get("duration")
             elif len(args) == 1:
+                if "unit" in kw_map:
+                    self.error(f"duplicate argument 'unit' for {ns}.apply (passed as both positional and keyword argument)", call)
                 unit_node = args[0]
                 effect_node = kw_map.get("effect")
                 duration_node = kw_map.get("duration")
             elif len(args) == 2:
+                if "unit" in kw_map:
+                    self.error(f"duplicate argument 'unit' for {ns}.apply (passed as both positional and keyword argument)", call)
+                if "effect" in kw_map:
+                    self.error(f"duplicate argument 'effect' for {ns}.apply (passed as both positional and keyword argument)", call)
                 unit_node = args[0]
                 effect_node = args[1]
                 duration_node = kw_map.get("duration")
-            elif len(args) == 3 and not kw_map:
+            elif len(args) == 3:
+                if "unit" in kw_map:
+                    self.error(f"duplicate argument 'unit' for {ns}.apply (passed as both positional and keyword argument)", call)
+                if "effect" in kw_map:
+                    self.error(f"duplicate argument 'effect' for {ns}.apply (passed as both positional and keyword argument)", call)
+                if "duration" in kw_map:
+                    self.error(f"duplicate argument 'duration' for {ns}.apply (passed as both positional and keyword argument)", call)
                 unit_node = args[0]
                 effect_node = args[1]
                 duration_node = args[2]
@@ -3532,9 +3709,15 @@ class Compiler:
                 unit_node = kw_map.get("unit")
                 effect_node = kw_map.get("effect")
             elif len(args) == 1:
+                if "unit" in kw_map:
+                    self.error(f"duplicate argument 'unit' for {ns}.clear (passed as both positional and keyword argument)", call)
                 unit_node = args[0]
                 effect_node = kw_map.get("effect")
-            elif len(args) == 2 and not kw_map:
+            elif len(args) == 2:
+                if "unit" in kw_map:
+                    self.error(f"duplicate argument 'unit' for {ns}.clear (passed as both positional and keyword argument)", call)
+                if "effect" in kw_map:
+                    self.error(f"duplicate argument 'effect' for {ns}.clear (passed as both positional and keyword argument)", call)
                 unit_node = args[0]
                 effect_node = args[1]
 
@@ -4028,17 +4211,61 @@ class Compiler:
             )
             return
 
-        if isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name) and call.func.value.id == "ulocate":
+        if isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name) and call.func.value.id == "ucontrol":
+            method_name = call.func.attr
+            if method_name in ("get_block", "getBlock"):
+                if call.keywords:
+                    self.error(f"ucontrol.{method_name} unpacking does not support keyword arguments", call)
+                if len(call.args) != 2:
+                    self.error(f"invalid arguments for ucontrol.{method_name} unpacking: expected ucontrol.{method_name}(x, y)", call)
+                if len(target_names) != 3:
+                    self.error(f"ucontrol.{method_name} unpacking expects exactly 3 target variables (out_type, out_building, out_floor), got {len(target_names)}", target)
+                x = str(self.format_intrinsic_arg(call.args[0], is_ident=False))
+                y = str(self.format_intrinsic_arg(call.args[1], is_ident=False))
+                out_type, out_building, out_floor = target_names
+                self.instructions.append(
+                    IRRaw(opcode="ucontrol", args=["getBlock", x, y, out_type, out_building, out_floor], loc=loc)
+                )
+                return
+            else:
+                self.error(f"tuple unpacking is not supported for 'ucontrol.{method_name}'", call)
+
+        elif isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name) and call.func.value.id == "ulocate":
             method_name = call.func.attr
             args = call.args
 
             if method_name == "building":
-                if len(args) != 2 or call.keywords:
+                kw_map = {kw.arg: kw.value for kw in call.keywords if kw.arg}
+                if any(k not in ("group", "enemy") for k in kw_map):
+                    self.error("invalid keyword arguments for ulocate.building unpacking: expected group, enemy", call)
+
+                group_node = None
+                enemy_node = None
+                if len(args) == 0:
+                    group_node = kw_map.get("group")
+                    enemy_node = kw_map.get("enemy")
+                elif len(args) == 1:
+                    if "group" in kw_map:
+                        self.error("duplicate argument 'group' for ulocate.building (passed as both positional and keyword argument)", call)
+                    group_node = args[0]
+                    enemy_node = kw_map.get("enemy")
+                elif len(args) == 2:
+                    if "group" in kw_map:
+                        self.error("duplicate argument 'group' for ulocate.building (passed as both positional and keyword argument)", call)
+                    if "enemy" in kw_map:
+                        self.error("duplicate argument 'enemy' for ulocate.building (passed as both positional and keyword argument)", call)
+                    group_node = args[0]
+                    enemy_node = args[1]
+                else:
+                    self.error("too many arguments for ulocate.building unpacking: expected ulocate.building(group, enemy)", call)
+
+                if group_node is None or enemy_node is None:
                     self.error("invalid arguments for ulocate.building unpacking: expected ulocate.building(group, enemy)", call)
+
                 if len(target_names) not in (3, 4):
                     self.error(f"ulocate.building unpacking expects 3 or 4 target variables (out_x, out_y, out_found[, out_building]), got {len(target_names)}", target)
-                group = str(self.format_intrinsic_arg(args[0], is_ident=True))
-                enemy = str(self.format_intrinsic_arg(args[1], is_ident=False))
+                group = str(self.format_intrinsic_arg(group_node, is_ident=True))
+                enemy = str(self.format_intrinsic_arg(enemy_node, is_ident=False))
                 out_x = target_names[0]
                 out_y = target_names[1]
                 out_found = target_names[2]
@@ -4049,11 +4276,26 @@ class Compiler:
                 return
 
             elif method_name == "ore":
-                if len(args) != 1 or call.keywords:
+                kw_map = {kw.arg: kw.value for kw in call.keywords if kw.arg}
+                if any(k not in ("ore",) for k in kw_map):
+                    self.error("invalid keyword arguments for ulocate.ore unpacking: expected ore", call)
+
+                ore_node = None
+                if len(args) == 0:
+                    ore_node = kw_map.get("ore")
+                elif len(args) == 1:
+                    if "ore" in kw_map:
+                        self.error("duplicate argument 'ore' for ulocate.ore (passed as both positional and keyword argument)", call)
+                    ore_node = args[0]
+                else:
+                    self.error("too many arguments for ulocate.ore unpacking: expected ulocate.ore(ore)", call)
+
+                if ore_node is None:
                     self.error("invalid arguments for ulocate.ore unpacking: expected ulocate.ore(ore)", call)
+
                 if len(target_names) not in (3, 4):
                     self.error(f"ulocate.ore unpacking expects 3 or 4 target variables (out_x, out_y, out_found[, out_building]), got {len(target_names)}", target)
-                ore = str(self.format_intrinsic_arg(args[0], is_ident=True))
+                ore = str(self.format_intrinsic_arg(ore_node, is_ident=True))
                 out_x = target_names[0]
                 out_y = target_names[1]
                 out_found = target_names[2]
@@ -4123,7 +4365,7 @@ class Compiler:
             else:
                 self.error(f"unsupported ulocate type for unpacking: '{loc_type}'", call)
         else:
-            self.error("tuple unpacking is only supported for 'ulocate' and 'unpackcolor' operations", call)
+            self.error("tuple unpacking is only supported for 'ulocate', 'unpackcolor', and 'ucontrol.get_block' operations", call)
 
     def compile_assignment(self, node: ast.Assign):
         """Compile an assignment statement: target = value"""
