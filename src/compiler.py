@@ -1129,6 +1129,8 @@ class Compiler:
                     return self.compile_fetch_method(call, target_dest=target_dest, is_statement=is_statement)
                 elif ns == "lookup":
                     return self.compile_lookup_method(call, target_dest=target_dest, is_statement=is_statement)
+                elif ns == "query":
+                    return self.compile_query_method(call, target_dest=target_dest, is_statement=is_statement)
             self.error(
                 f"unsupported method call on '{call.func.value.id if isinstance(call.func.value, ast.Name) else 'object'}'",
                 call,
@@ -3776,6 +3778,86 @@ class Compiler:
             IRRaw(opcode="lookup", args=[type_str, dest, idx], loc=loc)
         )
         return dest
+
+    def compile_query_method(
+        self,
+        call: ast.Call,
+        target_dest: Optional[str] = None,
+        is_statement: bool = False,
+    ) -> str:
+        """Compile query.<method>(...) call into Mindustry 'query' instruction."""
+        loc = self.loc(call)
+        assert isinstance(call.func, ast.Attribute)
+        method_name = call.func.attr
+        args = call.args
+        ns = call.func.value.id if isinstance(call.func.value, ast.Name) else "query"
+
+        if method_name not in ("circle", "rect"):
+            self.error(f"unknown query method: '{ns}.{method_name}'", call)
+
+        if call.keywords:
+            self.error(f"keyword arguments are not supported in {ns}.{method_name}()", call)
+
+        def _format_type(node: ast.AST) -> str:
+            type_arg = self.format_intrinsic_arg(node, is_ident=True)
+            return self.validate_arg(type_arg, REG_QUERY_TYPES, self.loc(node))
+
+        def _format_team(node: ast.AST) -> str:
+            if isinstance(node, ast.Constant):
+                if node.value in (None, "null", "None"):
+                    return "null"
+                if isinstance(node.value, str):
+                    return self.validate_arg(node.value, REG_TEAMS, self.loc(node))
+                return str(node.value)
+            if isinstance(node, ast.Name) and node.id in ("null", "None"):
+                return "null"
+            team_val = self.format_intrinsic_arg(node, is_ident=True)
+            if isinstance(team_val, RawValue):
+                return str(team_val)
+            if isinstance(team_val, str) and (team_val.startswith("@") or team_val in REG_TEAMS.by_source_name):
+                return self.validate_arg(team_val, REG_TEAMS, self.loc(node))
+            return str(team_val)
+
+        if method_name == "circle":
+            # query.circle(type, team, x, y, radius) -> query circle <type> <team> <x> <y> <radius> 0
+            if len(args) != 5:
+                self.error(
+                    f"invalid arguments for {ns}.circle: expected {ns}.circle(type, team, x, y, radius)",
+                    call,
+                )
+            type_str = _format_type(args[0])
+            team_str = _format_team(args[1])
+            x = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[3], is_ident=False))
+            radius = str(self.format_intrinsic_arg(args[4], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="query", args=["circle", type_str, team_str, x, y, radius, "0"], loc=loc)
+            )
+            if target_dest is not None:
+                self.instructions.append(IRSet(to=target_dest, from_="0", loc=loc))
+                return target_dest
+            return "0"
+
+        elif method_name == "rect":
+            # query.rect(type, team, x, y, width, height) -> query rect <type> <team> <x> <y> <width> <height>
+            if len(args) != 6:
+                self.error(
+                    f"invalid arguments for {ns}.rect: expected {ns}.rect(type, team, x, y, width, height)",
+                    call,
+                )
+            type_str = _format_type(args[0])
+            team_str = _format_team(args[1])
+            x = str(self.format_intrinsic_arg(args[2], is_ident=False))
+            y = str(self.format_intrinsic_arg(args[3], is_ident=False))
+            w = str(self.format_intrinsic_arg(args[4], is_ident=False))
+            h = str(self.format_intrinsic_arg(args[5], is_ident=False))
+            self.instructions.append(
+                IRRaw(opcode="query", args=["rect", type_str, team_str, x, y, w, h], loc=loc)
+            )
+            if target_dest is not None:
+                self.instructions.append(IRSet(to=target_dest, from_="0", loc=loc))
+                return target_dest
+            return "0"
 
 
     def compile_fstring_print(self, node: ast.JoinedStr, loc: SourceLocation) -> str:

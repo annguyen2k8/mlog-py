@@ -345,6 +345,13 @@ class ASTValidator(ast.NodeVisitor):
                     hint = f". Did you mean 'lookup.{matches[0]}'?" if matches else f" (valid methods: {', '.join(sorted(LOOKUP_METHODS))})"
                     self.error(f"unknown lookup method: 'lookup.{node.attr}'{hint}", node)
                 return
+            if node.value.id == "query":
+                QUERY_METHODS = {"circle", "rect"}
+                if node.attr not in QUERY_METHODS:
+                    matches = difflib.get_close_matches(node.attr, QUERY_METHODS, n=1)
+                    hint = f". Did you mean 'query.{matches[0]}'?" if matches else f" (valid methods: {', '.join(sorted(QUERY_METHODS))})"
+                    self.error(f"unknown query method: 'query.{node.attr}'{hint}", node)
+                return
             if node.value.id in ENUM_CLASS_TO_REGISTRY:
                 return
             if self.constant_registry.has_namespace(node.value.id):
@@ -356,12 +363,12 @@ class ASTValidator(ast.NodeVisitor):
                 return
         SUPPORTED_NAMESPACES = {
             "Vars", "draw", "control", "ucontrol", "ulocate",
-            "cutscene", "sound", "music", "marker", "op", "status", "fetch", "lookup",
+            "cutscene", "sound", "music", "marker", "op", "status", "fetch", "lookup", "query",
         } | set(ENUM_CLASS_TO_REGISTRY.keys())
         close = difflib.get_close_matches(node.value.id, SUPPORTED_NAMESPACES, n=1) if isinstance(node.value, ast.Name) else []
         hint = f". Did you mean '{close[0]}'?" if close else ""
         self.error(
-            f"attribute access is only supported on DSL enum types ({', '.join(sorted(ENUM_CLASS_TO_REGISTRY.keys()))}), user-defined IntEnums, 'Vars', 'draw', 'control', 'ucontrol', 'ulocate', 'cutscene', 'sound', 'music', 'marker', 'op', 'status', 'fetch', and 'lookup'{hint}",
+            f"attribute access is only supported on DSL enum types ({', '.join(sorted(ENUM_CLASS_TO_REGISTRY.keys()))}), user-defined IntEnums, 'Vars', 'draw', 'control', 'ucontrol', 'ulocate', 'cutscene', 'sound', 'music', 'marker', 'op', 'status', 'fetch', 'lookup', and 'query'{hint}",
             node,
         )
 
@@ -542,7 +549,7 @@ class ASTValidator(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call):
         CALLABLE_NAMESPACES = (
             "draw", "control", "ucontrol", "ulocate", "op",
-            "cutscene", "sound", "music", "marker", "status", "fetch", "lookup",
+            "cutscene", "sound", "music", "marker", "status", "fetch", "lookup", "query",
         )
         if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
             if node.func.value.id in CALLABLE_NAMESPACES:

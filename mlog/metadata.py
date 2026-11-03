@@ -908,8 +908,28 @@ def _rt_setrate(ipt: Any = 60) -> None:
 def _rt_raw(value: Any) -> str:
     return str(value)
 
-def _rt_query(*args: Any) -> None:
-    return None
+class _QueryCallable:
+    """Callable namespace object for Mindustry world spatial query operations.
+
+    Supports both legacy function-call syntax:
+        query(QueryShape.CIRCLE, QueryType.UNIT, Teams.SHARDED, x, y, radius, 0)
+        query("rect", "unit", "@crux", x, y, w, h)
+    and modern namespace method syntax:
+        query.circle(QueryType.UNIT, Teams.SHARDED, x, y, radius)
+        query.rect(QueryType.BUILDING, Teams.CRUX, x, y, width, height)
+    """
+
+    def __call__(self, shape: Any, type_: Any, team: Any, x: Any, y: Any, w: Any, h: Any) -> None:
+        return None
+
+    def circle(self, type_: Any, team: Any, x: Any, y: Any, radius: Any) -> None:
+        return None
+
+    def rect(self, type_: Any, team: Any, x: Any, y: Any, width: Any, height: Any) -> None:
+        return None
+
+_rt_query = _QueryCallable()
+query = _rt_query
 
 def _rt_getblock(*args: Any) -> Any:
     return None
@@ -3168,6 +3188,7 @@ MLOG_EXPORTS: Set[str] = (
         "_StatusCallable",
         "_FetchCallable",
         "_LookupCallable",
+        "_QueryCallable",
         "cutscene",
         "sound",
         "music",
@@ -3375,6 +3396,24 @@ def generate_pyi() -> str:
             lines.append("    def liquid(self, index: Any) -> Any: ...")
             lines.append("")
             lines.append("lookup: _LookupCallable")
+            lines.append("")
+            continue
+        if name == "query":
+            lines.append("class _QueryCallable:")
+            lines.append('    """Callable namespace object for Mindustry world spatial query operations.')
+            lines.append("")
+            lines.append("    Supports both legacy function-call syntax:")
+            lines.append('        query(QueryShape.CIRCLE, QueryType.UNIT, Teams.SHARDED, x, y, radius, 0)')
+            lines.append('        query("rect", "unit", "@crux", x, y, w, h)')
+            lines.append("    and modern namespace method syntax:")
+            lines.append('        query.circle(QueryType.UNIT, Teams.SHARDED, x, y, radius)')
+            lines.append('        query.rect(QueryType.BUILDING, Teams.CRUX, x, y, width, height)')
+            lines.append('    """')
+            lines.append("    def __call__(self, shape: Union[QueryShape, str], type: Union[QueryType, str], team: Any, x: Any, y: Any, w: Any, h: Any) -> None: ...")
+            lines.append("    def circle(self, type: Union[QueryType, str], team: Any, x: Any, y: Any, radius: Any) -> None: ...")
+            lines.append("    def rect(self, type: Union[QueryType, str], team: Any, x: Any, y: Any, width: Any, height: Any) -> None: ...")
+            lines.append("")
+            lines.append("query: _QueryCallable")
             lines.append("")
             continue
         if name == "control":

@@ -1464,20 +1464,21 @@ def printflush(message: Any) -> None:
     """
     ...
 
-def query(shape: Union[QueryShape, str], type_: Union[QueryType, str], team: Any, x: Any, y: Any, w: Any, h: Any) -> None:
-    """Queries units or buildings in a specified spatial area.
-    Results are outputted into @queries (can be read via read instruction or measured via sensor @size).
+class _QueryCallable:
+    """Callable namespace object for Mindustry world spatial query operations.
 
-    Args:
-        shape: Spatial shape ('circle' or 'rect', or QueryShape enum).
-        type_: Target type ('unit' or 'building', or QueryType enum).
-        team: Target team (Teams enum, team string, or 'null' for all teams).
-        x: Center X coordinate in world/tile units.
-        y: Center Y coordinate in world/tile units.
-        w: Radius (circle) or Width (rect).
-        h: Height (rect) or unused (circle).
+    Supports both legacy function-call syntax:
+        query(QueryShape.CIRCLE, QueryType.UNIT, Teams.SHARDED, x, y, radius, 0)
+        query("rect", "unit", "@crux", x, y, w, h)
+    and modern namespace method syntax:
+        query.circle(QueryType.UNIT, Teams.SHARDED, x, y, radius)
+        query.rect(QueryType.BUILDING, Teams.CRUX, x, y, width, height)
     """
-    ...
+    def __call__(self, shape: Union[QueryShape, str], type: Union[QueryType, str], team: Any, x: Any, y: Any, w: Any, h: Any) -> None: ...
+    def circle(self, type: Union[QueryType, str], team: Any, x: Any, y: Any, radius: Any) -> None: ...
+    def rect(self, type: Union[QueryType, str], team: Any, x: Any, y: Any, width: Any, height: Any) -> None: ...
+
+query: _QueryCallable
 
 @overload
 def radar(target1: Union[RadarTarget, str], target2: Union[RadarTarget, str], target3: Union[RadarTarget, str], sort: Union[RadarSort, str], turret: Any, sort_order: Any, output: Any) -> Any:
@@ -1998,6 +1999,7 @@ __all__ = [
     "_MarkerCallable",
     "_MusicCallable",
     "_OpCallable",
+    "_QueryCallable",
     "_SoundCallable",
     "_StatusCallable",
     "_UnitControlCallable",

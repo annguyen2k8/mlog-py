@@ -6,7 +6,7 @@ C. message callable namespace methods (announce, notify, toast)
 
 import unittest
 import mlog
-from mlog import compile_py, lookup, LookupType
+from mlog import compile_py, lookup, LookupType, query, QueryType, QueryShape, Teams
 from mlog.errors import CompileError
 from mlog.validator import MlogValidator
 from mlog.mindustry_validator import is_mindustry_available, validate_with_mindustry
@@ -123,6 +123,86 @@ class TestP2Ergonomics(unittest.TestCase):
         self.assertEqual(lookup.unit(0), 0)
         self.assertEqual(lookup.liquid(0), 0)
         self.assertEqual(lookup(LookupType.ITEM, 0), 0)
+
+    # =========================================================================
+    # B. query namespace methods
+    # =========================================================================
+
+    def test_query_circle(self):
+        source = (
+            "from mlog import query, QueryType, Teams\n"
+            "query.circle(QueryType.UNIT, Teams.SHARDED, 10, 20, 50)\n"
+            "query.circle('building', '@crux', x, y, r)\n"
+            "query.circle(QueryType.UNIT, None, 0, 0, 100)\n"
+            "query.circle(QueryType.UNIT, 'null', 0, 0, 100)\n"
+            "query.circle(QueryType.UNIT, team_var, 0, 0, 100)\n"
+        )
+        mlog = self.compile_code(source)
+        lines = mlog.splitlines()
+        self.assertEqual(lines[0], "query circle unit @sharded 10 20 50 0")
+        self.assertEqual(lines[1], "query circle building @crux x y r 0")
+        self.assertEqual(lines[2], "query circle unit null 0 0 100 0")
+        self.assertEqual(lines[3], "query circle unit null 0 0 100 0")
+        self.assertEqual(lines[4], "query circle unit team_var 0 0 100 0")
+        self.validate_with_jvm(mlog)
+
+    def test_query_rect(self):
+        source = (
+            "from mlog import query, QueryType, Teams\n"
+            "query.rect(QueryType.BUILDING, Teams.CRUX, 10, 20, 30, 40)\n"
+            "query.rect('unit', '@sharded', x, y, w, h)\n"
+            "query.rect(QueryType.BUILDING, None, 1, 2, 3, 4)\n"
+        )
+        mlog = self.compile_code(source)
+        lines = mlog.splitlines()
+        self.assertEqual(lines[0], "query rect building @crux 10 20 30 40")
+        self.assertEqual(lines[1], "query rect unit @sharded x y w h")
+        self.assertEqual(lines[2], "query rect building null 1 2 3 4")
+        self.validate_with_jvm(mlog)
+
+    def test_query_expression_fallback(self):
+        source = (
+            "from mlog import query, QueryType, Teams\n"
+            "res = query.circle(QueryType.UNIT, Teams.SHARDED, 0, 0, 10)\n"
+        )
+        mlog = self.compile_code(source)
+        lines = mlog.splitlines()
+        self.assertEqual(lines[0], "query circle unit @sharded 0 0 10 0")
+        self.assertEqual(lines[1], "set res 0")
+        self.validate_with_jvm(mlog)
+
+    def test_query_backward_compatibility(self):
+        source = (
+            "from mlog import query, QueryShape, QueryType, Teams\n"
+            "query(QueryShape.CIRCLE, QueryType.UNIT, Teams.SHARDED, 10, 20, 50, 0)\n"
+            "query('rect', 'unit', '@crux', 0, 0, 10, 20)\n"
+        )
+        mlog = self.compile_code(source)
+        lines = mlog.splitlines()
+        self.assertEqual(lines[0], "query circle unit @sharded 10 20 50 0")
+        self.assertEqual(lines[1], "query rect unit @crux 0 0 10 20")
+        self.validate_with_jvm(mlog)
+
+    def test_query_invalid_calls(self):
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import query, QueryType, Teams\nquery.circle()\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import query, QueryType, Teams\nquery.circle(QueryType.UNIT, Teams.SHARDED, 0, 0, 10, 20)\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import query, QueryType, Teams\nquery.circle(type=QueryType.UNIT)\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import query, QueryType, Teams\nquery.rect(QueryType.UNIT, Teams.SHARDED, 0, 0, 10)\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import query, QueryType, Teams\nquery.unknown(0, 0)\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import query, Teams\nquery.circle('invalid_type', Teams.SHARDED, 0, 0, 10)\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import query, QueryType\nquery.circle(QueryType.UNIT, 'invalid_team', 0, 0, 10)\n")
+
+    def test_query_pure_python_runtime(self):
+        self.assertIsNone(query.circle("unit", "@sharded", 0, 0, 10))
+        self.assertIsNone(query.rect("building", "@crux", 0, 0, 10, 20))
+        self.assertIsNone(query("circle", "unit", "@sharded", 0, 0, 10, 0))
 
 
 if __name__ == "__main__":
