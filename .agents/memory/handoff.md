@@ -3,40 +3,35 @@
 - **Updated**: 2026-11-03
 - **Agent**: Antigravity / Gemini 3.8 Flash
 - **Status**: done
-- **Goal**: Implement comprehensive P3 API Ergonomics, Argument Binding validations, and Expression Forms for mlog-py based on Mindustry v160.7.
+- **Goal**: Implement comprehensive P4 Remediation (Semantic & Runtime Correctness) for mlog-py based on p4_discovery_audit.md and Mindustry v160.7.
 
 ## Done
 
-- **P3 API Ergonomics & Argument Binding**:
-  - **CRIT-01 (Reject invalid keywords on flat intrinsics and marker/sound/music)**:
-    - Added `validate_no_keywords(call, intrinsic_name)` across all flat intrinsics in `compile_call`.
-    - Enforced keyword rejection on `sound.play`, `sound.play_at`, `music.play`, `marker.make`, and all `marker.<method>` controls.
-  - **CRIT-02 (Duplicate argument validation in `status.apply` & `status.clear`)**:
-    - Added comprehensive duplicate checking between positional arguments and keyword arguments (`unit`, `effect`, `duration`).
-  - **CRIT-03 (Positional argument shifting fix in `Array()`)**:
-    - Fixed `_parse_array_call` to bind positional parameters (`block`, `size`, `dtype`) directly without list popping shifts.
-    - Added duplicate argument detection between positional and keyword arguments for `block`, `size`, and `dtype`.
-  - **MED-04 (Marker arity validation)**:
-    - Enforced parameter arity validation for all `marker.<method>` control sub-actions matching `expected_params` in `ctrl_map`.
-  - **Expression Forms (`ucontrol.within`)**:
-    - Added support for 3-argument expression form `ucontrol.within(x, y, radius)` binding directly into destination register (`target_dest`) or temp variable.
-    - Preserved 100% backward compatibility for 4-argument statement form `ucontrol.within(x, y, radius, out_result)`.
-  - **Tuple Unpacking & Keyword Support (`ucontrol.get_block` & `ulocate`)**:
-    - Added tuple unpacking support for `b_type, b_build, b_floor = ucontrol.get_block(x, y)` (and alias `getBlock`) with strict 3-target validation.
-    - Added keyword argument support for `ulocate.building(group=..., enemy=...)` and `ulocate.ore(ore=...)` tuple unpacking with duplicate argument detection.
-  - **Output Destination Keywords (`dest=` / `out=`)**:
-    - Added keyword destination support (`dest=` / `out=`) to `sensor`, `read`, and `uradar`.
-    - Enforced mutual exclusion between `dest` and `out`, duplicate argument detection against positional destinations, and unexpected keyword rejection.
-  - **Metadata & IDE Typing Stubs**:
-    - Added `@overload` statement forms for all `_FetchCallable` methods in `metadata.py`.
-    - Disambiguated `_MessageCallable` `@overload` signatures between canonical `out_success` and alias `outSuccess`.
-    - Added `@overload` expression and statement forms for `_UnitControlCallable.within` and `_UnitControlCallable.get_block`.
-    - Added keyword destination overloads for `sensor`, `read`, `uradar`.
-    - Updated runtime mock implementations in `metadata.py` (`_rt_sensor`, `_rt_read`, `_rt_uradar`, `get_block`, `within`) to return matching types without keyword errors.
-    - Regenerated `mlog.pyi`, `mlog/__init__.pyi`, and `src/mlog.pyi` via `python -m mlog.metadata`.
-  - **Documentation & Tests**:
-    - Added comprehensive regression suite `tests/test_p3_ergonomics.py` (15 test methods).
-    - Updated `docs/compiler.md` and `docs/mlog-command-coverage.md`.
+- **P4 Remediation (Semantic & Runtime Correctness)**:
+  - **CRIT-01 (Identifier collision - remove counter/@counter auto-aliasing)**:
+    - Removed automatic mapping of `counter` and `_counter` to `@counter` in `format_name` in both `mlog/compiler.py` and `src/compiler.py`.
+    - User variables named `counter` or `_counter` now lower to regular Mindustry variables (`set counter ...`), allowing normal Python usage.
+    - Preserved `Vars.counter` as the explicit, canonical way to access and modify `@counter`.
+    - Aligned existing test suites (`test_phase1a.py`, `test_phase1f.py`, `test_aug_assign.py`, `test_builtins_and_properties.py`, `test_phase2_semantics.py`) to test explicit `Vars.counter` vs normal user variable `counter`.
+  - **CRIT-02 (Boolean short-circuit destination corruption)**:
+    - Updated `compile_expr` for `ast.BoolOp` (`and`, `or`) to evaluate branches into a dedicated temporary accumulator register (`accum = self.new_temp(loc)`).
+    - Prevents premature mutation of `target_dest` when subsequent branches in the boolean chain read or evaluate against `target_dest`.
+    - Emitted `set target_dest accum` only after the `boolop_end` label.
+    - Updated `examples/compiler/arithmetic.mlog` golden bytecode to match safe boolean lowering.
+  - **HIGH-01 (Team normalization & dynamic spawn)**:
+    - Added helper methods `format_team_operand` and `format_unit_type_operand` in `Compiler`.
+    - Enabled dynamic variables and runtime expressions for unit `type` and `team` in `spawn`, matching Mindustry v160.7 `SpawnUnitI` (which reads operands dynamically as `LVar type` and `LVar team`).
+    - Fixed team identifier collision in `fetch` and `bullet` where user variables matching team names (e.g. `sharded`, `crux`) were incorrectly normalized to team constants.
+  - **MED-01 (`draw.clear` signature alignment)**:
+    - Aligned `draw.clear` with Mindustry v160.7 `LStatements.java:163` (`draw clear r g b 0 0 0`), strictly accepting at most 3 operands (`r, g, b`) or keywords `r=, g=, b=`.
+    - Enforced `CompileError` on 4th positional argument or keyword `a=`.
+    - Updated `mlog/metadata.py`, `src/metadata.py`, and regenerated typing stubs (`mlog.pyi`, `mlog/__init__.pyi`, `src/mlog.pyi`).
+    - Updated `docs/compiler.md` and `README.md`.
+  - **INFO-01 (Division by zero documentation & runtime verification)**:
+    - Documented runtime differences between Python `ZeroDivisionError` and Mindustry Logic floating-point evaluation in `docs/compiler.md`.
+    - Verified in Mindustry JVM engine that division and modulo by zero (`/`, `//`, `%`, `op div/idiv/emod`) evaluate safely to `null` via `Double.isNaN` / `Double.isInfinite` checks in `LExecutor.java:LVar.setnum` without halting processor execution.
+  - **Regression Test Suite**:
+    - Created `tests/test_p4_remediation.py` containing 13 tests covering CRIT-01, CRIT-02, HIGH-01, MED-01, and INFO-01 with JVM harness execution and bytecode validation.
 
 ## Next
 
@@ -48,7 +43,9 @@
 
 ## Verification
 
-- `python run_tests.py --fast`: 807/807 passed.
-- `python run_tests.py --jvm`: 607/607 passed.
-- `python -m unittest tests.test_p3_ergonomics tests.test_unit_namespace tests.test_p2_ergonomics tests.test_p1_ergonomics`: 86/86 passed.
+- `python run_tests.py --fast`: 820/820 passed (pure-Python tier).
+- `python run_tests.py --jvm`: 607/607 passed (Mindustry v160.7 JVM engine tier).
+- `python run_tests.py --all`: 1427/1427 passed (full test suite).
 - `git diff --check`: 0 whitespace errors.
+- `git diff --no-index src/compiler.py mlog/compiler.py`: 0 diff.
+- `git diff --no-index src/metadata.py mlog/metadata.py`: 0 diff.
