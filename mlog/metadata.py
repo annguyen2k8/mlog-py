@@ -255,7 +255,7 @@ def _rt_min(a: Any, b: Any) -> Any:
 def _rt_max(a: Any, b: Any) -> Any:
     return max(a, b)
 
-def _rt_sensor(*args: Any) -> Any:
+def _rt_sensor(*args: Any, **kwargs: Any) -> Any:
     return 0
 
 class _ControlCallable:
@@ -377,13 +377,17 @@ class _UnitControlCallable:
     def deconstruct(self, x: Any, y: Any) -> None:
         return None
 
-    def get_block(self, x: Any, y: Any, out_type: Any, out_building: Any, out_floor: Any) -> None:
-        return None
+    def get_block(self, x: Any, y: Any, *args: Any, **kwargs: Any) -> Any:
+        if args or kwargs:
+            return None
+        return (None, None, None)
 
     getBlock = get_block
 
-    def within(self, x: Any, y: Any, radius: Any, out_result: Any) -> None:
-        return None
+    def within(self, x: Any, y: Any, radius: Any, *args: Any, **kwargs: Any) -> Any:
+        if args or kwargs:
+            return None
+        return 0
 
     def unbind(self) -> None:
         return None
@@ -670,7 +674,7 @@ def clear_print_buffer() -> None:
     """Clear runtime print buffer."""
     _rt_print_buffer.clear()
 
-def _rt_read(*args: Any) -> Any:
+def _rt_read(*args: Any, **kwargs: Any) -> Any:
     return 0
 
 def _rt_write(input_: Any, cell: Any, address: Any) -> None:
@@ -694,7 +698,7 @@ def _rt_ubind(unit_type: Any) -> None:
 def _rt_radar(*args: Any) -> Any:
     return 0
 
-def _rt_uradar(*args: Any) -> Any:
+def _rt_uradar(*args: Any, **kwargs: Any) -> Any:
     return 0
 
 class LocateResult(NamedTuple):
@@ -3372,6 +3376,77 @@ def generate_pyi() -> str:
     lines.append("")
 
     for name in sorted(INTRINSICS.keys()):
+        if name == "sensor":
+            lines.append("@overload")
+            lines.append("def sensor(dest: Any, block: Any, prop: Union[SensorProperty, str]) -> Any:")
+            lines.append('    """Read property from block into dest variable (statement form)."""')
+            lines.append("    ...")
+            lines.append("")
+            lines.append("@overload")
+            lines.append("def sensor(block: Any, prop: Union[SensorProperty, str]) -> Any:")
+            lines.append('    """Read property from block and return result (expression form: dest = sensor(...))."""')
+            lines.append("    ...")
+            lines.append("")
+            lines.append("@overload")
+            lines.append("def sensor(block: Any, prop: Union[SensorProperty, str], *, dest: Any) -> None:")
+            lines.append('    """Read property from block into target dest variable (keyword statement form)."""')
+            lines.append("    ...")
+            lines.append("")
+            lines.append("@overload")
+            lines.append("def sensor(block: Any, prop: Union[SensorProperty, str], *, out: Any) -> None:")
+            lines.append('    """Read property from block into target out variable (keyword statement form)."""')
+            lines.append("    ...")
+            lines.append("")
+            continue
+        if name == "read":
+            lines.append("@overload")
+            lines.append("def read(dest: Any, cell: Any, address: Any) -> Any:")
+            lines.append('    """Read number from cell at address into dest variable (statement form)."""')
+            lines.append("    ...")
+            lines.append("")
+            lines.append("@overload")
+            lines.append("def read(cell: Any, address: Any) -> Any:")
+            lines.append('    """Read number from cell at address and return it (expression form: dest = read(...))."""')
+            lines.append("    ...")
+            lines.append("")
+            lines.append("@overload")
+            lines.append("def read(cell: Any, address: Any, *, dest: Any) -> None:")
+            lines.append('    """Read number from cell at address into target dest variable (keyword statement form)."""')
+            lines.append("    ...")
+            lines.append("")
+            lines.append("@overload")
+            lines.append("def read(cell: Any, address: Any, *, out: Any) -> None:")
+            lines.append('    """Read number from cell at address into target out variable (keyword statement form)."""')
+            lines.append("    ...")
+            lines.append("")
+            continue
+        if name == "uradar":
+            lines.append("@overload")
+            lines.append("def uradar(target1: Union[RadarTarget, str] = RadarTarget.enemy, target2: Union[RadarTarget, str] = RadarTarget.any, target3: Union[RadarTarget, str] = RadarTarget.any, sort: Union[RadarSort, str] = RadarSort.distance, sort_order: Any = 1) -> Any:")
+            lines.append('    """Scan bound unit radar and return found unit (expression form: target = uradar(...))."""')
+            lines.append("    ...")
+            lines.append("")
+            lines.append("@overload")
+            lines.append("def uradar(target1: Union[RadarTarget, str] = RadarTarget.enemy, target2: Union[RadarTarget, str] = RadarTarget.any, target3: Union[RadarTarget, str] = RadarTarget.any, sort: Union[RadarSort, str] = RadarSort.distance, sort_order: Any = 1, *, dest: Any) -> None:")
+            lines.append('    """Scan bound unit radar and write found unit to dest variable."""')
+            lines.append("    ...")
+            lines.append("")
+            lines.append("@overload")
+            lines.append("def uradar(target1: Union[RadarTarget, str] = RadarTarget.enemy, target2: Union[RadarTarget, str] = RadarTarget.any, target3: Union[RadarTarget, str] = RadarTarget.any, sort: Union[RadarSort, str] = RadarSort.distance, sort_order: Any = 1, *, out: Any) -> None:")
+            lines.append('    """Scan bound unit radar and write found unit to out variable."""')
+            lines.append("    ...")
+            lines.append("")
+            lines.append("@overload")
+            lines.append("def uradar(target1: Union[RadarTarget, str], target2: Union[RadarTarget, str], target3: Union[RadarTarget, str], sort: Union[RadarSort, str], sort_order: Any, output: Any) -> Any:")
+            lines.append('    """Scan bound unit radar and write found unit to output (statement form)."""')
+            lines.append("    ...")
+            lines.append("")
+            lines.append("@overload")
+            lines.append("def uradar(target1: Union[RadarTarget, str], target2: Union[RadarTarget, str], target3: Union[RadarTarget, str], sort: Union[RadarSort, str], p1: Any, p2: Any, output: Any) -> Any:")
+            lines.append('    """Scan bound unit radar and write found unit to output (extended statement form)."""')
+            lines.append("    ...")
+            lines.append("")
+            continue
         if name == "status":
             lines.append("class _StatusCallable:")
             lines.append('    """Callable namespace object for Mindustry status effect operations.')
@@ -3410,18 +3485,60 @@ def generate_pyi() -> str:
             lines.append("        count = fetch.build_count(team, block)")
             lines.append('    """')
             lines.append("    def __call__(self, type: Union[FetchType, str], target_or_team: Any, team_or_index: Any = 0, index_or_extra: Any = 0, extra: Any = 0) -> Any: ...")
+            lines.append("    @overload")
             lines.append("    def unit(self, team: Union[Teams, str], index: Any, type: Any = 0) -> Any: ...")
+            lines.append("    @overload")
+            lines.append("    def unit(self, team: Union[Teams, str], index: Any, dest: Any) -> None: ...")
+            lines.append("    @overload")
+            lines.append("    def unit(self, team: Union[Teams, str], index: Any, type: Any, dest: Any) -> None: ...")
+            lines.append("    @overload")
             lines.append("    def unit_count(self, team: Union[Teams, str], type: Any = 0) -> int: ...")
+            lines.append("    @overload")
+            lines.append("    def unit_count(self, team: Union[Teams, str], dest: Any) -> None: ...")
+            lines.append("    @overload")
+            lines.append("    def unit_count(self, team: Union[Teams, str], type: Any, dest: Any) -> None: ...")
+            lines.append("    @overload")
             lines.append("    def unitCount(self, team: Union[Teams, str], type: Any = 0) -> int: ...")
+            lines.append("    @overload")
+            lines.append("    def unitCount(self, team: Union[Teams, str], dest: Any) -> None: ...")
+            lines.append("    @overload")
+            lines.append("    def unitCount(self, team: Union[Teams, str], type: Any, dest: Any) -> None: ...")
+            lines.append("    @overload")
             lines.append("    def player(self, team: Union[Teams, str], index: Any) -> Any: ...")
+            lines.append("    @overload")
+            lines.append("    def player(self, team: Union[Teams, str], index: Any, dest: Any) -> None: ...")
+            lines.append("    @overload")
             lines.append("    def player_count(self, team: Union[Teams, str]) -> int: ...")
+            lines.append("    @overload")
+            lines.append("    def player_count(self, team: Union[Teams, str], dest: Any) -> None: ...")
+            lines.append("    @overload")
             lines.append("    def playerCount(self, team: Union[Teams, str]) -> int: ...")
+            lines.append("    @overload")
+            lines.append("    def playerCount(self, team: Union[Teams, str], dest: Any) -> None: ...")
+            lines.append("    @overload")
             lines.append("    def core(self, team: Union[Teams, str], index: Any) -> Any: ...")
+            lines.append("    @overload")
+            lines.append("    def core(self, team: Union[Teams, str], index: Any, dest: Any) -> None: ...")
+            lines.append("    @overload")
             lines.append("    def core_count(self, team: Union[Teams, str]) -> int: ...")
+            lines.append("    @overload")
+            lines.append("    def core_count(self, team: Union[Teams, str], dest: Any) -> None: ...")
+            lines.append("    @overload")
             lines.append("    def coreCount(self, team: Union[Teams, str]) -> int: ...")
+            lines.append("    @overload")
+            lines.append("    def coreCount(self, team: Union[Teams, str], dest: Any) -> None: ...")
+            lines.append("    @overload")
             lines.append("    def build(self, team: Union[Teams, str], index: Any, block: Any) -> Any: ...")
+            lines.append("    @overload")
+            lines.append("    def build(self, team: Union[Teams, str], index: Any, block: Any, dest: Any) -> None: ...")
+            lines.append("    @overload")
             lines.append("    def build_count(self, team: Union[Teams, str], block: Any) -> int: ...")
+            lines.append("    @overload")
+            lines.append("    def build_count(self, team: Union[Teams, str], block: Any, dest: Any) -> None: ...")
+            lines.append("    @overload")
             lines.append("    def buildCount(self, team: Union[Teams, str], block: Any) -> int: ...")
+            lines.append("    @overload")
+            lines.append("    def buildCount(self, team: Union[Teams, str], block: Any, dest: Any) -> None: ...")
             lines.append("")
             lines.append("fetch: _FetchCallable")
             lines.append("")
@@ -3485,10 +3602,22 @@ def generate_pyi() -> str:
             lines.append('        message.notify(duration=3, out_success="@wait")')
             lines.append('        success = message.announce(duration=5)')
             lines.append('    """')
-            lines.append("    def __call__(self, type: Union[MessageType, str], duration: Any = 3, out_success: Any = '@wait', outSuccess: Any = '@wait') -> Any: ...")
-            lines.append("    def announce(self, duration: Any = 3, out_success: Any = '@wait', outSuccess: Any = '@wait') -> Any: ...")
-            lines.append("    def toast(self, duration: Any = 3, out_success: Any = '@wait', outSuccess: Any = '@wait') -> Any: ...")
-            lines.append("    def notify(self, duration: Any = 3, out_success: Any = '@wait', outSuccess: Any = '@wait') -> Any: ...")
+            lines.append("    @overload")
+            lines.append("    def __call__(self, type: Union[MessageType, str], duration: Any = 3, out_success: Any = '@wait') -> Any: ...")
+            lines.append("    @overload")
+            lines.append("    def __call__(self, type: Union[MessageType, str], duration: Any = 3, *, outSuccess: Any = '@wait') -> Any: ...")
+            lines.append("    @overload")
+            lines.append("    def announce(self, duration: Any = 3, out_success: Any = '@wait') -> Any: ...")
+            lines.append("    @overload")
+            lines.append("    def announce(self, duration: Any = 3, *, outSuccess: Any = '@wait') -> Any: ...")
+            lines.append("    @overload")
+            lines.append("    def toast(self, duration: Any = 3, out_success: Any = '@wait') -> Any: ...")
+            lines.append("    @overload")
+            lines.append("    def toast(self, duration: Any = 3, *, outSuccess: Any = '@wait') -> Any: ...")
+            lines.append("    @overload")
+            lines.append("    def notify(self, duration: Any = 3, out_success: Any = '@wait') -> Any: ...")
+            lines.append("    @overload")
+            lines.append("    def notify(self, duration: Any = 3, *, outSuccess: Any = '@wait') -> Any: ...")
             lines.append("")
             lines.append("message: _MessageCallable")
             lines.append("")
@@ -3592,8 +3721,17 @@ def generate_pyi() -> str:
             lines.append("    def flag(self, value: Any) -> None: ...")
             lines.append("    def build(self, x: Any, y: Any, block: Any, rotation: Any, config: Any) -> None: ...")
             lines.append("    def deconstruct(self, x: Any, y: Any) -> None: ...")
+            lines.append("    @overload")
+            lines.append("    def get_block(self, x: Any, y: Any) -> Tuple[Any, Any, Any]: ...")
+            lines.append("    @overload")
             lines.append("    def get_block(self, x: Any, y: Any, out_type: Any, out_building: Any, out_floor: Any) -> None: ...")
+            lines.append("    @overload")
+            lines.append("    def getBlock(self, x: Any, y: Any) -> Tuple[Any, Any, Any]: ...")
+            lines.append("    @overload")
             lines.append("    def getBlock(self, x: Any, y: Any, out_type: Any, out_building: Any, out_floor: Any) -> None: ...")
+            lines.append("    @overload")
+            lines.append("    def within(self, x: Any, y: Any, radius: Any) -> bool: ...")
+            lines.append("    @overload")
             lines.append("    def within(self, x: Any, y: Any, radius: Any, out_result: Any) -> None: ...")
             lines.append("    def unbind(self) -> None: ...")
             lines.append("")
