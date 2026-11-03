@@ -72,7 +72,7 @@ MLOG_TO_PY_BINARY_OPS = {
     "greaterThan": ">",
     "greaterThanEq": ">=",
     "strictEqual": "is",
-    "land": "and",
+
 }
 
 
@@ -226,7 +226,7 @@ class BinaryExpr(Expr):
     def to_python(self) -> str:
         # Left operand: parenthesize if strictly lower precedence
         left_str = self.left.to_python()
-        if self.left.precedence < self.precedence:
+        if self.left.precedence < self.precedence or (self.op == "**" and self.left.precedence == self.precedence):
             left_str = f"({left_str})"
 
         # Right operand: parenthesize if lower precedence, or equal precedence for non-associative ops
@@ -412,6 +412,10 @@ def parse_operand_to_expr(token: str) -> Expr:
     # Mindustry builtin constant token like @unit, @time
     if token.startswith("@"):
         return ConstantExpr(value=token, raw_str=token)
+
+    import keyword
+    if keyword.iskeyword(token) or token in ("None", "True", "False"):
+        return CallExpr("raw", [ConstantExpr(value=token, raw_str=f'"{token}"')])
 
     # Valid identifier
     return VariableExpr(name=token)
