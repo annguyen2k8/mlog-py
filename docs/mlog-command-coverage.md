@@ -323,9 +323,10 @@ Supported via `DrawType` enum and `draw.<method>`:
    - Pure expressions lower directly to the single `select` opcode (zero branch penalty).
    - Impure expressions fall back safely to short-circuiting jump ladders.
    - For `is not` (`strictNotEqual`), compiler inverts the operands (`select dest strictEqual x y b a`) to avoid JVM engine anomalies.
-3. **`unpackcolor` Dual Call Convention**:
-   - Matches Mindustry bytecode specification: `unpackcolor r g b a color` (4 destinations, 1 source).
-   - Both `unpackcolor(r, g, b, a, color)` and `r, g, b, a = unpackcolor(color)` lower to that exact instruction; exactly 4 targets are required.
+3. **`unpackcolor` and `ucontrol.get_block` Tuple Unpacking**:
+   - Matches Mindustry bytecode specifications: `unpackcolor r g b a color` (4 destinations) and `ucontrol getBlock x y type building floor` (3 destinations).
+   - Both statement calls and Pythonic tuple unpacking (`r, g, b, a = unpackcolor(col)` and `type, bld, floor = ucontrol.get_block(x, y)`) lower directly to those exact instructions without temporary registers. `ulocate` unpacking also supports keyword arguments.
+   - `ucontrol.within(x, y, radius)` supports expression form binding directly to target destination register.
 4. **Hybrid f-string Formatting**:
    - Python f-strings lower to template `print` and `format` sequences with strict evaluation order preservation and compile-time placeholder bounds checking.
 5. **Exact Runtime Semantics in Tier 3**:

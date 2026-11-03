@@ -482,16 +482,23 @@ ucontrol.mine(12, 34)                        # Emits: ucontrol mine 12 34 0 0 0
 ucontrol.flag(999)                           # Emits: ucontrol flag 999 0 0 0 0
 ucontrol.build(10, 20, "@router", 0, 0)      # Emits: ucontrol build 10 20 @router 0 0
 ucontrol.deconstruct(10, 20)                 # Emits: ucontrol deconstruct 10 20 0 0 0
+# Pythonic tuple unpacking syntax (3 target variables: type, building, floor):
+b_type, b_build, b_floor = ucontrol.get_block(10, 20) # Emits: ucontrol getBlock 10 20 b_type b_build b_floor
 ucontrol.get_block(10, 20, t, b, f)          # Emits: ucontrol getBlock 10 20 t b f
+
+# Expression form (binds directly to target variable or condition):
+in_range = ucontrol.within(10, 20, 5)        # Emits: ucontrol within 10 20 5 in_range 0
 ucontrol.within(10, 20, 5, res)              # Emits: ucontrol within 10 20 5 res 0
 ucontrol.idle()                              # Emits: ucontrol idle 0 0 0 0 0
 ucontrol.stop()                              # Emits: ucontrol stop 0 0 0 0 0
 ucontrol.unbind()                            # Emits: ucontrol unbind 0 0 0 0 0
 
 # 2. Unit Locate (ulocate)
-# Modern Pythonic tuple unpacking syntax (supports 3 or 4 target variables):
+# Modern Pythonic tuple unpacking syntax (supports 3 or 4 target variables, positional or keyword arguments):
 core_x, core_y, found_core, core_build = ulocate.building("core", False) # Emits: ulocate building core false @copper core_x core_y found_core core_build
+core_x, core_y, found_core, core_build = ulocate.building(group="core", enemy=False) # Supports keywords
 ore_x, ore_y, found_ore = ulocate.ore("@copper")                         # Emits: ulocate ore core true @copper ore_x ore_y found_ore __tmp0
+ore_x, ore_y, found_ore = ulocate.ore(ore="@copper")                     # Supports keywords
 spawn_x, spawn_y, found_spawn, spawn_build = ulocate.spawn()             # Emits: ulocate spawn core true @copper spawn_x spawn_y found_spawn spawn_build
 dmg_x, dmg_y, found_dmg, dmg_build = ulocate.damaged()                   # Emits: ulocate damaged core true @copper dmg_x dmg_y found_dmg dmg_build
 
@@ -513,6 +520,10 @@ from mlog import uradar, RadarTarget, RadarSort
 enemy = uradar()                                                 # Emits: uradar enemy any any distance 0 1 enemy
 closest_attacker = uradar(RadarTarget.ENEMY, RadarTarget.ATTACKER) # Emits: uradar enemy attacker any distance 0 1 closest_attacker
 boss = uradar("enemy", "boss", "any", RadarSort.MAX_HEALTH, 0)   # Emits: uradar enemy boss any maxHealth 0 0 boss
+
+# Keyword destination syntax (out= / dest=):
+uradar(RadarTarget.ENEMY, out=target)                            # Emits: uradar enemy any any distance 0 1 target
+uradar(RadarTarget.ENEMY, RadarTarget.ANY, RadarTarget.ANY, dest=target) # Emits: uradar enemy any any distance 0 1 target
 
 # Legacy positional statements (6 and 7 operands) are 100% backward-compatible:
 uradar(RadarTarget.ENEMY, RadarTarget.ANY, RadarTarget.ANY, RadarSort.DISTANCE, 1, out_unit)
