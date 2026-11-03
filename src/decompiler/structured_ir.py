@@ -9,6 +9,12 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .instruction import MlogInstruction
+import keyword
+
+def is_python_keyword(name: str) -> bool:
+    """Check if name is a Python reserved keyword or literal that cannot be assigned to."""
+    return keyword.iskeyword(name) or name in ("None", "True", "False")
+
 from .semantics import format_semantic_argument, UNARY_LOGIC_OPS
 
 
@@ -84,6 +90,8 @@ def format_operand(op: str) -> str:
         return "None"
     if op.startswith("@"):
         return repr(op)
+    if is_python_keyword(op):
+        return f'raw("{op}")'
     return op
 
 
@@ -355,7 +363,7 @@ def instruction_to_python(
 
     if op == "set" and len(args) == 2:
         dest, val = args[0], format_operand(args[1])
-        if dest.isidentifier() and not dest.startswith("@"):
+        if dest.isidentifier() and not dest.startswith("@") and not is_python_keyword(dest):
             return f"{dest} = {val}"
         return f'set("{dest}", {val})'
 
@@ -364,7 +372,7 @@ def instruction_to_python(
         dest = args[1]
         a = format_operand(args[2])
         is_unary = op_name in UNARY_LOGIC_OPS
-        if dest.isidentifier() and not dest.startswith("@"):
+        if dest.isidentifier() and not dest.startswith("@") and not is_python_keyword(dest):
             if op_name in ("min", "max") and len(args) >= 4:
                 b = format_operand(args[3])
                 return f"{dest} = {op_name}({a}, {b})"
@@ -380,30 +388,34 @@ def instruction_to_python(
 
     if op == "read" and len(args) == 3:
         dest = args[0]
-        if dest.isidentifier() and not dest.startswith("@"):
-            cell = format_semantic_argument("read", 1, args[1], defined_variables, args)
-            addr = format_semantic_argument("read", 2, args[2], defined_variables, args)
+        cell = format_semantic_argument("read", 1, args[1], defined_variables, args)
+        addr = format_semantic_argument("read", 2, args[2], defined_variables, args)
+        if dest.isidentifier() and not dest.startswith("@") and not is_python_keyword(dest):
             return f"{dest} = read({cell}, {addr})"
+        return f'read({cell}, {addr}, dest="{dest}")'
 
     if op == "sensor" and len(args) == 3:
         dest = args[0]
-        if dest.isidentifier() and not dest.startswith("@"):
-            block = format_semantic_argument("sensor", 1, args[1], defined_variables, args)
-            prop = format_semantic_argument("sensor", 2, args[2], defined_variables, args)
+        block = format_semantic_argument("sensor", 1, args[1], defined_variables, args)
+        prop = format_semantic_argument("sensor", 2, args[2], defined_variables, args)
+        if dest.isidentifier() and not dest.startswith("@") and not is_python_keyword(dest):
             return f"{dest} = sensor({block}, {prop})"
+        return f'sensor({block}, {prop}, dest="{dest}")'
 
     if op == "getlink" and len(args) == 2:
         dest = args[0]
-        if dest.isidentifier() and not dest.startswith("@"):
-            idx = format_semantic_argument("getlink", 1, args[1], defined_variables, args)
+        idx = format_semantic_argument("getlink", 1, args[1], defined_variables, args)
+        if dest.isidentifier() and not dest.startswith("@") and not is_python_keyword(dest):
             return f"{dest} = getlink({idx})"
+        return f'getlink("{dest}", {idx})'
 
     if op == "lookup" and len(args) == 3:
         dest = args[1]
-        if dest.isidentifier() and not dest.startswith("@"):
-            type_ = format_semantic_argument("lookup", 0, args[0], defined_variables, args)
-            idx = format_semantic_argument("lookup", 2, args[2], defined_variables, args)
+        type_ = format_semantic_argument("lookup", 0, args[0], defined_variables, args)
+        idx = format_semantic_argument("lookup", 2, args[2], defined_variables, args)
+        if dest.isidentifier() and not dest.startswith("@") and not is_python_keyword(dest):
             return f"{dest} = lookup({type_}, {idx})"
+        return f'lookup({type_}, "{dest}", {idx})'
 
     if op == "packcolor" and len(args) == 5:
         dest = args[0]
@@ -477,6 +489,9 @@ def instruction_to_python(
             ore = format_semantic_argument("ulocate", 3, args[3], defined_variables, args)
             return f"{targets} = ulocate.ore({ore})"
         elif locate == "spawn":
+            enemy = args[2]
+            if enemy in ("false", "0", "False"):
+                return f"{targets} = ulocate.spawn(enemy=False)"
             return f"{targets} = ulocate.spawn()"
         elif locate == "damaged":
             return f"{targets} = ulocate.damaged()"
@@ -622,7 +637,7 @@ class AssignNode(StructuredNode):
     def to_python(self, indent: int = 0) -> str:
         prefix = "    " * indent
         val_str = self.value.to_python() if hasattr(self.value, "to_python") else str(self.value)
-        if not self.target.isidentifier() or self.target.startswith("@"):
+        if not self.target.isidentifier() or self.target.startswith("@") or is_python_keyword(self.target):
             return f'{prefix}set("{self.target}", {val_str})'
         return f"{prefix}{self.target} = {val_str}"
 

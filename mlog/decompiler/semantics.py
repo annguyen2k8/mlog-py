@@ -363,6 +363,10 @@ def format_semantic_argument(
         if arg_idx == 2 and args and args[0] == "color" and is_mlog_color_literal(arg):
             return f"raw({arg!r})"
 
+    import keyword
+    if keyword.iskeyword(arg) or arg in ("None", "True", "False"):
+        return f'raw("{arg}")'
+
     # 1. String literal already
     if is_string_literal(arg):
         return arg

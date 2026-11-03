@@ -394,8 +394,8 @@ class ASTValidator(ast.NodeVisitor):
                 self.error("ulocate.building produces 4 outputs and must be unpacked into a tuple: core_x, core_y, found, building = ulocate.building(group, enemy)", node)
             elif m == "ore" and len(call.args) == 1:
                 self.error("ulocate.ore produces 3 outputs and must be unpacked into a tuple: ore_x, ore_y, found = ulocate.ore(ore)", node)
-            elif m == "spawn" and len(call.args) == 0:
-                self.error("ulocate.spawn produces 4 outputs and must be unpacked into a tuple: spawn_x, spawn_y, found, building = ulocate.spawn()", node)
+            elif m == "spawn" and (len(call.args) == 0 or (len(call.args) == 1 and not call.keywords) or (len(call.args) == 0 and any(kw.arg == "enemy" for kw in call.keywords))):
+                self.error("ulocate.spawn produces 4 outputs and must be unpacked into a tuple: spawn_x, spawn_y, found, building = ulocate.spawn([enemy])", node)
             elif m == "damaged" and len(call.args) == 0:
                 self.error("ulocate.damaged produces 4 outputs and must be unpacked into a tuple: dmg_x, dmg_y, found, building = ulocate.damaged()", node)
 
@@ -497,7 +497,7 @@ class ASTValidator(ast.NodeVisitor):
                 if target_count not in (3, 4):
                     self.error(f"ulocate.ore unpacking expects 3 or 4 target variables (out_x, out_y, out_found[, out_building]), got {target_count}", target)
             elif method_name == "spawn":
-                if len(call.args) != 0 or call.keywords:
+                if len(call.args) != 0 or any(k != "enemy" for k in kw_map):
                     self.error("invalid arguments for ulocate.spawn unpacking: expected ulocate.spawn()", call)
                 if target_count not in (3, 4):
                     self.error(f"ulocate.spawn unpacking expects 3 or 4 target variables (out_x, out_y, out_found[, out_building]), got {target_count}", target)

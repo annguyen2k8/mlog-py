@@ -775,8 +775,8 @@ class _UnitLocateCallable:
             return None
         return LocateResult(0.0, 0.0, 0, None)
 
-    def spawn(self, *args: Any) -> Any:
-        if args:
+    def spawn(self, *args: Any, enemy: Any = True) -> Any:
+        if args and len(args) >= 3:
             return None
         return LocateResult(0.0, 0.0, 0, None)
 
@@ -3818,9 +3818,11 @@ def generate_pyi() -> str:
             lines.append("    @overload")
             lines.append("    def building(self, group: Any, enemy: Any, out_x: Any, out_y: Any, out_found: Any, out_building: Any = None) -> None: ...")
             lines.append("    @overload")
-            lines.append("    def spawn(self) -> LocateResult: ...")
+            lines.append("    def spawn(self, enemy: Any = True) -> LocateResult: ...")
             lines.append("    @overload")
-            lines.append("    def spawn(self, out_x: Any, out_y: Any, out_found: Any, out_build: Any = None) -> None: ...")
+            lines.append("    def spawn(self, out_x: Any, out_y: Any, out_found: Any, out_build: Any = None, *, enemy: Any = True) -> None: ...")
+            lines.append("    @overload")
+            lines.append("    def spawn(self, enemy: Any, out_x: Any, out_y: Any, out_found: Any, out_build: Any = None) -> None: ...")
             lines.append("    @overload")
             lines.append("    def damaged(self) -> LocateResult: ...")
             lines.append("    @overload")

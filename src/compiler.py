@@ -3223,22 +3223,43 @@ class Compiler:
             return "0"
 
         elif method_name == "spawn":
-            if len(args) == 0 and not call.keywords:
-                self.error(f"invalid arguments for {ns}.spawn: for statement calls expected {ns}.spawn(out_x, out_y, out_found, [out_build]); for tuple unpacking use: out_x, out_y, out_found, out_build = {ns}.spawn()", call)
-            elif len(args) == 3 and not call.keywords:
-                out_x = str(self.format_intrinsic_arg(args[0], is_ident=True))
-                out_y = str(self.format_intrinsic_arg(args[1], is_ident=True))
-                out_found = str(self.format_intrinsic_arg(args[2], is_ident=True))
+            enemy = "true"
+            pos_args = list(args)
+            for kw in call.keywords:
+                if kw.arg == "enemy":
+                    enemy = str(self.format_intrinsic_arg(kw.value, is_ident=False))
+                else:
+                    self.error(f"unexpected keyword argument '{kw.arg}' for {ns}.spawn", call)
+
+            if len(pos_args) == 0 and not call.keywords:
+                self.error(f"invalid arguments for {ns}.spawn: for statement calls expected {ns}.spawn(out_x, out_y, out_found, [out_build]); for tuple unpacking use: out_x, out_y, out_found, out_build = {ns}.spawn([enemy])", call)
+            elif len(pos_args) == 3:
+                out_x = str(self.format_intrinsic_arg(pos_args[0], is_ident=True))
+                out_y = str(self.format_intrinsic_arg(pos_args[1], is_ident=True))
+                out_found = str(self.format_intrinsic_arg(pos_args[2], is_ident=True))
                 out_build = self.new_temp(loc)
-            elif len(args) == 4 and not call.keywords:
-                out_x = str(self.format_intrinsic_arg(args[0], is_ident=True))
-                out_y = str(self.format_intrinsic_arg(args[1], is_ident=True))
-                out_found = str(self.format_intrinsic_arg(args[2], is_ident=True))
-                out_build = str(self.format_intrinsic_arg(args[3], is_ident=True))
+            elif len(pos_args) == 4:
+                if not call.keywords and isinstance(pos_args[0], ast.Constant) and isinstance(pos_args[0].value, bool):
+                    enemy = str(self.format_intrinsic_arg(pos_args[0], is_ident=False))
+                    out_x = str(self.format_intrinsic_arg(pos_args[1], is_ident=True))
+                    out_y = str(self.format_intrinsic_arg(pos_args[2], is_ident=True))
+                    out_found = str(self.format_intrinsic_arg(pos_args[3], is_ident=True))
+                    out_build = self.new_temp(loc)
+                else:
+                    out_x = str(self.format_intrinsic_arg(pos_args[0], is_ident=True))
+                    out_y = str(self.format_intrinsic_arg(pos_args[1], is_ident=True))
+                    out_found = str(self.format_intrinsic_arg(pos_args[2], is_ident=True))
+                    out_build = str(self.format_intrinsic_arg(pos_args[3], is_ident=True))
+            elif len(pos_args) == 5:
+                enemy = str(self.format_intrinsic_arg(pos_args[0], is_ident=False))
+                out_x = str(self.format_intrinsic_arg(pos_args[1], is_ident=True))
+                out_y = str(self.format_intrinsic_arg(pos_args[2], is_ident=True))
+                out_found = str(self.format_intrinsic_arg(pos_args[3], is_ident=True))
+                out_build = str(self.format_intrinsic_arg(pos_args[4], is_ident=True))
             else:
-                self.error(f"invalid arguments for {ns}.spawn: expected {ns}.spawn(out_x, out_y, out_found, [out_build]) or tuple unpacking", call)
+                self.error(f"invalid arguments for {ns}.spawn: expected {ns}.spawn([enemy,] out_x, out_y, out_found, [out_build]) or tuple unpacking", call)
             self.instructions.append(
-                IRRaw(opcode="ulocate", args=["spawn", "core", "true", "@copper", out_x, out_y, out_found, out_build], loc=loc)
+                IRRaw(opcode="ulocate", args=["spawn", "core", enemy, "@copper", out_x, out_y, out_found, out_build], loc=loc)
             )
             return "0"
 
@@ -4313,8 +4334,12 @@ class Compiler:
                 return
 
             elif method_name == "spawn":
-                if len(args) != 0 or call.keywords:
+                enemy = "true"
+                if len(args) != 0 or any(kw.arg != "enemy" for kw in call.keywords):
                     self.error("invalid arguments for ulocate.spawn unpacking: expected ulocate.spawn()", call)
+                for kw in call.keywords:
+                    if kw.arg == "enemy":
+                        enemy = str(self.format_intrinsic_arg(kw.value, is_ident=False))
                 if len(target_names) not in (3, 4):
                     self.error(f"ulocate.spawn unpacking expects 3 or 4 target variables (out_x, out_y, out_found[, out_building]), got {len(target_names)}", target)
                 out_x = target_names[0]
@@ -4322,7 +4347,7 @@ class Compiler:
                 out_found = target_names[2]
                 out_build = target_names[3] if len(target_names) == 4 else self.new_temp(loc)
                 self.instructions.append(
-                    IRRaw(opcode="ulocate", args=["spawn", "core", "true", "@copper", out_x, out_y, out_found, out_build], loc=loc)
+                    IRRaw(opcode="ulocate", args=["spawn", "core", enemy, "@copper", out_x, out_y, out_found, out_build], loc=loc)
                 )
                 return
 

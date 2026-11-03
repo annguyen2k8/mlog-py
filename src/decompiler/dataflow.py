@@ -7,6 +7,11 @@ strictly following the Zero Guessing principle.
 """
 
 from typing import Any, Dict, List, Optional, Set, Tuple
+import keyword
+
+def is_python_keyword(name: str) -> bool:
+    """Check if name is a Python reserved keyword or literal that cannot be assigned to."""
+    return keyword.iskeyword(name) or name in ("None", "True", "False")
 
 from .expression import (
     MLOG_TO_PY_BINARY_OPS,
@@ -502,7 +507,7 @@ class DataflowTransformer:
                 # Case A: set dest src -> dest = src
                 if op == "set" and len(args) == 2:
                     dest = args[0]
-                    if not dest.isidentifier() or dest.startswith("@"):
+                    if not dest.isidentifier() or dest.startswith("@") or is_python_keyword(dest):
                         result.append(node)
                         continue
                     src_expr = parse_operand_to_expr(args[1])
@@ -513,6 +518,9 @@ class DataflowTransformer:
                 if op == "op" and len(args) >= 3:
                     op_name = args[0]
                     dest = args[1]
+                    if is_python_keyword(dest):
+                        result.append(node)
+                        continue
                     a_expr = parse_operand_to_expr(args[2])
                     b_expr = parse_operand_to_expr(args[3]) if len(args) > 3 else ConstantExpr(0)
 
@@ -557,7 +565,7 @@ class DataflowTransformer:
                 # Case C: read dest cell address -> dest = read(cell, address)
                 if op == "read" and len(args) == 3:
                     dest = args[0]
-                    if dest.isidentifier() and not dest.startswith("@"):
+                    if dest.isidentifier() and not dest.startswith("@") and not is_python_keyword(dest):
                         cell_expr = semantic_argument_to_expr("read", 1, args[1], defined_vars, args)
                         addr_expr = semantic_argument_to_expr("read", 2, args[2], defined_vars, args)
                         result.append(AssignNode(target=dest, value=CallExpr("read", [cell_expr, addr_expr]), source_addresses=[instr.address]))
@@ -566,7 +574,7 @@ class DataflowTransformer:
                 # Case D: sensor dest block prop -> dest = sensor(block, prop)
                 if op == "sensor" and len(args) == 3:
                     dest = args[0]
-                    if dest.isidentifier() and not dest.startswith("@"):
+                    if dest.isidentifier() and not dest.startswith("@") and not is_python_keyword(dest):
                         block_expr = semantic_argument_to_expr("sensor", 1, args[1], defined_vars, args)
                         prop_expr = semantic_argument_to_expr("sensor", 2, args[2], defined_vars, args)
                         result.append(AssignNode(target=dest, value=CallExpr("sensor", [block_expr, prop_expr]), source_addresses=[instr.address]))
@@ -575,7 +583,7 @@ class DataflowTransformer:
                 # Case E: getlink dest index -> dest = getlink(index)
                 if op == "getlink" and len(args) == 2:
                     dest = args[0]
-                    if dest.isidentifier() and not dest.startswith("@"):
+                    if dest.isidentifier() and not dest.startswith("@") and not is_python_keyword(dest):
                         idx_expr = semantic_argument_to_expr("getlink", 1, args[1], defined_vars, args)
                         result.append(AssignNode(target=dest, value=CallExpr("getlink", [idx_expr]), source_addresses=[instr.address]))
                         continue
@@ -583,7 +591,7 @@ class DataflowTransformer:
                 # Case F: lookup type dest index -> dest = lookup(type, index)
                 if op == "lookup" and len(args) == 3:
                     dest = args[1]
-                    if dest.isidentifier() and not dest.startswith("@"):
+                    if dest.isidentifier() and not dest.startswith("@") and not is_python_keyword(dest):
                         type_expr = semantic_argument_to_expr("lookup", 0, args[0], defined_vars, args)
                         idx_expr = semantic_argument_to_expr("lookup", 2, args[2], defined_vars, args)
                         result.append(AssignNode(target=dest, value=CallExpr("lookup", [type_expr, idx_expr]), source_addresses=[instr.address]))
@@ -592,7 +600,7 @@ class DataflowTransformer:
                 # Case G: packcolor dest r g b a -> dest = packcolor(r, g, b, a)
                 if op == "packcolor" and len(args) == 5:
                     dest = args[0]
-                    if dest.isidentifier() and not dest.startswith("@"):
+                    if dest.isidentifier() and not dest.startswith("@") and not is_python_keyword(dest):
                         params = [semantic_argument_to_expr("packcolor", i, args[i], defined_vars, args) for i in range(1, 5)]
                         result.append(AssignNode(target=dest, value=CallExpr("packcolor", params), source_addresses=[instr.address]))
                         continue
@@ -600,7 +608,7 @@ class DataflowTransformer:
                 # Case H: radar target1 target2 target3 sort turret sort_order output -> output = radar(...)
                 if op == "radar" and len(args) >= 7:
                     dest = args[6]
-                    if dest.isidentifier() and not dest.startswith("@"):
+                    if dest.isidentifier() and not dest.startswith("@") and not is_python_keyword(dest):
                         params = [semantic_argument_to_expr("radar", i, args[i], defined_vars, args) for i in range(6)]
                         result.append(AssignNode(target=dest, value=CallExpr("radar", params), source_addresses=[instr.address]))
                         continue
@@ -609,7 +617,7 @@ class DataflowTransformer:
                 if op == "uradar":
                     if len(args) == 7:
                         dest = args[6]
-                        if dest.isidentifier() and not dest.startswith("@"):
+                        if dest.isidentifier() and not dest.startswith("@") and not is_python_keyword(dest):
                             params = [semantic_argument_to_expr("uradar", i, args[i], defined_vars, args) for i in (0, 1, 2, 3, 5)]
                             result.append(AssignNode(target=dest, value=CallExpr("uradar", params), source_addresses=[instr.address]))
                             continue
