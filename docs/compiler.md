@@ -209,6 +209,15 @@ Following [ADR-001](adr/0001-modulo-semantics.md) targeting Mindustry v8 (`v160.
     ```
   - The decompiler preserves vanilla `op mod` instructions as `op("mod", ...)` to prevent unintended semantic migration to `emod`.
 
+### Division by Zero Semantics (`/`, `//`, `/=`, `//=`, `op("div", ...)`, `op("idiv", ...)`)
+
+In standard Python, dividing by zero raises a `ZeroDivisionError` at runtime. However, when compiling to Mindustry Logic:
+- Mindustry executes division via Java's floating-point arithmetic (`a / b`) in `LExecutor.java`.
+- When dividing by zero in floating point, Java evaluates `x / 0.0` to `Infinity` or `NaN`.
+- In Mindustry's `LVar.setnum(double val)`, if `Double.isNaN(val)` or `Double.isInfinite(val)` is true, the register is set to `null` (`null` object in `LVar.setobj(null)`).
+- Therefore, in compiled Mindustry bytecode, division by zero (`x / 0` or `x // 0`) evaluates to `null` at runtime without halting processor execution or raising an error.
+- Low-level `op("div", ...)` and `op("idiv", ...)` follow identical Mindustry runtime behavior.
+
 ### Mindustry Built-in Variables & Registers (`Vars` API)
 
 Mindustry processor runtime registers and global variables are directly accessible via the canonical `Vars` namespace, preserving original Mindustry variable names and capitalization:
@@ -413,7 +422,7 @@ from mlog import draw
 # 1. Modern method syntax with IDE autocomplete
 draw.clear()                                # Emits: draw clear 0 0 0 0 0 0 (default black: r=0, g=0, b=0)
 draw.clear(0, 0, 0)                          # Emits: draw clear 0 0 0 0 0 0
-draw.clear(255, 0, 0, 255)                   # Emits: draw clear 255 0 0 0 0 0 (DSL accepts 'a' for RGBA convenience; opcode is RGB only)
+draw.clear(255, 0, 0)                        # Emits: draw clear 255 0 0 0 0 0 (RGB color; alpha is not supported in Mindustry v160.7)
 draw.color(255, 128, 0)                      # Emits: draw color 255 128 0 255 0 0 (default alpha=255)
 draw.color(255, 128, 0, a=128)               # Emits: draw color 255 128 0 128 0 0
 draw.stroke(2)                               # Emits: draw stroke 2 0 0 0 0
@@ -440,7 +449,7 @@ draw("line", 0, 0, 80, 80)
 
 | Method | Parameters & Defaults | Emitted MLog Opcode | Notes |
 | :--- | :--- | :--- | :--- |
-| `draw.clear(r=0, g=0, b=0, a=0)` | `[r=0], [g=0], [b=0], [a=0]` | `draw clear r g b 0 0 0` | Clears canvas. DSL accepts RGBA (0..4 args) for color tuple compatibility; the compiled Mindustry opcode operates strictly on RGB without a separate alpha channel. |
+| `draw.clear(r=0, g=0, b=0)` | `[r=0], [g=0], [b=0]` | `draw clear r g b 0 0 0` | Clears canvas. Operates strictly on RGB channels (0..3 args); Mindustry v160.7 `draw clear` does not have an alpha operand. |
 | `draw.color(r, g, b, a=255)` | `r, g, b, [a=255]` | `draw color r g b a 0 0` | RGBA color (0..255) |
 | `draw.col(color)` | `color` | `draw col color 0 0 0 0` | Packed color number |
 | `draw.stroke(width)` | `width` | `draw stroke width 0 0 0 0` | Stroke line width |

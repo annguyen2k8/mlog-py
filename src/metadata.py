@@ -404,7 +404,7 @@ class _DrawCallable:
         draw(DrawType.LINE, x1, y1, x2, y2)
     and modern namespace method syntax:
         draw.line(x1, y1, x2, y2)
-        draw.clear(r=0, g=0, b=0, a=0)
+        draw.clear(r=0, g=0, b=0)
         draw.color(r, g, b, a=255)
         draw.rect(x, y, width, height)
         draw.reset()
@@ -413,7 +413,7 @@ class _DrawCallable:
     def __call__(self, type_: Any, *params: Any) -> None:
         return None
 
-    def clear(self, r: Any = 0, g: Any = 0, b: Any = 0, a: Any = 0) -> None:
+    def clear(self, r: Any = 0, g: Any = 0, b: Any = 0) -> None:
         return None
 
 
@@ -3655,11 +3655,11 @@ def generate_pyi() -> str:
             lines.append("        draw(DrawType.LINE, x1, y1, x2, y2)")
             lines.append("    and modern namespace method syntax:")
             lines.append("        draw.line(x1, y1, x2, y2)")
-            lines.append("        draw.clear(r=0, g=0, b=0, a=0)")
+            lines.append("        draw.clear(r=0, g=0, b=0)")
             lines.append("        draw.color(r, g, b, a=255)")
             lines.append('    """')
             lines.append("    def __call__(self, type: Union[DrawType, str], x: Any = 0, y: Any = 0, p1: Any = 0, p2: Any = 0, p3: Any = 0, p4: Any = 0) -> None: ...")
-            lines.append("    def clear(self, r: Any = 0, g: Any = 0, b: Any = 0, a: Any = 0) -> None: ...")
+            lines.append("    def clear(self, r: Any = 0, g: Any = 0, b: Any = 0) -> None: ...")
             lines.append("    def color(self, r: Any, g: Any, b: Any, a: Any = 255) -> None: ...")
             lines.append("    def col(self, color: Any) -> None: ...")
             lines.append("    def stroke(self, width: Any) -> None: ...")

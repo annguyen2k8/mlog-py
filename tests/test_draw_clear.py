@@ -34,11 +34,12 @@ class TestDrawClear(unittest.TestCase):
         res = compile_py(code)
         self.assertIn("draw clear 255 128 64 0 0 0", res.mlog)
 
-    def test_draw_clear_four_args(self):
-        """draw.clear(255, 128, 64, 255) accepts alpha parameter safely for RGBA habit."""
+    def test_draw_clear_four_args_rejected(self):
+        """draw.clear(255, 128, 64, 255) rejects 4th parameter because Mindustry v160.7 draw clear lacks alpha (MED-01)."""
         code = "from mlog import draw\ndraw.clear(255, 128, 64, 255)\n"
-        res = compile_py(code)
-        self.assertIn("draw clear 255 128 64 0 0 0", res.mlog)
+        with self.assertRaises(CompileError) as ctx:
+            compile_py(code)
+        self.assertIn("at most 3 arguments", str(ctx.exception))
 
     def test_draw_clear_keywords(self):
         """draw.clear supports r, g, b, a keywords in any order."""
@@ -46,9 +47,11 @@ class TestDrawClear(unittest.TestCase):
         res = compile_py(code)
         self.assertIn("draw clear 255 128 64 0 0 0", res.mlog)
 
+        # Keyword 'a' must be rejected
         code_rgba = "from mlog import draw\ndraw.clear(r=10, g=20, b=30, a=40)\n"
-        res_rgba = compile_py(code_rgba)
-        self.assertIn("draw clear 10 20 30 0 0 0", res_rgba.mlog)
+        with self.assertRaises(CompileError) as ctx:
+            compile_py(code_rgba)
+        self.assertIn("unexpected keyword argument 'a'", str(ctx.exception))
 
     def test_draw_clear_mixed_pos_and_keywords(self):
         """Positional and keyword arguments can be mixed safely."""
@@ -96,8 +99,8 @@ class TestDrawClear(unittest.TestCase):
         self.assertIsNone(mlog.draw.clear(255))
         self.assertIsNone(mlog.draw.clear(255, 128))
         self.assertIsNone(mlog.draw.clear(255, 128, 64))
-        self.assertIsNone(mlog.draw.clear(255, 128, 64, 255))
-        self.assertIsNone(mlog.draw.clear(r=10, g=20, b=30, a=40))
+        self.assertIsNone(mlog.draw.clear(255, 128, 64))
+        self.assertIsNone(mlog.draw.clear(r=10, g=20, b=30))
 
 
 if __name__ == "__main__":

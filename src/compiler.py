@@ -2565,18 +2565,19 @@ class Compiler:
 
         # Mindustry v160.7 Draw sub-commands mapping
         if method_name == "clear":
-            # draw.clear(r=0, g=0, b=0, a=0)
+            # draw.clear(r=0, g=0, b=0)
+            # Mindustry v160.7 draw clear only takes (r, g, b). Alpha operand is rejected (MED-01).
             kw_map = {}
             for kw in call.keywords:
-                if kw.arg in ("r", "g", "b", "a"):
+                if kw.arg in ("r", "g", "b"):
                     kw_map[kw.arg] = kw.value
                 else:
                     self.error(f"invalid arguments for draw.clear: unexpected keyword argument '{kw.arg}'", kw)
 
-            if len(args) > 4:
-                self.error("invalid arguments for draw.clear: expected draw.clear([r=0, g=0, b=0, a=0])", call)
+            if len(args) > 3:
+                self.error("invalid arguments for draw.clear: expected draw.clear([r=0, g=0, b=0]) (at most 3 arguments, alpha is not supported in Mindustry v160.7)", call)
 
-            param_names = ("r", "g", "b", "a")
+            param_names = ("r", "g", "b")
             resolved_args = {}
             for i, arg in enumerate(args):
                 p_name = param_names[i]
@@ -2590,13 +2591,10 @@ class Compiler:
             r_node = resolved_args.get("r")
             g_node = resolved_args.get("g")
             b_node = resolved_args.get("b")
-            a_node = resolved_args.get("a")
 
             r = str(self.format_intrinsic_arg(r_node, is_ident=False)) if r_node is not None else "0"
             g = str(self.format_intrinsic_arg(g_node, is_ident=False)) if g_node is not None else "0"
             b = str(self.format_intrinsic_arg(b_node, is_ident=False)) if b_node is not None else "0"
-            if a_node is not None:
-                self.format_intrinsic_arg(a_node, is_ident=False)
 
             self.instructions.append(
                 IRRaw(opcode="draw", args=["clear", r, g, b, "0", "0", "0"], loc=loc)

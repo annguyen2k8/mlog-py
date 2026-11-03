@@ -231,5 +231,54 @@ b_res = bullet(None, 0, 10, 20, 0, crux)
         self.validate_with_jvm(mlog)
 
 
+
+    # =========================================================================
+    # 4. MED-01: draw.clear signature (3 operands r, g, b)
+    # =========================================================================
+
+    def test_med01_draw_clear_signature_and_rejection(self):
+        """Verify draw.clear only accepts (r, g, b) and rejects alpha (MED-01)."""
+        # Valid 3-arg call
+        mlog = self.compile_code("from mlog import draw\ndraw.clear(255, 128, 64)\n")
+        self.assertIn("draw clear 255 128 64 0 0 0", mlog)
+        self.validate_with_jvm(mlog)
+
+        # 4 positional args rejected
+        with self.assertRaises(CompileError) as ctx:
+            self.compile_code("from mlog import draw\ndraw.clear(255, 128, 64, 255)\n")
+        self.assertIn("at most 3 arguments", str(ctx.exception))
+
+        # Keyword 'a' rejected
+        with self.assertRaises(CompileError) as ctx:
+            self.compile_code("from mlog import draw\ndraw.clear(r=10, g=20, b=30, a=40)\n")
+        self.assertIn("unexpected keyword argument 'a'", str(ctx.exception))
+
+    # =========================================================================
+    # 5. INFO-01: Zero division runtime behavior on Mindustry engine
+    # =========================================================================
+
+    def test_info01_zero_division_evaluates_to_null_without_crashing(self):
+        """Verify division by zero produces 'null' without throwing exception in Mindustry JVM."""
+        source = """
+a = 10
+b = 0
+div_res = a / b
+idiv_res = a // b
+mod_res = a % b
+"""
+        mlog = self.compile_code(source)
+        self.assertIn("op div div_res a b", mlog)
+        self.assertIn("op idiv idiv_res a b", mlog)
+        self.assertIn("op emod mod_res a b", mlog)
+        self.validate_with_jvm(mlog)
+
+        if is_mindustry_available():
+            run_res = run_with_mindustry(mlog, max_steps=50)
+            self.assertTrue(run_res.success)
+            self.assertEqual(run_res.vars.get("div_res"), "null")
+            self.assertEqual(run_res.vars.get("idiv_res"), "null")
+            self.assertEqual(run_res.vars.get("mod_res"), "null")
+
+
 if __name__ == "__main__":
     unittest.main()
