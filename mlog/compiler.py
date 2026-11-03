@@ -2194,8 +2194,16 @@ class Compiler:
                 if k not in ("type", "duration", "out_success", "outSuccess"):
                     self.error(f"unexpected keyword argument '{k}' for message", call)
 
+            if "out_success" in kwargs and "outSuccess" in kwargs:
+                self.error("duplicate argument for message: cannot pass both 'out_success' and 'outSuccess'", call)
+
+            if len(args) > 3:
+                self.error("too many arguments for message: expected message(type, [duration=3], [out_success='@wait'])", call)
+
             # extract type
             if len(args) >= 1:
+                if "type" in kwargs:
+                    self.error("duplicate argument 'type' for message (passed as both positional and keyword argument)", call)
                 type_node = args[0]
             elif "type" in kwargs:
                 type_node = kwargs["type"]
@@ -2208,6 +2216,8 @@ class Compiler:
 
             # extract duration
             if len(args) >= 2:
+                if "duration" in kwargs:
+                    self.error("duplicate argument 'duration' for message (passed as both positional and keyword argument)", call)
                 duration = str(self.format_intrinsic_arg(args[1], is_ident=False))
             elif "duration" in kwargs:
                 duration = str(self.format_intrinsic_arg(kwargs["duration"], is_ident=False))
@@ -2216,6 +2226,10 @@ class Compiler:
 
             # extract out_success
             if len(args) >= 3:
+                if "out_success" in kwargs:
+                    self.error("duplicate argument 'out_success' for message (passed as both positional and keyword argument)", call)
+                if "outSuccess" in kwargs:
+                    self.error("duplicate argument 'outSuccess' for message (passed as both positional and keyword argument)", call)
                 out_success = str(self.format_intrinsic_arg(args[2], is_ident=True))
                 dest = out_success
             elif "out_success" in kwargs:
@@ -2231,8 +2245,6 @@ class Compiler:
                 dest = "0"
                 out_success = "@wait"
 
-            if len(args) > 3:
-                self.error("too many arguments for message: expected message(type, [duration=3], [out_success='@wait'])", call)
 
             self.instructions.append(
                 IRRaw(opcode="message", args=[type_, duration, out_success], loc=loc)
@@ -3889,11 +3901,16 @@ class Compiler:
             if k not in ("duration", "out_success", "outSuccess"):
                 self.error(f"unexpected keyword argument '{k}' for {ns}.{method_name}", call)
 
+        if "out_success" in kwargs and "outSuccess" in kwargs:
+            self.error(f"duplicate argument for {ns}.{method_name}: cannot pass both 'out_success' and 'outSuccess'", call)
+
         if len(args) > 2:
             self.error(f"too many positional arguments for {ns}.{method_name}: expected at most 2 (duration, out_success)", call)
 
         # duration
         if len(args) >= 1:
+            if "duration" in kwargs:
+                self.error(f"duplicate argument 'duration' for {ns}.{method_name} (passed as both positional and keyword argument)", call)
             duration = str(self.format_intrinsic_arg(args[0], is_ident=False))
         elif "duration" in kwargs:
             duration = str(self.format_intrinsic_arg(kwargs["duration"], is_ident=False))
@@ -3902,6 +3919,10 @@ class Compiler:
 
         # out_success
         if len(args) >= 2:
+            if "out_success" in kwargs:
+                self.error(f"duplicate argument 'out_success' for {ns}.{method_name} (passed as both positional and keyword argument)", call)
+            if "outSuccess" in kwargs:
+                self.error(f"duplicate argument 'outSuccess' for {ns}.{method_name} (passed as both positional and keyword argument)", call)
             out_success = str(self.format_intrinsic_arg(args[1], is_ident=True))
             dest = out_success
         elif "out_success" in kwargs:

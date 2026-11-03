@@ -3,41 +3,34 @@
 - **Updated**: 2026-11-03
 - **Agent**: Antigravity / Gemini 3.8 Flash
 - **Status**: done
-- **Goal**: Implement P2 API Ergonomics: lookup namespace methods (item, block, unit, liquid), query namespace methods (circle, rect with automatic dummy height operand filling), and message namespace methods (announce, toast, notify) matching Mindustry v160.7.
+- **Goal**: Implement P2.1 to resolve all 4 findings from independent review of P2 API Ergonomics (MED-01 lookup typing, MED-02 query team identifier collision, LOW-01 lookup.team, LOW-02 duplicate message arguments).
 
 ## Done
 
-- **P2 API Ergonomics Implementation**:
-  - **A. `lookup` namespace**:
-    - Added `lookup.item(index)`, `lookup.block(index)`, `lookup.unit(index)`, `lookup.liquid(index)` methods to `_LookupCallable`.
-    - Supports both expression forms (`dest = lookup.item(idx)`) and statement forms (`lookup.item(idx, dest)`).
-    - Preserves 100% backward compatibility for legacy positional `lookup(type, ...)` calls.
-    - Added parser validation for lookup methods with close-match typo suggestions.
-    - Pushed in commit `a4e91a3`.
-  - **B. `query` namespace**:
-    - Added `query.circle(type, team, x, y, radius)` and `query.rect(type, team, x, y, width, height)` to `_QueryCallable`.
-    - Automatically injects trailing dummy operand `"0"` for `query.circle` matching upstream Mindustry v160.7 `QueryStatement.java` / `QueryI`.
-    - Supports `QueryType` enum and strings (`"unit"`, `"building"`), `Teams` enum, string tokens (`"@sharded"`), variables, and `None`/`null`.
-    - Preserves 100% backward compatibility for legacy 7-operand `query(shape, type, team, x, y, w, h)`.
-    - Pushed in commit `b18cff3`.
-  - **C. `message` namespace**:
-    - Added `message.announce([duration=3], [out_success="@wait"])`, `message.toast([duration=3], [out_success="@wait"])`, and `message.notify([duration=3], [out_success="@wait"])` to `_MessageCallable`.
-    - Supports both statement forms (defaulting to `@wait` for non-blocking message queueing) and expression forms (`success = message.announce(...)`).
-    - Explicitly omits `message.mission()` per upstream semantics (`LStatements.FlushMessageStatement` sets scenario rules rather than a HUD message popup).
-    - Preserves 100% backward compatibility for legacy `message(type, [duration], [out_success])`.
-- **SSOT Metadata & Typing Stubs**:
-  - Updated `src/metadata.py`, `mlog/metadata.py`, and `mlog/__init__.py`.
-  - Exported `_LookupCallable`, `_QueryCallable`, and `_MessageCallable` in `MLOG_EXPORTS`.
-  - Regenerated typing stubs (`mlog.pyi`, `mlog/__init__.pyi`, `src/mlog.pyi`) via `python -m mlog.metadata`.
-- **Documentation**:
-  - Updated `docs/compiler.md` with usage examples and descriptions for `lookup.<method>`, `query.<method>`, and `message.<method>`.
-  - Updated `docs/mlog-command-coverage.md` detailing modern callable namespaces alongside legacy forms.
+- **P2.1 Fixes Implementation**:
+  - **MED-01 & LOW-01 (`lookup` namespace & typing)**:
+    - Added `lookup.team(index)` and statement form `lookup.team(index, dest)` to `_LookupCallable`.
+    - Added `team` to `LOOKUP_METHODS` in `src/parser.py` and `src/compiler.py`.
+    - Updated `generate_pyi()` in `src/metadata.py` to generate accurate `@overload` definitions for both expression form (`(index: Any) -> Any`) and statement form (`(index: Any, dest: Any) -> None`) across all 5 lookup methods (`item`, `block`, `unit`, `liquid`, `team`).
+    - Regenerated typing stubs (`mlog.pyi`, `mlog/__init__.pyi`, `src/mlog.pyi`).
+    - Added JVM validation and regression tests for `lookup.team`.
+    - Pushed in commit `6cb9b8a`.
+  - **MED-02 (`query` team collision fix)**:
+    - Updated `_format_team()` in `src/compiler.py` so that user variables (`ast.Name`) matching team names (`sharded`, `crux`, `green`, etc.) are preserved as runtime variable names rather than being erroneously hijacked into team constants (`@sharded`).
+    - Preserved normalization for `null`, `None`, `Teams.SHARDED`, string literals (`"sharded"` -> `@sharded`), and numbers.
+    - Added regression tests in `tests/test_p2_ergonomics.py` demonstrating variable preservation and JVM validity.
+    - Pushed in commit `c4d048b`.
+  - **LOW-02 (`message` duplicate argument validation)**:
+    - Implemented duplicate argument detection in `compile_message_method` and `func_name == "message"`.
+    - Detects and rejects with `CompileError` when `duration` or `out_success`/`outSuccess` is passed as both positional and keyword argument, or when both aliases `out_success` and `outSuccess` are passed simultaneously.
+    - Added 8 focused regression tests in `test_message_reject_mission_and_invalid_calls`.
+  - **Documentation**:
+    - Updated `docs/compiler.md` and `docs/mlog-command-coverage.md` to document all 5 lookable registries including `team`.
 - **Testing & Verification**:
-  - Created `tests/test_p2_ergonomics.py` with 16 comprehensive test methods covering:
-    - `lookup` methods (item, block, unit, liquid, expression/statement forms, nested calls, invalid calls, runtime).
-    - `query` methods (circle with dummy height 0, rect, team formatting, expression fallback, invalid calls, runtime).
-    - `message` methods (announce, toast, notify, statement/expression forms, keyword args, mission rejection, invalid calls, runtime).
-  - Validated all generated instructions against real Mindustry v160.7 JVM engine (`validate_with_jvm`).
+  - Ran pure-Python test suite (`python run_tests.py --fast`): 792/792 passed.
+  - Ran Mindustry v160.7 JVM test suite (`python run_tests.py --jvm`): 607/607 passed.
+  - Ran unit suites (`tests.test_p2_ergonomics`, `tests.test_p1_ergonomics`, `tests.test_imports_and_stub`, `tests.test_compiler_examples`, `tests.test_decompiler_examples`, `tests.test_agent_memory`): 77/77 passed.
+  - `git diff --check`: 0 whitespace errors.
 
 ## Next
 
@@ -49,7 +42,7 @@
 
 ## Verification
 
-- `python -m unittest tests.test_p2_ergonomics tests.test_p1_ergonomics tests.test_imports_and_stub tests.test_compiler_examples tests.test_decompiler_examples tests.test_agent_memory`: 76/76 passed.
+- `python -m unittest tests.test_p2_ergonomics tests.test_p1_ergonomics tests.test_imports_and_stub tests.test_compiler_examples tests.test_decompiler_examples tests.test_agent_memory`: 77/77 passed.
 - `python run_tests.py --jvm`: 607/607 passed.
-- `python run_tests.py --fast`: 791/791 passed.
+- `python run_tests.py --fast`: 792/792 passed.
 - `git diff --check`: 0 whitespace errors.

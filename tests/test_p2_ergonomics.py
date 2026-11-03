@@ -298,6 +298,23 @@ class TestP2Ergonomics(unittest.TestCase):
             self.compile_code("from mlog import message\nmessage.announce(1, 2, 3)\n")
         with self.assertRaises(CompileError):
             self.compile_code("from mlog import message\nmessage.announce(timeout=5)\n")
+        # Duplicate argument checks (LOW-02)
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import message\nmessage.announce(5, duration=10)\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import message\nmessage.announce(5, s, out_success=s2)\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import message\nmessage.announce(5, s, outSuccess=s2)\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import message\nmessage.announce(out_success=s1, outSuccess=s2)\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import message\nmessage('announce', 5, duration=10)\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import message\nmessage('announce', type='toast')\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import message\nmessage('announce', 5, s, out_success=s2)\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import message\nmessage('announce', out_success=s1, outSuccess=s2)\n")
 
     def test_message_backward_compatibility(self):
         source = (
