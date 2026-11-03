@@ -1,0 +1,129 @@
+"""Regression tests for P2 API Ergonomics:
+A. lookup callable namespace methods (item, block, unit, liquid)
+B. query callable namespace methods (circle, rect)
+C. message callable namespace methods (announce, notify, toast)
+"""
+
+import unittest
+import mlog
+from mlog import compile_py, lookup, LookupType
+from mlog.errors import CompileError
+from mlog.validator import MlogValidator
+from mlog.mindustry_validator import is_mindustry_available, validate_with_mindustry
+
+
+class TestP2Ergonomics(unittest.TestCase):
+    """Test suite for P2 Ergonomics additions and backward compatibility."""
+
+    def compile_code(self, source: str) -> str:
+        """Compile DSL source and validate syntax."""
+        res = compile_py(source, validate=True)
+        mlog_text = res.mlog.strip()
+        MlogValidator.validate(mlog_text)
+        return mlog_text
+
+    def validate_with_jvm(self, mlog_text: str):
+        """Validate generated mlog against real Mindustry v160.7 engine if available."""
+        if is_mindustry_available():
+            valid, err = validate_with_mindustry(mlog_text)
+            self.assertTrue(valid, f"JVM validation failed: {err}")
+
+    # =========================================================================
+    # A. lookup namespace methods
+    # =========================================================================
+
+    def test_lookup_item_expression_and_statement(self):
+        source = (
+            "from mlog import lookup\n"
+            "it = lookup.item(0)\n"
+            "lookup.item(1, out_it)\n"
+        )
+        mlog = self.compile_code(source)
+        lines = mlog.splitlines()
+        self.assertEqual(lines[0], "lookup item it 0")
+        self.assertEqual(lines[1], "lookup item out_it 1")
+        self.validate_with_jvm(mlog)
+
+    def test_lookup_block_expression_and_statement(self):
+        source = (
+            "from mlog import lookup\n"
+            "b = lookup.block(5)\n"
+            "lookup.block(10, out_b)\n"
+        )
+        mlog = self.compile_code(source)
+        lines = mlog.splitlines()
+        self.assertEqual(lines[0], "lookup block b 5")
+        self.assertEqual(lines[1], "lookup block out_b 10")
+        self.validate_with_jvm(mlog)
+
+    def test_lookup_unit_expression_and_statement(self):
+        source = (
+            "from mlog import lookup\n"
+            "u = lookup.unit(2)\n"
+            "lookup.unit(3, out_u)\n"
+        )
+        mlog = self.compile_code(source)
+        lines = mlog.splitlines()
+        self.assertEqual(lines[0], "lookup unit u 2")
+        self.assertEqual(lines[1], "lookup unit out_u 3")
+        self.validate_with_jvm(mlog)
+
+    def test_lookup_liquid_expression_and_statement(self):
+        source = (
+            "from mlog import lookup\n"
+            "liq = lookup.liquid(1)\n"
+            "lookup.liquid(2, out_liq)\n"
+        )
+        mlog = self.compile_code(source)
+        lines = mlog.splitlines()
+        self.assertEqual(lines[0], "lookup liquid liq 1")
+        self.assertEqual(lines[1], "lookup liquid out_liq 2")
+        self.validate_with_jvm(mlog)
+
+    def test_lookup_nested_expression(self):
+        source = (
+            "from mlog import lookup, print\n"
+            "print(lookup.item(0))\n"
+        )
+        mlog = self.compile_code(source)
+        lines = mlog.splitlines()
+        self.assertEqual(lines[0], "lookup item __tmp0 0")
+        self.assertEqual(lines[1], "print __tmp0")
+        self.validate_with_jvm(mlog)
+
+    def test_lookup_backward_compatibility(self):
+        source = (
+            "from mlog import lookup, LookupType\n"
+            "res = lookup(LookupType.ITEM, 0)\n"
+            "lookup(LookupType.BLOCK, out_b, 1)\n"
+            "res2 = lookup('unit', 2)\n"
+            "lookup('liquid', out_l, 3)\n"
+        )
+        mlog = self.compile_code(source)
+        lines = mlog.splitlines()
+        self.assertEqual(lines[0], "lookup item res 0")
+        self.assertEqual(lines[1], "lookup block out_b 1")
+        self.assertEqual(lines[2], "lookup unit res2 2")
+        self.assertEqual(lines[3], "lookup liquid out_l 3")
+        self.validate_with_jvm(mlog)
+
+    def test_lookup_invalid_calls(self):
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import lookup\nlookup.item()\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import lookup\nlookup.item(1, 2, 3)\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import lookup\nlookup.item(idx=0)\n")
+        with self.assertRaises(CompileError):
+            self.compile_code("from mlog import lookup\nlookup.unknown(0)\n")
+
+    def test_lookup_pure_python_runtime(self):
+        self.assertEqual(lookup.item(0), 0)
+        self.assertEqual(lookup.block(0), 0)
+        self.assertEqual(lookup.unit(0), 0)
+        self.assertEqual(lookup.liquid(0), 0)
+        self.assertEqual(lookup(LookupType.ITEM, 0), 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

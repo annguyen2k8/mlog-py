@@ -1127,6 +1127,8 @@ class Compiler:
                     return self.compile_status_method(call, target_dest=target_dest, is_statement=is_statement)
                 elif ns == "fetch":
                     return self.compile_fetch_method(call, target_dest=target_dest, is_statement=is_statement)
+                elif ns == "lookup":
+                    return self.compile_lookup_method(call, target_dest=target_dest, is_statement=is_statement)
             self.error(
                 f"unsupported method call on '{call.func.value.id if isinstance(call.func.value, ast.Name) else 'object'}'",
                 call,
@@ -3736,6 +3738,44 @@ class Compiler:
 
         else:
             self.error(f"unknown fetch method: '{ns}.{method_name}'", call)
+
+    def compile_lookup_method(
+        self,
+        call: ast.Call,
+        target_dest: Optional[str] = None,
+        is_statement: bool = False,
+    ) -> str:
+        """Compile lookup.<method>(...) call into Mindustry 'lookup' instruction."""
+        loc = self.loc(call)
+        assert isinstance(call.func, ast.Attribute)
+        method_name = call.func.attr
+        args = call.args
+        ns = call.func.value.id if isinstance(call.func.value, ast.Name) else "lookup"
+
+        if method_name not in ("item", "block", "unit", "liquid"):
+            self.error(f"unknown lookup method: '{ns}.{method_name}'", call)
+
+        if call.keywords:
+            self.error(f"keyword arguments are not supported in {ns}.{method_name}()", call)
+
+        type_str = method_name
+
+        if len(args) == 1 and (target_dest is not None or not is_statement):
+            dest = target_dest if target_dest is not None else self.new_temp(loc)
+            idx = str(self.format_intrinsic_arg(args[0], is_ident=False))
+        elif len(args) == 2 and is_statement and target_dest is None:
+            idx = str(self.format_intrinsic_arg(args[0], is_ident=False))
+            dest = str(self.format_intrinsic_arg(args[1], is_ident=True))
+        else:
+            self.error(
+                f"invalid arguments for {ns}.{method_name}: expected dest = {ns}.{method_name}(index) or {ns}.{method_name}(index, dest)",
+                call,
+            )
+
+        self.instructions.append(
+            IRRaw(opcode="lookup", args=[type_str, dest, idx], loc=loc)
+        )
+        return dest
 
 
     def compile_fstring_print(self, node: ast.JoinedStr, loc: SourceLocation) -> str:

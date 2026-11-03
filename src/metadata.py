@@ -785,8 +785,36 @@ class _UnitLocateCallable:
 _rt_ulocate = _UnitLocateCallable()
 ulocate = _rt_ulocate
 
-def _rt_lookup(*args: Any) -> Any:
-    return 0
+class _LookupCallable:
+    """Callable namespace object for Mindustry content lookup operations.
+
+    Supports both legacy function-call syntax:
+        res = lookup(LookupType.ITEM, 0)
+        lookup(LookupType.BLOCK, out_block, 0)
+    and modern namespace method syntax:
+        res = lookup.item(index)
+        res = lookup.block(index)
+        res = lookup.unit(index)
+        res = lookup.liquid(index)
+    """
+
+    def __call__(self, type_: Any, *params: Any) -> Any:
+        return 0
+
+    def item(self, index: Any, *dest: Any) -> Any:
+        return 0
+
+    def block(self, index: Any, *dest: Any) -> Any:
+        return 0
+
+    def unit(self, index: Any, *dest: Any) -> Any:
+        return 0
+
+    def liquid(self, index: Any, *dest: Any) -> Any:
+        return 0
+
+_rt_lookup = _LookupCallable()
+lookup = _rt_lookup
 
 def _rt_packcolor(*args: Any) -> Any:
     return 0
@@ -3139,6 +3167,7 @@ MLOG_EXPORTS: Set[str] = (
         "_MarkerCallable",
         "_StatusCallable",
         "_FetchCallable",
+        "_LookupCallable",
         "cutscene",
         "sound",
         "music",
@@ -3324,6 +3353,28 @@ def generate_pyi() -> str:
             lines.append("    def buildCount(self, team: Union[Teams, str], block: Any) -> int: ...")
             lines.append("")
             lines.append("fetch: _FetchCallable")
+            lines.append("")
+            continue
+        if name == "lookup":
+            lines.append("class _LookupCallable:")
+            lines.append('    """Callable namespace object for Mindustry content lookup operations.')
+            lines.append("")
+            lines.append("    Supports both legacy function-call syntax:")
+            lines.append('        res = lookup(LookupType.ITEM, 0)')
+            lines.append('        lookup(LookupType.BLOCK, out_block, 0)')
+            lines.append("    and modern namespace method syntax:")
+            lines.append('        res = lookup.item(index)')
+            lines.append('        res = lookup.block(index)')
+            lines.append('        res = lookup.unit(index)')
+            lines.append('        res = lookup.liquid(index)')
+            lines.append('    """')
+            lines.append("    def __call__(self, type: Union[LookupType, str], target_or_index: Any, index: Any = 0) -> Any: ...")
+            lines.append("    def item(self, index: Any) -> Any: ...")
+            lines.append("    def block(self, index: Any) -> Any: ...")
+            lines.append("    def unit(self, index: Any) -> Any: ...")
+            lines.append("    def liquid(self, index: Any) -> Any: ...")
+            lines.append("")
+            lines.append("lookup: _LookupCallable")
             lines.append("")
             continue
         if name == "control":

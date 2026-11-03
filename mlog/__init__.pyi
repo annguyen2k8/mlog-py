@@ -1064,17 +1064,25 @@ def localeprint(value: Any) -> None:
     """
     ...
 
-@overload
-def lookup(type: Union[LookupType, str], dest: Any, index: Any) -> Any:
-    """Look up content and write result to dest variable (statement form).
-    """
-    ...
+class _LookupCallable:
+    """Callable namespace object for Mindustry content lookup operations.
 
-@overload
-def lookup(type: Union[LookupType, str], index: Any) -> Any:
-    """Look up content and return result (expression form: dest = lookup(...)).
+    Supports both legacy function-call syntax:
+        res = lookup(LookupType.ITEM, 0)
+        lookup(LookupType.BLOCK, out_block, 0)
+    and modern namespace method syntax:
+        res = lookup.item(index)
+        res = lookup.block(index)
+        res = lookup.unit(index)
+        res = lookup.liquid(index)
     """
-    ...
+    def __call__(self, type: Union[LookupType, str], target_or_index: Any, index: Any = 0) -> Any: ...
+    def item(self, index: Any) -> Any: ...
+    def block(self, index: Any) -> Any: ...
+    def unit(self, index: Any) -> Any: ...
+    def liquid(self, index: Any) -> Any: ...
+
+lookup: _LookupCallable
 
 def makemarker(type: Any, id: Any, x: Any, y: Any, replace: Any = True) -> None:
     """Create an objective map marker at tile coordinates.
@@ -1986,6 +1994,7 @@ __all__ = [
     "_CutsceneCallable",
     "_DrawCallable",
     "_FetchCallable",
+    "_LookupCallable",
     "_MarkerCallable",
     "_MusicCallable",
     "_OpCallable",
