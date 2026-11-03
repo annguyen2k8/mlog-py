@@ -4,8 +4,9 @@ op add __tmp0 x y
 op mul __tmp1 __tmp0 2
 op idiv __tmp2 y 3
 op sub z __tmp1 __tmp2
-op greaterThan __tmp3 z 50
+op greaterThan __tmp4 z 50
+set __tmp3 __tmp4
+jump 11 equal __tmp3 0
+op notEqual __tmp5 x y
+set __tmp3 __tmp5
 set flag __tmp3
-jump 11 equal flag 0
-op notEqual __tmp4 x y
-set flag __tmp4
