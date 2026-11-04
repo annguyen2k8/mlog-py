@@ -23,6 +23,7 @@ from .expression import (
     UnaryExpr,
     parse_operand_to_expr,
 )
+from .instruction import MlogInstruction
 from .semantics import (
     UNARY_LOGIC_OPS,
     collect_program_defined_variables,
@@ -304,6 +305,23 @@ class CFGStructurer:
                     return True
         return False
 
+    @staticmethod
+    def _is_loop_latch_target(loop: LoopInfo, target: int) -> bool:
+        """Return True if ``target`` is a latch that unconditionally restarts the loop.
+
+        Jumping to an unconditional ``jump header`` latch is semantically identical
+        to a Python ``continue``: it skips the rest of the body and re-enters the
+        loop at the header. A conditional latch cannot be treated this way because
+        ``continue`` would bypass its condition check.
+        """
+        for latch in loop.latches:
+            last = latch.last_instruction
+            if last is None or last.address != target:
+                continue
+            if last.is_unconditional_jump and last.jump_target == loop.header_address:
+                return True
+        return False
+
     def _structure_range(
         self,
         start_address: int,
@@ -530,8 +548,10 @@ class CFGStructurer:
 
                 if loop_stack:
                     innermost_loop = loop_stack[-1]
-                    # Continue: targets innermost loop header
-                    if target == innermost_loop.header_address:
+                    # Continue: targets innermost loop header or an unconditional latch
+                    if target == innermost_loop.header_address or self._is_loop_latch_target(
+                        innermost_loop, target
+                    ):
                         nodes.append(ContinueNode(loop_id=innermost_loop.id, source_addresses=[instr.address]))
                         curr_addr += 1
                         continue
@@ -559,12 +579,37 @@ class CFGStructurer:
                             curr_addr += 1
                             continue
 
-                # If jumping to stop_address (merge point of enclosing branch/loop), consume jump
-                if target >= stop_address:
+                # A jump past the final instruction is a program terminator.
+                # Dropping it would make the following (unreachable) instructions
+                # execute sequentially in the generated Python.
+                if target >= self.n_instructions:
+                    end_instr = MlogInstruction(
+                        address=instr.address,
+                        opcode="end",
+                        args=(),
+                        loc=instr.loc,
+                        raw_text="end",
+                    )
+                    nodes.append(
+                        InstructionNode(
+                            instruction=end_instr,
+                            defined_variables=self.defined_variables,
+                        )
+                    )
                     curr_addr += 1
                     continue
 
-                # Unstructured jump
+                # A jump to the exclusive end of this range is only a structured
+                # fallthrough when it is the last instruction in the range. If
+                # instructions remain between the jump and the range end, they are
+                # unreachable and must stay behind a preserved jump.
+                if target == stop_address and curr_addr == stop_address - 1:
+                    curr_addr += 1
+                    continue
+
+                # Any other forward jump crossing the enclosing scope boundary is
+                # not a safe merge/break/continue equivalent. Preserve it verbatim
+                # instead of silently dropping it or executing unreachable code.
                 nodes.append(
                     UnstructuredNode(
                         reason=f"Unstructured unconditional jump to address {target}",
