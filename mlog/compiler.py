@@ -1220,10 +1220,17 @@ class Compiler:
             )
             self.instructions.append(IRLabel(name=ret_site_lbl, loc=loc))
 
+            retval_var = f"__retval_{func_name}"
             if target_dest is not None:
-                retval_var = f"__retval_{func_name}"
                 self.instructions.append(IRSet(to=target_dest, from_=retval_var, loc=loc))
                 return target_dest
+            if not is_statement:
+                # The call protocol always stores its result in __retval_<fn>.
+                # Capture it into a fresh temporary so the call can participate in
+                # expressions and return statements instead of degrading to 0.
+                dest = self.new_temp(loc)
+                self.instructions.append(IRSet(to=dest, from_=retval_var, loc=loc))
+                return dest
             return "0"
 
         if func_name == "set":
