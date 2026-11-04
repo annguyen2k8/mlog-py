@@ -144,6 +144,24 @@ ALIGN_TOKEN_TO_ENUM: Dict[str, str] = {
 }
 
 
+def format_jump_arguments(
+    instr: MlogInstruction,
+    defined_variables: Optional[Set[str]] = None,
+) -> str:
+    """Render mlog jump operands as Python DSL arguments.
+
+    Jump operands have mixed roles: the target address and comparison operands
+    are numeric or variable operands, while the condition token must stay a
+    string. Formatting each argument through the metadata-driven semantic
+    formatter keeps raw jumps recompilable without quoting numbers or
+    identifiers.
+    """
+    return ", ".join(
+        format_semantic_argument("jump", idx, arg, defined_variables, instr.args)
+        for idx, arg in enumerate(instr.args)
+    )
+
+
 def instruction_to_python(
     instr: MlogInstruction,
     defined_variables: Optional[Set[str]] = None,
@@ -746,11 +764,7 @@ class UnstructuredNode(StructuredNode):
         lines = [f"{prefix}# [UNSTRUCTURED REGION]: {self.reason}"]
         for instr in self.instructions:
             if instr.is_jump:
-                formatted_args = [
-                    format_semantic_argument("jump", idx, a, self.defined_variables, instr.args)
-                    for idx, a in enumerate(instr.args)
-                ]
-                args_repr = ", ".join(formatted_args)
+                args_repr = format_jump_arguments(instr, self.defined_variables)
                 lines.append(f"{prefix}jump({args_repr})  # addr {instr.address}")
             else:
                 lines.append(f"{prefix}{instruction_to_python(instr, self.defined_variables)}")

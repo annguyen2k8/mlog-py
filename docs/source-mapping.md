@@ -45,6 +45,12 @@ wait(0.5)
 - `# mlog[<addr>]`: Single MLog instruction origin.
 - `# mlog[<addr1>, <addr2>]`: Compound condition or collapsed statement origin.
 
+Raw jumps emitted by `UnstructuredNode` use the same metadata-driven operand
+formatter as the plain decompiler: target addresses and comparison operands stay
+numeric or bare identifiers, while condition tokens remain quoted strings. For
+example, `jump(5, "greaterThan", a, 0)` recompiles byte-for-byte. Using Python
+`repr()` here would quote every operand and silently invert program logic.
+
 ---
 
 ## 3. Bi-Directional Lookup API

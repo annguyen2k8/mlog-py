@@ -273,6 +273,7 @@ class SourceMapEmitter:
             PassNode,
             UnstructuredNode,
             WhileNode,
+            format_jump_arguments,
             instruction_to_python,
         )
         from .function_ir import CallNode, FunctionDef, ReturnNode
@@ -354,7 +355,9 @@ class SourceMapEmitter:
                     self.emit_line(f"{prefix}# mlog[{instr.address}]")
                 line_no = self.current_line()
                 if instr.is_jump:
-                    args_repr = ", ".join(repr(a) for a in instr.args)
+                    args_repr = format_jump_arguments(
+                        instr, getattr(node, "defined_variables", None)
+                    )
                     self.emit_line(f"{prefix}jump({args_repr})  # addr {instr.address}")
                 else:
                     self.emit_line(f"{prefix}{instruction_to_python(instr, getattr(node, 'defined_variables', None))}")
