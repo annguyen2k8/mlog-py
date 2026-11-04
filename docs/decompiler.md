@@ -62,7 +62,8 @@ Python DSL Source (.py) / SourceMap (.json)
   - **Loop Header Side-Effects**: When a loop header contains I/O operations (`read`, `sensor`, `getlink`), the loop is safely structured as `while True:` where the pre-instructions execute first, followed by `if exit_cond: break`, ensuring exact execution order without undefined variable access.
   - **Bottom-tested Loops (`do-while`)**: When the condition check occurs at the latch back-edge, the body statements are scoped up to `latch_block.end_address`, and the latch is cleanly emitted as `if not (latch_cond): break`.
 - **Branch Ladder Recovery**: Reconstructs `IfNode` trees with optional `elif` and `else` branches based on convergence merge points.
-- **Break & Continue Isolation**: Distinguishes between loop-internal jumps (`continue` targeting header/latch, `break` targeting loop exit) and external jumps across nested loops.
+- **Unconditional Jump Preservation**: A jump past the final instruction becomes an explicit `end()` so unreachable code can never execute sequentially. A jump to the exclusive end of the current range is consumed only when it is the range's last instruction; any other jump that crosses the enclosing scope boundary is preserved as an `UnstructuredNode` instead of being treated as a merge or fallthrough.
+- **Break & Continue Isolation**: Distinguishes between loop-internal jumps (`continue` targeting the header, an unconditional latch, or `break` targeting the loop exit) and external jumps across nested loops.
 - **Zero Guessing Fallback (`UnstructuredNode`)**:
   If a loop is irreducible (multiple entry points) or an indirect jump modifies `@counter`, the structurer does not guess speculative while loops. Instead, it emits `UnstructuredNode` with comments and raw, unquoted semantic `jump(...)` calls (`jump(1, "equal", y, 2)`) to preserve 100% execution fidelity and byte-for-byte round-trip equivalence.
 

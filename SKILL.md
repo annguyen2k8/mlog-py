@@ -215,6 +215,10 @@ Python DSL Source (.py) / SourceMap (.json)
 - Identifies basic block leaders and computes immediate dominators (`idom`).
 - Natural loop back-edges reconstruct `WhileNode`; branch merge points
   reconstruct `IfNode` / `elif` / `else`.
+- Unconditional jumps that leave the current scope are preserved: a jump past
+  the final instruction becomes `end()`, and a jump targeting an unconditional
+  loop latch becomes `continue`. Other cross-boundary jumps stay raw instead
+  of being dropped.
 - **Zero Guessing Fallback**: Irreducible CFG loops and indirect jumps
   modifying `@counter` emit `UnstructuredNode` comments and raw jumps.
 
@@ -232,6 +236,10 @@ Python DSL Source (.py) / SourceMap (.json)
   (`set @counter __ret_addr`).
 - Reconstructs `def name(args):` statements and call sites, preserving global
   variables.
+- The compiler captures `__retval_<fn>` into the assignment target or a fresh
+  temporary whenever a call result is consumed by an expression or `return`.
+  Recursive user functions are rejected at compile time with a cycle-path
+  diagnostic because mlog has no software call stack.
 
 ### 4. Semantic Argument Recovery
 
