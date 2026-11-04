@@ -5238,6 +5238,58 @@ class Compiler:
                 stmt,
             )
 
+    def _collect_function_call_sites(
+        self, fn: ast.FunctionDef
+    ) -> "List[ast.Call]":
+        """Return call sites inside ``fn`` that target another user function."""
+        return [
+            node
+            for node in ast.walk(fn)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in self.functions
+        ]
+
+    def _reject_recursive_functions(self, functions: "List[ast.FunctionDef]") -> None:
+        """Reject direct and indirect recursion with a diagnostic cycle path.
+
+        mlog has a single scalar return-address register per function
+        (``__ret_<name>``), so a recursive invocation would overwrite the
+        caller's return address and loop forever. Until a software stack is
+        implemented, recursion must fail at compile time instead of producing
+        silently broken bytecode.
+        """
+        call_graph = {
+            fn.name: self._collect_function_call_sites(fn) for fn in functions
+        }
+        white, gray, black = 0, 1, 2
+        state = {name: white for name in call_graph}
+        path: "List[str]" = []
+
+        def visit(name: str) -> None:
+            state[name] = gray
+            path.append(name)
+            for call in call_graph[name]:
+                callee = call.func.id
+                if state[callee] == gray:
+                    cycle_start = path.index(callee)
+                    cycle = path[cycle_start:] + [callee]
+                    self.error(
+                        "recursive user function call is not supported: "
+                        + " -> ".join(cycle)
+                        + " (mlog has no call stack; recursion would overwrite the "
+                        "return address)",
+                        call,
+                    )
+                if state[callee] == white:
+                    visit(callee)
+            path.pop()
+            state[name] = black
+
+        for name in call_graph:
+            if state[name] == white:
+                visit(name)
+
     def compile(self, tree: ast.Module) -> List[IRNode]:
         """Compile an AST module into a list of IR nodes."""
         from .constants import extract_int_enums
@@ -5268,6 +5320,7 @@ class Compiler:
             functions = [s for s in tree.body if isinstance(s, ast.FunctionDef)]
             for fn in functions:
                 self.functions[fn.name] = fn
+            self._reject_recursive_functions(functions)
             global_stmts = [s for s in tree.body if not isinstance(s, ast.FunctionDef)]
 
             if functions and global_stmts:

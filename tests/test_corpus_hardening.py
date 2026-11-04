@@ -19,10 +19,19 @@ from src.decompiler.cfg import build_cfg
 from src.decompiler.sourcemap import SourceMap
 from src.decompiler.structured_ir import UnstructuredNode
 from src.decompiler.structurer import structure_cfg
+from src.errors import CompileError
 from src.mlog import compile_py
 
 
 CORPUS_DIR = os.path.join(os.path.dirname(__file__), "corpus")
+
+# P6-HIGH-01: recursion is rejected at compile time until mlog gets a real
+# call stack. These corpus programs still decompile, but their Python form
+# must raise the documented diagnostic instead of producing broken bytecode.
+RECURSIVE_CORPUS = {
+    "recursive_factorial.mlog",
+    "recursion.mlog",
+}
 
 
 class TestCorpusDecompilation(unittest.TestCase):
@@ -118,6 +127,11 @@ class TestCorpusRoundTrip(unittest.TestCase):
                     orig_mlog = f.read()
 
                 py_code = decompile(orig_mlog, filename=path)
+                if os.path.basename(path) in RECURSIVE_CORPUS:
+                    with self.assertRaises(CompileError) as ctx:
+                        compile_py(py_code, allow_functions=True, validate=True)
+                    self.assertIn("recursive user function call", str(ctx.exception))
+                    continue
                 res = compile_py(py_code, allow_functions=True, validate=True)
                 self.assertIsNotNone(res.mlog)
                 self.assertGreater(len(res.mlog.strip().splitlines()), 0)

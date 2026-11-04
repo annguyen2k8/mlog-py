@@ -913,6 +913,30 @@ Python subset, including `examples/compiler/functions.py`, compiles through the 
 Python API keeps the stricter default (`compile_py(..., allow_functions=False)`); pass
 `allow_functions=True` there to opt in.
 
+#### User-Defined Functions and Recursion
+
+`def` / `return` lower to an inline calling convention:
+
+- Argument values are copied into the parameter registers, the return address is stored
+  in `__ret_<fn>`, and control jumps to `__fn_<fn>`.
+- Return values are written to `__retval_<fn>`. When a call is used as a value (an
+  assignment target, an operand such as `inc(x) + 1`, or `return inc(x)`), the compiler
+  captures that register into the destination or a fresh `__tmpN`. A call used only as a
+  statement does not allocate a capture register.
+
+Recursion is rejected with a `CompileError` until the code generator gains a software
+call stack. The convention has exactly one scalar return-address register per function,
+so a recursive invocation would overwrite the caller's return address and loop forever.
+Direct and indirect cycles are detected on the post-constant-folding call graph and
+reported with the complete cycle path:
+
+```text
+recursive user function call is not supported: ping -> pong -> ping
+(mlog has no call stack; recursion would overwrite the return address)
+```
+
+Nested non-recursive calls remain fully supported.
+
 #### Automatic Clipboard Copying
 
 Upon successful compilation, the full MLog output is automatically copied to your system clipboard ready to paste directly into Mindustry processors:
