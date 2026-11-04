@@ -37,6 +37,7 @@ JVM_TEST_MODULES = {
     "test_select_and_ternary",
     "test_memory_bank_header_protocol",
     "test_noop",
+    "test_p6_remediation_jvm",
 }
 
 
