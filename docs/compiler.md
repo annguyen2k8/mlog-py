@@ -159,6 +159,44 @@ read item bank1 addr
 > - Calling `write(x, "bank1", 0)` without declaring a header `Array` will silently collide with any `Array` that starts at offset 0.
 > - The allocator only tracks and protects memory regions declared via `Array(...)`. Always declare memory regions with `Array` to ensure compile-time collision prevention and capacity bounds checking.
 
+### Unified Array Architecture (`mlog.beta`)
+
+Starting in P9–P12 (formalized in [ADR-0005](adr/0005-p9-p12-hybrid-array-architecture.md)), `mlog-py` provides the Unified Array Architecture in `mlog.beta`. It unifies in-register variables and physical memory blocks under a single, ergonomic factory and generic typing hierarchy:
+
+```python
+from mlog.beta import Array, LocalArray, BlockArray
+
+# 1. Register-backed LocalArray: Zero hardware memory cells required!
+# Elements are allocated to processor registers (coords_0, coords_1)
+coords = Array[float](2)
+coords[0] = 120.0
+coords[1] = 45.5
+coords[0] += 15.0
+
+# 2. Hardware block-backed BlockArray: Single physical block (Cell/Bank)
+# Lowers to native O(1) read/write with dynamic loop indexing
+buffer = Array[int]("bank1", 64)
+buffer.fill(0)
+for i in range(10):
+    buffer[i] = i * 5
+```
+
+#### Dual Backend Model
+
+| Backend | Class | Instantiation | Storage | Dynamic Indexing (`arr[i]`) | Max Size | Physical Block |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Register** | `LocalArray` | `Array(size)` or `Array[T](size)` | CPU Registers (`arr_0`, `arr_1`, ...) | No (Static constants only) | 64 | None (0 blocks) |
+| **Hardware** | `BlockArray` | `Array(block, size)` or `Array[T](block, size)` | Memory Cell (64) / Bank (512) | Yes (Mlog `read`/`write`) | Block capacity | Linked block |
+
+#### Key Invariants and Platform Constraints
+
+1. **Zero-Block Register Optimization**: `LocalArray` allows scripts to allocate fixed-size array structures (e.g. 2D/3D vectors, lookup tables, intermediate state buffers) with zero hardware memory blocks linked to the processor.
+2. **Static Indexing Constraint on `LocalArray`**: Because Mindustry processor registers are statically named in instruction text and cannot be computed via dynamic pointer indirection, expressions like `coords[i]` where `i` is a variable or runtime expression are rejected at compile time with `CompileError`. For dynamic variable indexing, developers must use `BlockArray`.
+3. **Capacity Constraints**: `LocalArray` size is restricted to $1 \le \text{size} \le 64$ to avoid exhausting the processor register pool. `BlockArray` capacity is strictly bound by the linked block type (64 for Memory Cell, 512 for Memory Bank).
+4. **Single Block Exclusivity**: Unlike the legacy allocator which packed multiple contiguous sub-arrays into one cell, each `BlockArray` instance in `mlog.beta` binds exclusively to a single physical memory block.
+5. **No `.block` Attribute on `LocalArray`**: Because `LocalArray` exists entirely within processor registers, accessing `.block` raises `AttributeError` at runtime and a compile-time error during compilation.
+6. **Backward Compatibility**: `from mlog import Array` retains the legacy packing behavior and remains 100% backward compatible without changes. Both legacy and beta APIs can coexist in the same project or compilation unit.
+
 ### Augmented Assignment & Single-Evaluation Semantics
 
 The compiler fully supports in-place augmented assignments on scalar variables and array elements:

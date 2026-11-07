@@ -23,7 +23,9 @@ These examples show how to write Python code that compiles directly into Mindust
 | [`color_channels.py`](compiler/color_channels.py) | Color Channels | Packing RGBA with `packcolor` and unpacking it back with `r, g, b, a = unpackcolor(color)`. |
 | [`print_message.py`](compiler/print_message.py) | Message Displays | Concatenating text into processor buffers and outputting to message blocks via `printflush`. |
 | [`memory_cell.py`](compiler/memory_cell.py) | Memory Cells | Saving and loading persistent variables using `read()` and `write()` on memory cells. |
-| [`array_memory.py`](compiler/array_memory.py) | Memory Arrays | High-level `Array` API with static contiguous memory allocation and bounds checking on cells/banks. |
+| [`array_memory.py`](compiler/array_memory.py) | Legacy Memory Arrays | Backward-compatible `Array` API with static contiguous packing on cells/banks (`from mlog import Array`). |
+| [`beta_local_array.py`](compiler/beta_local_array.py) | Local Register Arrays | Modern register-backed `LocalArray` requiring zero memory blocks on map (`from mlog.beta import Array`). |
+| [`beta_block_array.py`](compiler/beta_block_array.py) | Hardware Block Arrays | Modern hardware block `BlockArray` with dynamic loop indexing and `.fill()` (`from mlog.beta import Array`). |
 | [`constant_folding.py`](compiler/constant_folding.py) | Constant Folding | Compile-time evaluation of pure constant expressions, bitwise masks, and static array subscripts. |
 | [`aug_assign.py`](compiler/aug_assign.py) | Augmented Assignment | In-place variable and array element arithmetic & bitwise updates with single-offset evaluation. |
 | [`block_vs_variable.py`](compiler/block_vs_variable.py) | Block Links vs Variables | Clear distinction between hardware link names (`"cell1"`) and dynamic variables (`b`). |
@@ -84,3 +86,28 @@ cat examples/decompiler/reactor_safety.mlog | mlog decompile
 # Or run the round-trip verification suite
 python3 examples/decompiler/roundtrip_verify.py
 ```
+
+---
+
+## 3. Array Programming in mlog-py: Legacy vs. Beta APIs
+
+mlog-py provides two distinct array programming models tailored to different Mindustry processor architectures:
+
+### Summary Comparison
+
+| Feature | Legacy Array (`from mlog import Array`) | Modern LocalArray (`from mlog.beta import Array`) | Modern BlockArray (`from mlog.beta import Array`) |
+| :--- | :--- | :--- | :--- |
+| **Constructor** | `Array(block, size, dtype=...)` | `Array(size, dtype=...)` or `Array[T](size)` | `Array(block, size, dtype=...)` or `Array[T](block, size)` |
+| **Backing Storage** | Hardware Memory Cell (64) / Bank (512) | Processor Registers (`name_0`, `name_1`, ...) | Hardware Memory Cell (64) / Bank (512) |
+| **Hardware Link Required** | Yes (`cell1`, `bank1`, etc.) | **No** (Zero external blocks needed) | Yes (`cell1`, `bank1`, etc.) |
+| **Dynamic Indexing (`arr[i]`)**| Yes (lowers to `read`/`write` with offset) | No (Static constants only: `arr[0]`, `arr[1]`) | Yes (lowers to native `read`/`write`) |
+| **Capacity Limit** | Multiple arrays packed per block | Maximum 64 registers per array | Single block capacity (64 for cell, 512 for bank)|
+| **Performance** | Memory I/O cycle latency | Ultra-fast direct register operations | Memory I/O cycle latency |
+| **Recommended Use** | Backward compatibility | Math vectors, small LUTs, coordinate tuples | Large buffers, dynamic looping, hardware sharing |
+
+### Architectural Boundaries & Limitations of `mlog.beta`
+
+1. **LocalArray Static Indexing Boundary**: Processor registers in Mindustry Logic cannot be computed dynamically at runtime. Consequently, expressions like `coords[i]` on a `LocalArray` where `i` is a variable or runtime expression raise a compile-time `CompileError`. Use `BlockArray` whenever variable/loop indexing is needed.
+2. **LocalArray Capacity Limit**: `LocalArray` size is constrained to $1 \le \text{size} \le 64$ to prevent exhausting the processor's variable pool and instruction budget.
+3. **BlockArray Single Block Boundary**: Unlike the legacy allocator which packed multiple contiguous sub-arrays into one cell, each `BlockArray` instance binds exclusively to a dedicated physical memory block.
+4. **LocalArray Has No `.block`**: Because `LocalArray` is purely register-backed and has no physical memory block on the map, accessing `.block` raises an `AttributeError`.

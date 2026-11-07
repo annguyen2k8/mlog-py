@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Unified Array Architecture (`mlog.beta`)**:
+  - Introduced `LocalArray` backed directly by processor registers, eliminating memory cell/bank requirements on map for vector math, small lookup tables, and in-register buffers.
+  - Introduced `BlockArray` backed by physical memory blocks (`cell` and `bank`) with native $O(1)$ read/write instructions and `.fill()` memory initialization.
+  - Provided polymorphic `Array` factory in `mlog.beta` that automatically dispatches to `LocalArray` or `BlockArray` based on presence of a block argument.
+  - Generic typing support via `Array[T]`, `LocalArray[T]`, and `BlockArray[T]`.
+  - Compile-time constant folding for array properties (`len(arr)`, `arr.size`, `arr.capacity`).
+  - Added paired compiler examples: `examples/compiler/beta_local_array.py` and `examples/compiler/beta_block_array.py`.
+- **Architectural & Audit Documentation**:
+  - Consolidated P9–P15 array subsystem specification in `docs/p9_p15_acceptance_report.md`.
+  - Codified the Hybrid Array Architecture in `docs/adr/0005-p9-p12-hybrid-array-architecture.md`.
+
 ## [0.8.1] - 2026-11-01
 
 ### Added

@@ -1,0 +1,18 @@
+set __tmp0 0
+set __tmp1 16
+jump 6 greaterThanEq __tmp0 __tmp1
+write 0 bank1 __tmp0
+op add __tmp0 __tmp0 1
+jump 2 always 0 0
+write 42 bank1 0
+write 99 bank1 1
+set i 0
+jump 14 greaterThanEq i 5
+op mul __tmp2 i 5
+write __tmp2 bank1 i
+op add i i 1
+jump 9 always 0 0
+read __tmp3 bank1 0
+op add __tmp4 __tmp3 10
+write __tmp4 bank1 0
+read first_val bank1 0

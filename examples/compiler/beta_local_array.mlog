@@ -1,0 +1,6 @@
+set coords_0 100.0
+set coords_1 50.0
+op add coords_0 coords_0 25.5
+set x coords_0
+set y coords_1
+set total 2

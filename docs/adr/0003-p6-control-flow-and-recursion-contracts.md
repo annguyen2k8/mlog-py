@@ -125,4 +125,4 @@ ADR for the calling convention.
   29/32 -> 30/32 (2 recursion files rejected by design, `flare_miner.mlog`
   invalid in both engine runs).
 
-Detailed evidence is in `p6_remediation_report.md`.
+Detailed evidence is preserved in git history (commit 54179b5).

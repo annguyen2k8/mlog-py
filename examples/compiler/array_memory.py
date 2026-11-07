@@ -1,4 +1,12 @@
-"""Example: Using Array for static memory cell and bank allocation in mlog-py."""
+"""Example: Using Legacy Array for static memory cell and bank allocation in mlog-py.
+
+Note:
+    This demonstrates the backward-compatible Legacy Array API (`from mlog import Array`).
+    It packs multiple contiguous arrays into shared hardware memory cells or banks.
+    For the new Unified Array API (with register-backed LocalArray requiring zero
+    memory cells on map, and dedicated BlockArray), see `beta_local_array.py` and
+    `beta_block_array.py` (`from mlog.beta import Array`).
+"""
 
 from mlog import Array
 
