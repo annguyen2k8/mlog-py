@@ -1820,8 +1820,8 @@ sensor(mhp, cell, "@maxHealth")
         # Decompile back and verify roundtrip stability
         decompiled = decompile(compile_res.mlog)
         self.assertIn("cell = getlink(0)", decompiled)
-        self.assertIn("sensor(cell, '@health')", decompiled)
-        self.assertIn("sensor(cell, '@maxHealth')", decompiled)
+        self.assertIn('sensor(cell, raw("@health"))', decompiled)
+        self.assertIn('sensor(cell, raw("@maxHealth"))', decompiled)
 
     # -----------------------------------------------------------------------
     # Group E: Display Graphics & Building Control (draw, drawflush, control)

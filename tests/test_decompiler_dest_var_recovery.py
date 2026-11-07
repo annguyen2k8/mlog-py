@@ -64,7 +64,7 @@ class TestDecompilerDestVarRecovery(unittest.TestCase):
         mlog = "sensor hp reactor1 @heat\n"
         py = decompile(mlog)
         self._assert_no_undefined_variables(py)
-        self.assertIn('hp = sensor("reactor1", \'@heat\')', py)
+        self.assertIn('hp = sensor("reactor1", raw("@heat"))', py)
         self.assertNotIn('sensor(hp', py)
 
         # Recompile check
@@ -173,7 +173,7 @@ write status cell1 0
 """
         py = decompile(mlog)
         self._assert_no_undefined_variables(py)
-        self.assertIn('heat = sensor("reactor1", \'@heat\')', py)
+        self.assertIn('heat = sensor("reactor1", raw("@heat"))', py)
         self.assertIn("status = 1", py)
         self.assertIn("status = 0", py)
         self.assertIn('write(status, "cell1", 0)', py)

@@ -50,6 +50,7 @@ EXPECTED_BYTE_EXACT = (
     "nested_loops.mlog",
     "print_message.mlog",
     "reactor_safety.mlog",
+    "special_constants.mlog",
     "unit_operations.mlog",
     "while_loop.mlog",
 )
@@ -60,7 +61,6 @@ EXPECTED_VALID_ONLY = (
     "arithmetic.mlog",
     "array_memory.mlog",
     "aug_assign.mlog",
-    "special_constants.mlog",
 )
 
 

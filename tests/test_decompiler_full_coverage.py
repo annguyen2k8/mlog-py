@@ -56,7 +56,7 @@ radar enemy any any distance turret1 1 target1
 uradar enemy any any distance 0 1 target2
 """
         py_code, recompiled = self._verify_roundtrip(mlog)
-        self.assertIn("hp = sensor(\"vault1\", '@health')", py_code)
+        self.assertIn('hp = sensor("vault1", raw("@health"))', py_code)
         self.assertIn("out_item = lookup(\"item\", 0)", py_code)
         self.assertIn('target2 = uradar("enemy", "any", "any", "distance", 1)', py_code)
 

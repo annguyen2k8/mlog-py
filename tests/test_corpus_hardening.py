@@ -279,7 +279,13 @@ class TestCorpusPathologicalHardening(unittest.TestCase):
         py = decompile(mlog_text)
         tree = ast.parse(py)
         self.assertIsNotNone(tree)
-        self.assertIn('op("add", \'@counter\'', py)
+        # @counter is a live register, not a string literal. raw() keeps the
+        # recompiled operand bare so the JVM reads the current counter value.
+        self.assertIn('op("add", raw("@counter"), raw("@counter"), offset)', py)
+        self.assertNotIn('\'@counter\'', py)
+
+        recompiled = compile_py(py, allow_functions=True).mlog
+        self.assertIn("op add @counter @counter offset", recompiled)
 
     def test_unreachable_dead_code_handling(self):
         """Unreachable dead code blocks are safely represented without crashing."""
@@ -313,13 +319,20 @@ class TestCorpusRegressionCases(unittest.TestCase):
         self.assertIn("draw.line(10.5, 20.5, 30.5, 40.5)", py)
         self.assertIn("wait(0.25)", py)
 
-    def test_at_constant_quoted_in_assignments(self):
-        """Constants starting with @ (e.g. @unit) must be quoted in Python assignments."""
-        mlog = "set u @unit\nset t @this\n"
+    def test_at_constant_registers_are_raw_not_quoted(self):
+        """Bare @ tokens are registers; quoted "@..." tokens are real strings."""
+        mlog = 'set u @unit\nset t @this\nset s "@unit"\n'
         py = decompile(mlog)
         ast.parse(py)
-        self.assertIn("u = '@unit'", py)
-        self.assertIn("t = '@this'", py)
+        self.assertIn('u = raw("@unit")', py)
+        self.assertIn('t = raw("@this")', py)
+        # The quoted input must stay a string object, not become a register.
+        self.assertIn('s = \'@unit\'', py)
+
+        recompiled = compile_py(py, allow_functions=True).mlog
+        self.assertIn("set u @unit", recompiled)
+        self.assertIn("set t @this", recompiled)
+        self.assertIn('set s "@unit"', recompiled)
 
 
 if __name__ == "__main__":

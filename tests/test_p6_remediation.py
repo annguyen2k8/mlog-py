@@ -80,7 +80,29 @@ class TestP6Crit01UnconditionalJumps(unittest.TestCase):
             ["set x 1", "jump 4 equal x 0", "jump 7 always 0 0", "set dead1 99"],
         )
 
-    def test_loop_latch_jump_becomes_continue_and_keeps_gap_code(self):
+    def test_loop_latch_jump_becomes_continue(self):
+        path = os.path.join(CORPUS, "control_flow", "nested_while_breaks.mlog")
+        with open(path, "r", encoding="utf-8") as handle:
+            mlog = handle.read()
+
+        py, source_map = decompile_with_source_map(mlog, filename=path)
+        ast.parse(py)
+
+        # A branch that jumps to the unconditional loop latch means "continue",
+        # not "skip the rest of the if body". Address 7 is that latch jump.
+        self.assertIn("continue", _lines(py))
+        mapping_by_address = {}
+        for mapping in source_map.mappings:
+            for address in mapping.mlog_addresses:
+                mapping_by_address.setdefault(address, []).append(mapping.node_type)
+        self.assertIn("Continue", mapping_by_address[7])
+
+        # No instruction may disappear from the source map.
+        instructions = parse_mlog(mlog)
+        mapped = set(mapping_by_address)
+        self.assertEqual(set(range(len(instructions))) - mapped, set())
+
+    def test_loop_exit_gap_is_preserved_as_unstructured(self):
         path = os.path.join(CORPUS, "handwritten", "base_manager_120.mlog")
         with open(path, "r", encoding="utf-8") as handle:
             mlog = handle.read()
@@ -88,23 +110,25 @@ class TestP6Crit01UnconditionalJumps(unittest.TestCase):
         py, source_map = decompile_with_source_map(mlog, filename=path)
         ast.parse(py)
 
-        # The branch at address 15 jumps to the unconditional loop latch and
-        # therefore means "continue", not "skip the rest of the if body".
-        self.assertIn("continue", _lines(py))
-        mapping_by_address = {}
-        for mapping in source_map.mappings:
-            for address in mapping.mlog_addresses:
-                mapping_by_address.setdefault(address, []).append(mapping.node_type)
-        self.assertIn("Continue", mapping_by_address[15])
+        # P7-HIGH-01: the loop exit skips [20, 22) and [33, 36). Those
+        # instructions must stay in the output but must never execute on the
+        # loop-exit path, so the whole loop region is preserved as raw code and
+        # structuring resumes exactly at the recorded exit addresses.
+        self.assertIn("Loop exit at address 22", py)
+        self.assertIn("Loop exit at address 36", py)
+        self.assertIn('ubind("@flare")', py)
+        self.assertIn('u_flag = sensor("@unit", "@flag")', py)
 
         # No instruction may disappear from the source map.
         instructions = parse_mlog(mlog)
-        mapped = set(mapping_by_address)
+        mapped = set()
+        for mapping in source_map.mappings:
+            mapped.update(mapping.mlog_addresses)
         self.assertEqual(set(range(len(instructions))) - mapped, set())
 
-        # The P5 unit-binding instructions remain preserved.
-        self.assertIn('ubind("@flare")', py)
-        self.assertIn("u_flag = sensor('@unit', '@flag')", py)
+        # Recompilation preserves the full 120-instruction layout.
+        recompiled = compile_py(py, allow_functions=True, validate=True).mlog
+        self.assertEqual(len(recompiled.strip().splitlines()), 120)
 
     def test_structured_loops_keep_their_shape(self):
         path = os.path.join(CORPUS, "control_flow", "nested_while_breaks.mlog")

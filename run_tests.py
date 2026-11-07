@@ -38,6 +38,7 @@ JVM_TEST_MODULES = {
     "test_memory_bank_header_protocol",
     "test_noop",
     "test_p6_remediation_jvm",
+    "test_p7_remediation_jvm",
 }
 
 

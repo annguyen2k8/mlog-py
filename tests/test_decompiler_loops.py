@@ -140,7 +140,7 @@ print "dead"
         py = decompile(mlog)
         self._assert_valid_python(py)
         self.assertIn("while True:", py)
-        self.assertIn("hp = sensor('@unit', '@health')", py)
+        self.assertIn('hp = sensor(raw("@unit"), raw("@health"))', py)
         self.assertIn("if hp < 50:", py)
         self.assertIn("break", py)
         self.assertIn("ucontrol.move(10, 10)", py)
@@ -322,7 +322,7 @@ print "done"
     def test_nested_loops_with_inner_continue(self):
         """Nested loops where inner loop continues independently."""
         mlog = """set r 0
-jump 11 greaterThanEq r 4
+jump 10 greaterThanEq r 4
 set c 0
 jump 8 greaterThanEq c 4
 op add c c 1
@@ -349,7 +349,7 @@ print "finished"
     def test_loop_with_if_else_inside(self):
         """Loop containing if/else branch with execution continuing after merge."""
         mlog = """set i 0
-jump 9 greaterThanEq i 10
+jump 8 greaterThanEq i 10
 jump 5 notEqual mode 1
 print "mode 1"
 jump 6 always 0 0

@@ -103,10 +103,12 @@ op land res a b
 
         # Verify all instructions between latch and exits are preserved in decompiled Python
         self.assertIn('ubind("@flare")', py_code)
-        self.assertIn("u_flag = sensor('@unit', '@flag')", py_code)
+        self.assertIn('u_flag = sensor("@unit", "@flag")', py_code)
         self.assertIn("draw.clear(0, 0, 0)", py_code)
         self.assertIn("draw.color(0, 255, 0)", py_code)
-        self.assertIn("bar_w = power_ratio * 80", py_code)
+        self.assertIn('bar_w = op("mul", power_ratio, 80)', py_code)
+        self.assertIn("Loop exit at address 22", py_code)
+        self.assertIn("Loop exit at address 36", py_code)
 
         # Verify all instructions (except absorbed if/else unconditional jumps) are mapped
         mapped_addrs = set()

@@ -33,7 +33,7 @@ class TestDecompilerUcontrolAliases(unittest.TestCase):
 
         # 3. Canonical ubind and lookup
         self.assertIn("ubind(uType)", py)
-        self.assertTrue('sensor("@unit", "@flag")' in py or "sensor('@unit', '@flag')" in py)
+        self.assertIn('sensor(raw("@unit"), raw("@flag"))', py)
 
 
         # 4. Roundtrip compilation

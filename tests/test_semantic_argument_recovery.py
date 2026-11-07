@@ -122,11 +122,11 @@ class TestSemanticArgumentRecovery(unittest.TestCase):
         self.assertEqual(py, 'from mlog import write\n\nwrite(total, "cell1", 63)')
 
     def test_sensor_named_building(self):
-        """sensor hp vault1 @health must decompile to hp = sensor('vault1', '@health') with import."""
+        """sensor hp vault1 @health must decompile to a sensor call with a raw @health property."""
         mlog = "sensor hp vault1 @health\n"
         py = decompile(mlog).strip()
         ast.parse(py)
-        self.assertEqual(py, 'from mlog import sensor\n\nhp = sensor("vault1", \'@health\')')
+        self.assertEqual(py, 'from mlog import raw, sensor\n\nhp = sensor("vault1", raw("@health"))')
 
     def test_control_named_building(self):
         """control enabled reactor1 1 0 0 0 must decompile to control.enabled('reactor1', 1) with import."""
@@ -165,7 +165,7 @@ drawflush b
         ast.parse(py)
         # b must be emitted as identifier b, not "b"
         self.assertIn("b = getlink(0)", py)
-        self.assertIn("hp = sensor(b, '@health')", py)
+        self.assertIn('hp = sensor(b, raw("@health"))', py)
         self.assertIn("val = read(b, 0)", py)
         self.assertIn("write(val, b, 1)", py)
         self.assertIn("drawflush(b)", py)

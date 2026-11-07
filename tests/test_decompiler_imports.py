@@ -100,7 +100,7 @@ wait 0.5
         code_obj = compile(py, "<test>", "exec")
         self.assertIsNotNone(code_obj)
 
-        self.assertIn("from mlog import control, sensor, wait", py)
+        self.assertIn("from mlog import control, raw, sensor, wait", py)
 
         # Roundtrip
         res = compile_py(py)
