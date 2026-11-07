@@ -112,7 +112,8 @@ def main():
     result = runner.run(selected_suite)
     elapsed = time.time() - t0
 
-    print(f"\nCompleted in {elapsed:.2f}s | Ran: {result.testsRun} | Passed: {result.testsRun - len(result.failures) - len(result.errors)} | Failures: {len(result.failures)} | Errors: {len(result.errors)}")
+    passed_count = result.testsRun - len(result.failures) - len(result.errors) - len(result.skipped)
+    print(f"\nCompleted in {elapsed:.2f}s | Ran: {result.testsRun} | Passed: {passed_count} | Skipped: {len(result.skipped)} | Failures: {len(result.failures)} | Errors: {len(result.errors)}")
 
     sys.exit(0 if result.wasSuccessful() else 1)
 

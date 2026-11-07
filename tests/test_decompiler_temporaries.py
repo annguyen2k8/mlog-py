@@ -36,6 +36,7 @@ RESERVED_PREFIX = "__tmp"
 
 # Compiler examples whose MLog -> Python -> MLog round-trip is byte-for-byte exact.
 EXPECTED_BYTE_EXACT = (
+    "beta_local_array.mlog",
     "bitwise.mlog",
     "block_vs_variable.mlog",
     "color_channels.mlog",
@@ -61,6 +62,7 @@ EXPECTED_VALID_ONLY = (
     "arithmetic.mlog",
     "array_memory.mlog",
     "aug_assign.mlog",
+    "beta_block_array.mlog",
 )
 
 
