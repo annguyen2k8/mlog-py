@@ -161,6 +161,53 @@ class TestP8RemediationJvm(unittest.TestCase):
         self.assertEqual(run.vars.get("i"), 4.0)
         self.assertEqual(run.vars.get("acc"), 40.0)
 
+    def test_large_compiler_program_jvm_assignment_layout(self):
+        """P8-REM-02: large_compiler_program achieves 100% JVM semantic equivalence.
+
+        Proves that commutative assignment of distinct registers (a, b) produces
+        identical observable runtime state (300 steps, 38 ticks, identical variables).
+        """
+        orig_mlog = _read_corpus("compiler_generated/large_compiler_program.mlog")
+        py, recompiled, before, after = self._roundtrip(orig_mlog, max_steps=300)
+
+        self._assert_runtime_equal(before, after)
+        self.assertEqual(before.message, "RUN_OK:300")
+        self.assertEqual(after.message, "RUN_OK:300")
+        self.assertEqual(before.ticks, 38)
+        self.assertEqual(after.ticks, 38)
+        self.assertEqual(after.vars.get("s1"), 13.0)
+        self.assertEqual(after.vars.get("z"), 3.0)
+        self.assertEqual(after.vars.get("s2"), 33.0)
+        self.assertEqual(after.vars.get("acc"), 108.0)
+        self.assertEqual(after.vars.get("tmp"), 33.0)
+
+    def test_empty_branches_jvm_eof_termination(self):
+        """P8-REM-03: empty_branches EOF termination equivalence across input domain.
+
+        Verifies that 'end' opcode and 'jump 7 always 0 0' produce identical
+        runtime behavior across input partitions (val <= 100 and val > 100).
+        """
+        orig_mlog = _read_corpus("control_flow/empty_branches.mlog")
+
+        # Case 1: val <= 100 (val = 42 default) -> enters then block, val becomes 200
+        py, recompiled, before, after = self._roundtrip(orig_mlog, max_steps=100)
+        self._assert_runtime_equal(before, after)
+        self.assertEqual(before.message, "RUN_OK:6")
+        self.assertEqual(after.message, "RUN_OK:6")
+        self.assertEqual(before.ticks, 1)
+        self.assertEqual(after.ticks, 1)
+        self.assertEqual(after.vars.get("val"), 200.0)
+
+        # Case 2: val > 100 (val = 150) -> skips then block, val stays 150
+        orig_150 = orig_mlog.replace("set val 42", "set val 150")
+        py_150, recompiled_150, before_150, after_150 = self._roundtrip(orig_150, max_steps=100)
+        self._assert_runtime_equal(before_150, after_150)
+        self.assertEqual(before_150.message, "RUN_OK:4")
+        self.assertEqual(after_150.message, "RUN_OK:4")
+        self.assertEqual(before_150.ticks, 1)
+        self.assertEqual(after_150.ticks, 1)
+        self.assertEqual(after_150.vars.get("val"), 150.0)
+
 
 if __name__ == "__main__":
     unittest.main()

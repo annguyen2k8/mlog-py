@@ -214,25 +214,54 @@ class TestP8CorpusRoundtripByteIdentity(unittest.TestCase):
     def test_scale_1000_byte_identical(self):
         self._assert_roundtrip_byte_identical("pathological/scale_1000_instr.mlog")
 
-    def test_out_of_scope_files_remain_unmodified_behavior(self):
-        """Verify the 3 out-of-scope files maintain their documented behaviors."""
-        # large_compiler_program: still compiles cleanly
+    def test_p8_rem_02_large_compiler_program_assignment_layout(self):
+        """P8-REM-02: large_compiler_program assignment layout verification.
+
+        The diff is strictly the commutative parameter assignment order:
+        original sets (a, b) while recompiled sets (b, a). Both have identical
+        instruction count (38) and disjoint non-aliasing registers.
+        """
         lcp_orig = _read_corpus("compiler_generated/large_compiler_program.mlog")
         lcp_py = decompile(lcp_orig)
         lcp_rec = compile_py(lcp_py, allow_functions=True, validate=True).mlog
-        self.assertEqual(len(_normalized_lines(lcp_orig)), len(_normalized_lines(lcp_rec)))
+        orig_lines = _normalized_lines(lcp_orig)
+        rec_lines = _normalized_lines(lcp_rec)
+        self.assertEqual(len(orig_lines), len(rec_lines))
+        self.assertEqual(len(orig_lines), 41)
+        # Line 17-18 are commutative assignments to distinct registers
+        self.assertEqual({orig_lines[17], orig_lines[18]}, {"set a s1", "set b z"})
+        self.assertEqual({rec_lines[17], rec_lines[18]}, {"set a s1", "set b z"})
+        # All other lines are byte-identical
+        for i in range(len(orig_lines)):
+            if i not in (17, 18):
+                self.assertEqual(orig_lines[i], rec_lines[i], f"Mismatch at line {i}")
 
-        # multi_func_math: still compiles cleanly
+    def test_p8_rem_03_empty_branches_eof_termination(self):
+        """P8-REM-03: empty_branches EOF termination verification.
+
+        Unconditional jump past final instruction (jump 7) is decompiled to
+        idiomatic end(), which re-lowers to the canonical 'end' opcode.
+        Total instruction count remains 7 (lines 0..6).
+        """
+        eb_orig = _read_corpus("control_flow/empty_branches.mlog")
+        eb_py = decompile(eb_orig)
+        self.assertIn("end()", eb_py)
+        eb_rec = compile_py(eb_py, allow_functions=True, validate=True).mlog
+        orig_lines = _normalized_lines(eb_orig)
+        rec_lines = _normalized_lines(eb_rec)
+        self.assertEqual(len(orig_lines), len(rec_lines))
+        self.assertEqual(len(orig_lines), 7)
+        self.assertEqual(orig_lines[6], "jump 7 always 0 0")
+        self.assertEqual(rec_lines[6], "end")
+        # Lines 0..5 are byte-identical
+        self.assertEqual(orig_lines[:6], rec_lines[:6])
+
+    def test_out_of_scope_files_remain_unmodified_behavior(self):
+        """Verify multi_func_math maintains its documented behavior."""
         mfm_orig = _read_corpus("compiler_generated/multi_func_math.mlog")
         mfm_py = decompile(mfm_orig)
         mfm_rec = compile_py(mfm_py, allow_functions=True, validate=True).mlog
         self.assertEqual(len(_normalized_lines(mfm_orig)), len(_normalized_lines(mfm_rec)))
-
-        # empty_branches: still compiles cleanly
-        eb_orig = _read_corpus("control_flow/empty_branches.mlog")
-        eb_py = decompile(eb_orig)
-        eb_rec = compile_py(eb_py, allow_functions=True, validate=True).mlog
-        self.assertEqual(len(_normalized_lines(eb_orig)), len(_normalized_lines(eb_rec)))
 
 
 if __name__ == "__main__":
