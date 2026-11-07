@@ -5,6 +5,7 @@ Do not edit directly; regenerated and verified via test suite.
 
 from enum import Enum, IntEnum as IntEnum
 from typing import Any, Dict, List, Literal, NamedTuple, Optional, Tuple, Union, overload
+from . import beta as beta
 
 # Package version
 __version__: str
@@ -2094,6 +2095,7 @@ __all__ = [
     "_UnitControlCallable",
     "_UnitLocateCallable",
     "__version__",
+    "beta",
     "bullet",
     "clientdata",
     "compile_py",

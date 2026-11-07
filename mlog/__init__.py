@@ -128,6 +128,7 @@ from .optimizer import PassThroughOptimizer
 from .parser import parse_and_validate
 from .validator import MlogValidator, ValidationError
 from .comments import transform_comments_to_print
+from . import beta
 from .decompiler import decompile, decompile_with_source_map
 
 # Null constant representing null in Mindustry Logic
@@ -162,7 +163,7 @@ def _get_version() -> str:
 
 __version__: str = _get_version()
 
-__all__ = sorted(list(MLOG_EXPORTS))
+__all__ = sorted(list(MLOG_EXPORTS) + ["beta"])
 
 
 

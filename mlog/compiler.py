@@ -3,7 +3,7 @@
 import ast
 import difflib
 import math
-from typing import List, Optional, Set, Tuple, Union
+from typing import Any, List, Optional, Set, Tuple, Union
 
 from .errors import CompileError, SourceLocation
 from .ir import IRJump, IRLabel, IRNode, IROp, IRRaw, IRSet
@@ -333,6 +333,246 @@ def _parse_array_call(compiler: "Compiler", call: ast.Call, loc: SourceLocation)
     return block_name, size_val, dtype_str
 
 
+def _is_local_array_constructor(func_node: ast.AST) -> bool:
+    """Check if an AST node represents a LocalArray constructor call."""
+    if isinstance(func_node, ast.Subscript):
+        func_node = func_node.value
+    if isinstance(func_node, ast.Name) and func_node.id == "LocalArray":
+        return True
+    if isinstance(func_node, ast.Attribute) and func_node.attr == "LocalArray":
+        return True
+    return False
+
+
+def _parse_local_array_call(
+    compiler: "Compiler", call: ast.Call, loc: SourceLocation, caller_name: str = "LocalArray"
+) -> Tuple[int, str, Optional[ast.AST]]:
+    """Parse and validate arguments to LocalArray(size, default=..., dtype=...)."""
+    size_node = None
+    default_node = None
+    dtype_node = None
+
+    # Check for generic subscript dtype, e.g. LocalArray[float](...)
+    generic_dtype = None
+    if isinstance(call.func, ast.Subscript):
+        slice_node = call.func.slice
+        if isinstance(slice_node, ast.Name):
+            generic_dtype = slice_node.id.lower()
+        elif isinstance(slice_node, ast.Constant) and isinstance(slice_node.value, str):
+            generic_dtype = slice_node.value.lower()
+
+    for kw in call.keywords:
+        if kw.arg == "size":
+            size_node = kw.value
+        elif kw.arg == "default":
+            default_node = kw.value
+        elif kw.arg == "dtype":
+            dtype_node = kw.value
+        else:
+            compiler.error(f"unexpected keyword argument '{kw.arg}' in {caller_name}()", kw)
+
+    pos_args = list(call.args)
+    if len(pos_args) > 3:
+        compiler.error(
+            f"{caller_name}() takes at most 3 arguments, got {len(call.args) + len(call.keywords)}",
+            call,
+        )
+
+    kw_names = {kw.arg for kw in call.keywords if kw.arg}
+    if len(pos_args) >= 1:
+        if "size" in kw_names:
+            compiler.error(f"duplicate argument 'size' in {caller_name}() (passed as both positional and keyword argument)", call)
+        size_node = pos_args[0]
+    if len(pos_args) >= 2:
+        if "default" in kw_names:
+            compiler.error(f"duplicate argument 'default' in {caller_name}() (passed as both positional and keyword argument)", call)
+        default_node = pos_args[1]
+    if len(pos_args) >= 3:
+        if "dtype" in kw_names:
+            compiler.error(f"duplicate argument 'dtype' in {caller_name}() (passed as both positional and keyword argument)", call)
+        dtype_node = pos_args[2]
+
+    if size_node is None:
+        compiler.error(f"missing required argument 'size' in {caller_name}()", call)
+
+    size_val = _get_literal_int(size_node)
+    if size_val is None:
+        compiler.error(f"{caller_name} size must be a positive integer literal", size_node)
+    if size_val <= 0:
+        compiler.error(f"{caller_name} size must be a positive integer (> 0), got {size_val}", size_node)
+    if size_val > 64:
+        compiler.error(f"{caller_name} size {size_val} exceeds maximum register capacity (64)", size_node)
+
+    dtype_str = "int"
+    if dtype_node is not None:
+        if isinstance(dtype_node, ast.Name):
+            dtype_str = dtype_node.id.lower()
+        elif isinstance(dtype_node, ast.Constant) and isinstance(dtype_node.value, str):
+            dtype_str = dtype_node.value.lower()
+        else:
+            compiler.error(f"{caller_name} dtype must be int, float, bool, str, or any (e.g. dtype=float)", dtype_node)
+    elif generic_dtype is not None:
+        dtype_str = generic_dtype
+
+    if dtype_str not in ("int", "float", "bool", "str", "any"):
+        compiler.error(f"unsupported {caller_name} dtype '{dtype_str}': expected int, float, bool, str, or any", dtype_node or call)
+
+    return size_val, dtype_str, default_node
+
+
+def _is_block_array_constructor(func_node: ast.AST) -> bool:
+    """Check if an AST node represents a BlockArray constructor call."""
+    if isinstance(func_node, ast.Subscript):
+        func_node = func_node.value
+    if isinstance(func_node, ast.Name) and func_node.id == "BlockArray":
+        return True
+    if isinstance(func_node, ast.Attribute) and func_node.attr == "BlockArray":
+        return True
+    return False
+
+
+def _parse_block_array_call(
+    compiler: "Compiler", call: ast.Call, loc: SourceLocation, caller_name: str = "BlockArray"
+) -> Tuple[str, int, str]:
+    """Parse and validate arguments to BlockArray(block, size, dtype=...)."""
+    block_node = None
+    size_node = None
+    dtype_node = None
+
+    # Check for generic subscript dtype, e.g. BlockArray[float](...)
+    generic_dtype = None
+    if isinstance(call.func, ast.Subscript):
+        slice_node = call.func.slice
+        if isinstance(slice_node, ast.Name):
+            generic_dtype = slice_node.id.lower()
+        elif isinstance(slice_node, ast.Constant) and isinstance(slice_node.value, str):
+            generic_dtype = slice_node.value.lower()
+
+    for kw in call.keywords:
+        if kw.arg == "block":
+            block_node = kw.value
+        elif kw.arg == "size":
+            size_node = kw.value
+        elif kw.arg == "dtype":
+            dtype_node = kw.value
+        else:
+            compiler.error(f"unexpected keyword argument '{kw.arg}' in {caller_name}()", kw)
+
+    pos_args = list(call.args)
+    if len(pos_args) > 3:
+        compiler.error(
+            f"{caller_name}() takes at most 3 arguments, got {len(call.args) + len(call.keywords)}",
+            call,
+        )
+
+    kw_names = {kw.arg for kw in call.keywords if kw.arg}
+    if len(pos_args) >= 1:
+        if "block" in kw_names:
+            compiler.error(f"duplicate argument 'block' in {caller_name}() (passed as both positional and keyword argument)", call)
+        block_node = pos_args[0]
+    if len(pos_args) >= 2:
+        if "size" in kw_names:
+            compiler.error(f"duplicate argument 'size' in {caller_name}() (passed as both positional and keyword argument)", call)
+        size_node = pos_args[1]
+    if len(pos_args) >= 3:
+        if "dtype" in kw_names:
+            compiler.error(f"duplicate argument 'dtype' in {caller_name}() (passed as both positional and keyword argument)", call)
+        dtype_node = pos_args[2]
+
+    if block_node is None:
+        compiler.error(f"missing required argument 'block' in {caller_name}()", call)
+    if size_node is None:
+        compiler.error(f"missing required argument 'size' in {caller_name}()", call)
+
+    if not (isinstance(block_node, ast.Constant) and isinstance(block_node.value, str)):
+        compiler.error(f"{caller_name} memory block must be a string literal (e.g. 'cell1', 'bank1')", block_node)
+    block_name = block_node.value
+
+    size_val = _get_literal_int(size_node)
+    if size_val is None:
+        compiler.error(f"{caller_name} size must be a positive integer literal", size_node)
+    if size_val <= 0:
+        compiler.error(f"{caller_name} size must be a positive integer (> 0), got {size_val}", size_node)
+
+    dtype_str = "int"
+    if dtype_node is not None:
+        if isinstance(dtype_node, ast.Name):
+            dtype_str = dtype_node.id.lower()
+        elif isinstance(dtype_node, ast.Constant) and isinstance(dtype_node.value, str):
+            dtype_str = dtype_node.value.lower()
+        else:
+            compiler.error(f"{caller_name} dtype must be int, float, bool, str, unit, block, or any (e.g. dtype=float)", dtype_node)
+    elif generic_dtype is not None:
+        dtype_str = generic_dtype
+
+    valid_dtypes = ("int", "float", "bool", "str", "unit", "block", "any")
+    if dtype_str not in valid_dtypes:
+        compiler.error(
+            f"unsupported {caller_name} dtype '{dtype_str}': expected one of {', '.join(valid_dtypes)}",
+            dtype_node or call,
+        )
+
+    return block_name, size_val, dtype_str
+
+
+def _parse_beta_array_call(
+    compiler: "Compiler", call: ast.Call, loc: SourceLocation
+) -> Tuple[str, Any]:
+    """Parse and validate arguments to beta.Array(...), dispatching to either LocalArray or BlockArray."""
+    valid_kwargs = {"block", "size", "dtype", "default"}
+    for kw in call.keywords:
+        if kw.arg not in valid_kwargs:
+            compiler.error(f"unexpected keyword argument '{kw.arg}' in Array()", kw)
+
+    pos_args = list(call.args)
+    if len(pos_args) > 3:
+        compiler.error(
+            f"Array() takes at most 3 arguments, got {len(call.args) + len(call.keywords)}",
+            call,
+        )
+
+    # Determine backend: "block" vs "local"
+    is_block = False
+    if len(pos_args) >= 1:
+        first_arg = pos_args[0]
+        if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, bool):
+            compiler.error(f"Array size must be a positive integer literal, got {first_arg.value!r}", first_arg)
+        elif isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
+            is_block = True
+        elif _get_literal_int(first_arg) is not None:
+            is_block = False
+        elif isinstance(first_arg, ast.UnaryOp) and isinstance(first_arg.op, ast.USub):
+            is_block = False
+        else:
+            compiler.error("Array() first argument must be a string (block name) or integer (size)", first_arg)
+    else:
+        if any(kw.arg == "block" for kw in call.keywords):
+            is_block = True
+        elif any(kw.arg in ("size", "default") for kw in call.keywords):
+            is_block = False
+        else:
+            compiler.error("missing required argument 'size' in Array()", call)
+
+    if is_block:
+        for kw in call.keywords:
+            if kw.arg == "default":
+                compiler.error(
+                    "argument 'default' is only supported for in-register LocalArray, not BlockArray; use .fill() for BlockArray",
+                    kw,
+                )
+        block_name, size_val, dtype_val = _parse_block_array_call(compiler, call, loc, caller_name="Array")
+        return ("block", (block_name, size_val, dtype_val))
+    else:
+        for kw in call.keywords:
+            if kw.arg == "block":
+                compiler.error(
+                    "Array() received unexpected 'block' argument when size is passed as first positional argument",
+                    kw,
+                )
+        size_val, dtype_val, default_node = _parse_local_array_call(compiler, call, loc, caller_name="Array")
+        return ("local", (size_val, dtype_val, default_node))
+
+
 class ConstantFolder(ast.NodeTransformer):
     """AST transformer that safely folds pure compile-time constant expressions.
 
@@ -596,6 +836,59 @@ class Compiler:
         self.allocator = MemoryBlockAllocator()
         self._pre_allocated_arrays: Set[str] = set()
         self.constant_registry = NamedConstantRegistry()
+        self.beta_array_symbols: Set[str] = set()
+        self.beta_local_array_symbols: Set[str] = set()
+        self.beta_block_array_symbols: Set[str] = set()
+        self.legacy_array_symbols: Set[str] = set()
+        self.beta_module_aliases: Set[str] = {"beta"}
+
+    def _is_beta_array_constructor(self, func_node: ast.AST) -> bool:
+        """Check if an AST node represents a beta.Array constructor call."""
+        if isinstance(func_node, ast.Subscript):
+            func_node = func_node.value
+        if isinstance(func_node, ast.Name):
+            return func_node.id in self.beta_array_symbols
+        if isinstance(func_node, ast.Attribute):
+            if func_node.attr == "Array":
+                if isinstance(func_node.value, ast.Name) and (func_node.value.id in self.beta_module_aliases or func_node.value.id == "beta"):
+                    return True
+                if isinstance(func_node.value, ast.Attribute) and func_node.value.attr == "beta":
+                    return True
+        return False
+
+    def _is_legacy_array_constructor(self, func_node: ast.AST) -> bool:
+        """Check if an AST node represents a legacy from mlog import Array constructor call."""
+        if isinstance(func_node, ast.Subscript):
+            func_node = func_node.value
+        if isinstance(func_node, ast.Name):
+            if func_node.id in self.legacy_array_symbols:
+                return True
+            if func_node.id == "Array" and func_node.id not in self.beta_array_symbols:
+                return True
+        if isinstance(func_node, ast.Attribute):
+            if func_node.attr == "Array" and isinstance(func_node.value, ast.Name) and func_node.value.id in ("mlog", "src.mlog"):
+                return True
+        return False
+
+    def _is_local_array_constructor(self, func_node: ast.AST) -> bool:
+        """Check if an AST node represents a LocalArray constructor call."""
+        if isinstance(func_node, ast.Subscript):
+            func_node = func_node.value
+        if isinstance(func_node, ast.Name):
+            return func_node.id == "LocalArray" or func_node.id in self.beta_local_array_symbols
+        if isinstance(func_node, ast.Attribute) and func_node.attr == "LocalArray":
+            return True
+        return False
+
+    def _is_block_array_constructor(self, func_node: ast.AST) -> bool:
+        """Check if an AST node represents a BlockArray constructor call."""
+        if isinstance(func_node, ast.Subscript):
+            func_node = func_node.value
+        if isinstance(func_node, ast.Name):
+            return func_node.id == "BlockArray" or func_node.id in self.beta_block_array_symbols
+        if isinstance(func_node, ast.Attribute) and func_node.attr == "BlockArray":
+            return True
+        return False
 
     def new_temp(self, loc: Optional[SourceLocation] = None) -> str:
         """Allocate a new deterministic temporary variable name."""
@@ -634,6 +927,14 @@ class Compiler:
                 f"variable name '{name}' is reserved for compiler temporaries",
                 node,
             )
+        for larr_name, larr in self.allocator.local_arrays.items():
+            if name.startswith(f"{larr_name}_"):
+                suffix = name[len(larr_name) + 1:]
+                if suffix.isdigit() and 0 <= int(suffix) < larr.size:
+                    self.error(
+                        f"variable name '{name}' conflicts with element register of LocalArray '{larr_name}'",
+                        node,
+                    )
         return name
 
     def format_constant(self, val: object, loc: SourceLocation, is_negated: bool = False) -> str:
@@ -836,15 +1137,23 @@ class Compiler:
             if isinstance(expr.func, ast.Name) and expr.func.id == "raw":
                 return self.compile_raw_value(expr, target_dest=target_dest)
             if isinstance(expr.func, ast.Name) and expr.func.id == "len":
-                if len(expr.args) == 1 and isinstance(expr.args[0], ast.Name) and expr.args[0].id in self.allocator.arrays:
-                    arr = self.allocator.arrays[expr.args[0].id]
-                    size_str = str(arr.size)
-                    if target_dest is not None:
-                        self.instructions.append(IRSet(to=target_dest, from_=size_str, loc=loc))
-                        return target_dest
-                    return size_str
-                else:
-                    self.error("len() is only supported on Array objects", expr)
+                if len(expr.args) == 1 and isinstance(expr.args[0], ast.Name):
+                    arg_name = expr.args[0].id
+                    if arg_name in self.allocator.arrays:
+                        arr = self.allocator.arrays[arg_name]
+                        size_str = str(arr.size)
+                        if target_dest is not None:
+                            self.instructions.append(IRSet(to=target_dest, from_=size_str, loc=loc))
+                            return target_dest
+                        return size_str
+                    elif arg_name in self.allocator.local_arrays:
+                        larr = self.allocator.local_arrays[arg_name]
+                        size_str = str(larr.size)
+                        if target_dest is not None:
+                            self.instructions.append(IRSet(to=target_dest, from_=size_str, loc=loc))
+                            return target_dest
+                        return size_str
+                self.error("len() is only supported on Array objects", expr)
             return self.compile_call(
                 expr, target_dest=target_dest, is_statement=is_statement
             )
@@ -853,6 +1162,36 @@ class Compiler:
             if not isinstance(expr.value, ast.Name):
                 self.error("subscript indexing is only supported on simple array names", expr.value)
             arr_name = expr.value.id
+
+            local_arr = self.allocator.get_local_array(arr_name)
+            if local_arr is not None:
+                if _is_literal_float(expr.slice):
+                    self.error("array index must be an integer, got float literal", expr.slice)
+                if isinstance(expr.slice, ast.Constant) and isinstance(expr.slice.value, str):
+                    self.error("array index must be an integer, got string literal", expr.slice)
+                if isinstance(expr.slice, ast.Constant) and isinstance(expr.slice.value, bool):
+                    self.error("array index must be an integer, got boolean literal", expr.slice)
+
+                literal_idx = _get_literal_int(expr.slice)
+                if literal_idx is None:
+                    self.error(
+                        "LocalArray only supports compile-time static indexing; dynamic index is not supported (use BlockArray for dynamic indexing)",
+                        expr.slice,
+                    )
+
+                if literal_idx < 0 or literal_idx >= local_arr.size:
+                    self.error(
+                        f"array index out of bounds: index {literal_idx} is outside valid range [0, {local_arr.size}) for LocalArray '{arr_name}'",
+                        expr.slice,
+                    )
+
+                reg_name = f"{arr_name}_{literal_idx}"
+                if target_dest is not None:
+                    if target_dest != reg_name:
+                        self.instructions.append(IRSet(to=target_dest, from_=reg_name, loc=loc))
+                    return target_dest
+                return reg_name
+
             arr = self.allocator.get_array(arr_name)
             if arr is None:
                 self.error(f"'{arr_name}' is not an Array", expr.value)
@@ -865,10 +1204,11 @@ class Compiler:
                 self.error("array index must be an integer, got boolean literal", expr.slice)
 
             literal_idx = _get_literal_int(expr.slice)
+            arr_type_name = "BlockArray" if arr.is_block_array else "Array"
             if literal_idx is not None:
                 if literal_idx < 0 or literal_idx >= arr.size:
                     self.error(
-                        f"array index out of bounds: index {literal_idx} is outside valid range [0, {arr.size}) for Array '{arr_name}'",
+                        f"array index out of bounds: index {literal_idx} is outside valid range [0, {arr.size}) for {arr_type_name} '{arr_name}'",
                         expr.slice,
                     )
                 abs_addr = str(arr.base_offset + literal_idx)
@@ -986,6 +1326,28 @@ class Compiler:
         loc = self.loc(node)
         if isinstance(node.value, ast.Name):
             cls_name = node.value.id
+            if node.attr == "size":
+                if cls_name in self.allocator.local_arrays:
+                    return str(self.allocator.local_arrays[cls_name].size)
+                if cls_name in self.allocator.arrays:
+                    return str(self.allocator.arrays[cls_name].size)
+                self.error(f"'{cls_name}' is not an Array or LocalArray", node)
+            if node.attr == "capacity":
+                if cls_name in self.allocator.local_arrays:
+                    return str(self.allocator.local_arrays[cls_name].size)
+                if cls_name in self.allocator.arrays:
+                    return str(self.allocator.arrays[cls_name].capacity)
+                self.error(f"'{cls_name}' is not an Array or LocalArray", node)
+            if node.attr == "block":
+                if cls_name in self.allocator.arrays:
+                    return self.allocator.arrays[cls_name].block
+                self.error(f"'{cls_name}' is not an Array backed by a block", node)
+            if node.attr == "dtype":
+                if cls_name in self.allocator.local_arrays:
+                    return f'"{self.allocator.local_arrays[cls_name].dtype}"'
+                if cls_name in self.allocator.arrays:
+                    return f'"{self.allocator.arrays[cls_name].dtype}"'
+                self.error(f"'{cls_name}' is not an Array or LocalArray", node)
             if cls_name == "Vars":
                 token = BUILTIN_VARIABLES_DATA.get(node.attr)
                 if token is None:
@@ -1184,6 +1546,51 @@ class Compiler:
     ) -> str:
         """Compile a compiler intrinsic function call."""
         loc = self.loc(call)
+        if self._is_beta_array_constructor(call.func):
+            self.error("Array declaration must be assigned to a variable, e.g. 'a = Array(...)'", call)
+        if self._is_local_array_constructor(call.func):
+            self.error("LocalArray declaration must be assigned to a variable, e.g. 'a = LocalArray(...)'", call)
+        if self._is_block_array_constructor(call.func):
+            self.error("BlockArray declaration must be assigned to a variable, e.g. 'a = BlockArray(...)'", call)
+        if self._is_legacy_array_constructor(call.func):
+            self.error("Array declaration must be assigned to a variable, e.g. 'a = Array(...)'", call)
+        if isinstance(call.func, ast.Attribute) and call.func.attr == "fill":
+            if not isinstance(call.func.value, ast.Name):
+                self.error("fill() must be called on a simple array variable", call)
+            arr_name = call.func.value.id
+            if len(call.args) != 1 or call.keywords:
+                self.error("fill() takes exactly 1 argument", call)
+            fill_arg = call.args[0]
+            larr = self.allocator.get_local_array(arr_name)
+            if larr is not None:
+                val = self.compile_expr(fill_arg)
+                for i in range(larr.size):
+                    self.instructions.append(IRSet(to=f"{arr_name}_{i}", from_=val, loc=loc))
+                return "0"
+            arr = self.allocator.get_array(arr_name)
+            if arr is not None:
+                val = self.compile_expr(fill_arg)
+                if arr.size <= 4:
+                    for i in range(arr.size):
+                        phys_addr = str(arr.base_offset + i)
+                        self.instructions.append(IRRaw(opcode="write", args=[val, arr.block, phys_addr], loc=loc))
+                else:
+                    idx_var = self.new_temp(loc)
+                    end_var = self.new_temp(loc)
+                    loop_lbl = self.new_label("fill_loop")
+                    after_lbl = self.new_label("fill_end")
+                    start_addr = str(arr.base_offset)
+                    end_addr = str(arr.base_offset + arr.size)
+                    self.instructions.append(IRSet(to=idx_var, from_=start_addr, loc=loc))
+                    self.instructions.append(IRSet(to=end_var, from_=end_addr, loc=loc))
+                    self.instructions.append(IRLabel(name=loop_lbl, loc=loc))
+                    self.instructions.append(IRJump(target=after_lbl, cond="greaterThanEq", a=idx_var, b=end_var, loc=loc))
+                    self.instructions.append(IRRaw(opcode="write", args=[val, arr.block, idx_var], loc=loc))
+                    self.instructions.append(IROp(op="add", dest=idx_var, a=idx_var, b="1", loc=loc))
+                    self.instructions.append(IRJump(target=loop_lbl, cond="always", a="0", b="0", loc=loc))
+                    self.instructions.append(IRLabel(name=after_lbl, loc=loc))
+                return "0"
+            self.error(f"'{arr_name}' is not an Array or LocalArray", call)
         if isinstance(call.func, ast.Attribute):
             if isinstance(call.func.value, ast.Name):
                 ns = call.func.value.id
@@ -4447,30 +4854,85 @@ class Compiler:
             if not isinstance(target.value, ast.Name):
                 self.error("subscript assignment is only supported on simple array names", target.value)
             arr_name = target.value.id
+
+            local_arr = self.allocator.get_local_array(arr_name)
+            if local_arr is not None:
+                # Check index literal type
+                if _is_literal_float(target.slice):
+                    self.error("array index must be an integer, got float literal", target.slice)
+                if isinstance(target.slice, ast.Constant) and isinstance(target.slice.value, str):
+                    self.error("array index must be an integer, got string literal", target.slice)
+                if isinstance(target.slice, ast.Constant) and isinstance(target.slice.value, bool):
+                    self.error("array index must be an integer, got boolean literal", target.slice)
+
+                literal_idx = _get_literal_int(target.slice)
+                if literal_idx is None:
+                    self.error(
+                        "LocalArray only supports compile-time static indexing; dynamic index is not supported (use BlockArray for dynamic indexing)",
+                        target.slice,
+                    )
+
+                if literal_idx < 0 or literal_idx >= local_arr.size:
+                    self.error(
+                        f"array index out of bounds: index {literal_idx} is outside valid range [0, {local_arr.size}) for LocalArray '{arr_name}'",
+                        target.slice,
+                    )
+
+                # Type checking on assigned value based on array dtype
+                if local_arr.dtype == "int":
+                    if _is_literal_float(node.value):
+                        self.error("LocalArray only stores integers; float literal is not supported", node.value)
+                    if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                        self.error("LocalArray only stores integers; string literal is not supported", node.value)
+                    if isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool):
+                        self.error("LocalArray only stores integers; boolean literal is not supported", node.value)
+                elif local_arr.dtype == "float":
+                    if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                        self.error("LocalArray of type 'float' only stores numbers; string literal is not supported", node.value)
+                    if isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool):
+                        self.error("LocalArray of type 'float' only stores numbers; boolean literal is not supported", node.value)
+                elif local_arr.dtype == "bool":
+                    if _get_literal_int(node.value) is not None:
+                        self.error("LocalArray of type 'bool' only stores booleans; integer literal is not supported", node.value)
+                    if _is_literal_float(node.value):
+                        self.error("LocalArray of type 'bool' only stores booleans; float literal is not supported", node.value)
+                    if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                        self.error("LocalArray of type 'bool' only stores booleans; string literal is not supported", node.value)
+
+                reg_name = f"{arr_name}_{literal_idx}"
+                self.compile_expr(node.value, target_dest=reg_name)
+                return
+
             arr = self.allocator.get_array(arr_name)
             if arr is None:
                 self.error(f"'{arr_name}' is not an Array", target.value)
 
+            arr_type_name = "BlockArray" if arr.is_block_array else "Array"
             # Type checking on assigned value based on array dtype
             if arr.dtype == "int":
                 if _is_literal_float(node.value):
-                    self.error("Array only stores integers; float literal is not supported", node.value)
+                    self.error(f"{arr_type_name} only stores integers; float literal is not supported", node.value)
                 if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                    self.error("Array only stores integers; string literal is not supported", node.value)
+                    self.error(f"{arr_type_name} only stores integers; string literal is not supported", node.value)
                 if isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool):
-                    self.error("Array only stores integers; boolean literal is not supported", node.value)
+                    self.error(f"{arr_type_name} only stores integers; boolean literal is not supported", node.value)
             elif arr.dtype == "float":
                 if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                    self.error("Array of type 'float' only stores numbers; string literal is not supported", node.value)
+                    self.error(f"{arr_type_name} of type 'float' only stores numbers; string literal is not supported", node.value)
                 if isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool):
-                    self.error("Array of type 'float' only stores numbers; boolean literal is not supported", node.value)
+                    self.error(f"{arr_type_name} of type 'float' only stores numbers; boolean literal is not supported", node.value)
             elif arr.dtype == "bool":
                 if _get_literal_int(node.value) is not None:
-                    self.error("Array of type 'bool' only stores booleans; integer literal is not supported", node.value)
+                    self.error(f"{arr_type_name} of type 'bool' only stores booleans; integer literal is not supported", node.value)
                 if _is_literal_float(node.value):
-                    self.error("Array of type 'bool' only stores booleans; float literal is not supported", node.value)
+                    self.error(f"{arr_type_name} of type 'bool' only stores booleans; float literal is not supported", node.value)
                 if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                    self.error("Array of type 'bool' only stores booleans; string literal is not supported", node.value)
+                    self.error(f"{arr_type_name} of type 'bool' only stores booleans; string literal is not supported", node.value)
+            elif arr.dtype == "str":
+                if _is_literal_float(node.value) or _get_literal_int(node.value) is not None:
+                    self.error(f"{arr_type_name} of type 'str' only stores strings; numeric literal is not supported", node.value)
+                if isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool):
+                    self.error(f"{arr_type_name} of type 'str' only stores strings; boolean literal is not supported", node.value)
 
             target_tmp = self.new_temp(loc) if isinstance(node.value, ast.Call) else None
             val = self.compile_expr(node.value, target_dest=target_tmp)
@@ -4500,7 +4962,7 @@ class Compiler:
             if literal_idx is not None:
                 if literal_idx < 0 or literal_idx >= arr.size:
                     self.error(
-                        f"array index out of bounds: index {literal_idx} is outside valid range [0, {arr.size}) for Array '{arr_name}'",
+                        f"array index out of bounds: index {literal_idx} is outside valid range [0, {arr.size}) for {arr_type_name} '{arr_name}'",
                         target.slice,
                     )
                 abs_addr = str(arr.base_offset + literal_idx)
@@ -4538,8 +5000,69 @@ class Compiler:
         assert isinstance(target, ast.Name)
         target_name = target.id
 
+        # Check if value is a beta.Array declaration: arr = beta.Array(...) or Array(...)
+        if isinstance(node.value, ast.Call) and self._is_beta_array_constructor(node.value.func):
+            if self._current_function is not None:
+                self.error("Array declaration is not allowed inside functions; declare arrays at the module level", node)
+            if self._loop_stack:
+                self.error("Array declaration is not allowed inside loops; declare arrays at the module level", node)
+
+            backend, params = _parse_beta_array_call(self, node.value, loc)
+            if backend == "local":
+                size_val, dtype_val, default_node = params
+                if target_name not in self._pre_allocated_arrays:
+                    self.allocator.allocate_local(name=target_name, size=size_val, dtype=dtype_val, default=default_node, loc=loc)
+                else:
+                    sym = self.allocator.get_local_array(target_name)
+                    default_node = sym.default if sym else None
+                    size_val = sym.size if sym else 0
+
+                if default_node is not None:
+                    for i in range(size_val):
+                        reg = f"{target_name}_{i}"
+                        self.compile_expr(default_node, target_dest=reg)
+            else:
+                if target_name not in self._pre_allocated_arrays:
+                    block_name, size_val, dtype_val = params
+                    self.allocator.allocate_block(name=target_name, block=block_name, size=size_val, dtype=dtype_val, loc=loc)
+            return
+
+        # Check if value is a LocalArray declaration: arr = LocalArray(...)
+        if isinstance(node.value, ast.Call) and self._is_local_array_constructor(node.value.func):
+            if self._current_function is not None:
+                self.error("LocalArray declaration is not allowed inside functions; declare arrays at the module level", node)
+            if self._loop_stack:
+                self.error("LocalArray declaration is not allowed inside loops; declare arrays at the module level", node)
+
+            if target_name not in self._pre_allocated_arrays:
+                size_val, dtype_val, default_node = _parse_local_array_call(self, node.value, loc)
+                self.allocator.allocate_local(name=target_name, size=size_val, dtype=dtype_val, default=default_node, loc=loc)
+            else:
+                sym = self.allocator.get_local_array(target_name)
+                default_node = sym.default if sym else None
+                size_val = sym.size if sym else 0
+
+            # If default value was specified, initialize each element
+            if default_node is not None:
+                for i in range(size_val):
+                    reg = f"{target_name}_{i}"
+                    self.compile_expr(default_node, target_dest=reg)
+            return
+
+        # Check if value is a BlockArray declaration: arr = BlockArray(...)
+        if isinstance(node.value, ast.Call) and self._is_block_array_constructor(node.value.func):
+            if self._current_function is not None:
+                self.error("BlockArray declaration is not allowed inside functions; declare arrays at the module level", node)
+            if self._loop_stack:
+                self.error("BlockArray declaration is not allowed inside loops; declare arrays at the module level", node)
+            if target_name in self._pre_allocated_arrays:
+                return
+            block_name, size_val, dtype_val = _parse_block_array_call(self, node.value, loc)
+            self.allocator.allocate_block(name=target_name, block=block_name, size=size_val, dtype=dtype_val, loc=loc)
+            return
+
         # Check if value is an Array declaration: arr = Array(...)
-        if isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name) and node.value.func.id == "Array":
+        if isinstance(node.value, ast.Call) and self._is_legacy_array_constructor(node.value.func):
             if self._current_function is not None:
                 self.error("Array declaration is not allowed inside functions; declare arrays at the module level", node)
             if self._loop_stack:
@@ -4550,16 +5073,24 @@ class Compiler:
             self.allocator.allocate(name=target_name, block=block_name, size=size_val, dtype=dtype_val, loc=loc)
             return
 
-        # Cannot reassign an existing Array variable
-        if target_name in self.allocator.arrays:
+        # Cannot reassign an existing Array or LocalArray variable
+        if target_name in self.allocator.arrays or target_name in self.allocator.local_arrays:
             self.error(f"cannot reassign Array variable '{target_name}'", target)
 
-        # Cannot assign an Array directly to another variable
-        if isinstance(node.value, ast.Name) and node.value.id in self.allocator.arrays:
-            self.error(
-                f"cannot assign Array '{node.value.id}' directly to a variable; use element indexing '{node.value.id}[i]'",
-                node.value,
-            )
+        # Cannot assign an Array, BlockArray, or LocalArray directly to another variable
+        if isinstance(node.value, ast.Name):
+            if node.value.id in self.allocator.arrays:
+                arr_sym = self.allocator.arrays[node.value.id]
+                arr_type = "BlockArray" if arr_sym.is_block_array else "Array"
+                self.error(
+                    f"cannot assign {arr_type} '{node.value.id}' directly to a variable; use element indexing '{node.value.id}[i]'",
+                    node.value,
+                )
+            if node.value.id in self.allocator.local_arrays:
+                self.error(
+                    f"cannot assign LocalArray '{node.value.id}' directly to a variable; use element indexing '{node.value.id}[i]'",
+                    node.value,
+                )
 
         formatted_target = self.format_name(target_name, target)
         self.compile_expr(node.value, target_dest=formatted_target)
@@ -4580,6 +5111,36 @@ class Compiler:
             if not isinstance(target.value, ast.Name):
                 self.error("subscript augmented assignment is only supported on simple array names", target.value)
             arr_name = target.value.id
+
+            local_arr = self.allocator.get_local_array(arr_name)
+            if local_arr is not None:
+                if _is_literal_float(target.slice):
+                    self.error("array index must be an integer, got float literal", target.slice)
+                if isinstance(target.slice, ast.Constant) and isinstance(target.slice.value, str):
+                    self.error("array index must be an integer, got string literal", target.slice)
+                if isinstance(target.slice, ast.Constant) and isinstance(target.slice.value, bool):
+                    self.error("array index must be an integer, got boolean literal", target.slice)
+
+                literal_idx = _get_literal_int(target.slice)
+                if literal_idx is None:
+                    self.error(
+                        "LocalArray only supports compile-time static indexing; dynamic index is not supported (use BlockArray for dynamic indexing)",
+                        target.slice,
+                    )
+
+                if literal_idx < 0 or literal_idx >= local_arr.size:
+                    self.error(
+                        f"array index out of bounds: index {literal_idx} is outside valid range [0, {local_arr.size}) for LocalArray '{arr_name}'",
+                        target.slice,
+                    )
+
+                reg_name = f"{arr_name}_{literal_idx}"
+                rhs_val = self.compile_expr(node.value)
+                self.instructions.append(
+                    IROp(op=mlog_op, dest=reg_name, a=reg_name, b=rhs_val, loc=loc)
+                )
+                return
+
             arr = self.allocator.get_array(arr_name)
             if arr is None:
                 self.error(f"'{arr_name}' is not an Array", target.value)
@@ -4592,22 +5153,23 @@ class Compiler:
             if isinstance(target.slice, ast.Constant) and isinstance(target.slice.value, bool):
                 self.error("array index must be an integer, got boolean literal", target.slice)
 
+            arr_type_name = "BlockArray" if arr.is_block_array else "Array"
             literal_idx = _get_literal_int(target.slice)
             if literal_idx is not None:
                 if literal_idx < 0 or literal_idx >= arr.size:
                     self.error(
-                        f"array index out of bounds: index {literal_idx} is outside valid range [0, {arr.size}) for Array '{arr_name}'",
+                        f"array index out of bounds: index {literal_idx} is outside valid range [0, {arr.size}) for {arr_type_name} '{arr_name}'",
                         target.slice,
                     )
 
             # Type checking and semantic validation based on array dtype and operator
             if arr.dtype == "int":
                 if _is_literal_float(node.value):
-                    self.error("Array only stores integers; float literal is not supported", node.value)
+                    self.error(f"{arr_type_name} only stores integers; float literal is not supported", node.value)
                 if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                    self.error("Array only stores integers; string literal is not supported", node.value)
+                    self.error(f"{arr_type_name} only stores integers; string literal is not supported", node.value)
                 if isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool):
-                    self.error("Array only stores integers; boolean literal is not supported", node.value)
+                    self.error(f"{arr_type_name} only stores integers; boolean literal is not supported", node.value)
                 if op_cls in (ast.LShift, ast.RShift):
                     shift_val = _get_literal_int(node.value)
                     if shift_val is not None:
@@ -4620,9 +5182,9 @@ class Compiler:
                             )
             elif arr.dtype == "float":
                 if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                    self.error("Array of type 'float' only stores numbers; string literal is not supported", node.value)
+                    self.error(f"{arr_type_name} of type 'float' only stores numbers; string literal is not supported", node.value)
                 if isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool):
-                    self.error("Array of type 'float' only stores numbers; boolean literal is not supported", node.value)
+                    self.error(f"{arr_type_name} of type 'float' only stores numbers; boolean literal is not supported", node.value)
                 if op_cls in BITWISE_BIN_OPS:
                     self.error(f"unsupported operand type for bitwise operator {op_cls.__name__}: float Array", node)
                 if _is_literal_float(node.value) and op_cls in BITWISE_BIN_OPS:
@@ -4630,15 +5192,20 @@ class Compiler:
             elif arr.dtype == "bool":
                 if op_cls not in (ast.BitAnd, ast.BitOr, ast.BitXor):
                     self.error(
-                        f"unsupported augmented assignment operator '{op_sym}' for Array of type 'bool'; only '&=', '|=', '^=' are supported",
+                        f"unsupported augmented assignment operator '{op_sym}' for {arr_type_name} of type 'bool'; only '&=', '|=', '^=' are supported",
                         node,
                     )
                 if _get_literal_int(node.value) is not None:
-                    self.error("Array of type 'bool' only stores booleans; integer literal is not supported", node.value)
+                    self.error(f"{arr_type_name} of type 'bool' only stores booleans; integer literal is not supported", node.value)
                 if _is_literal_float(node.value):
-                    self.error("Array of type 'bool' only stores booleans; float literal is not supported", node.value)
+                    self.error(f"{arr_type_name} of type 'bool' only stores booleans; float literal is not supported", node.value)
                 if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                    self.error("Array of type 'bool' only stores booleans; string literal is not supported", node.value)
+                    self.error(f"{arr_type_name} of type 'bool' only stores booleans; string literal is not supported", node.value)
+            elif arr.dtype == "str":
+                if op_cls is not ast.Add:
+                    self.error(f"{arr_type_name} of type 'str' only supports '+=' string concatenation", node)
+                if _is_literal_float(node.value) or _get_literal_int(node.value) is not None or (isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool)):
+                    self.error(f"{arr_type_name} of type 'str' can only concatenate string literals", node.value)
 
             # Compute address / offset EXACTLY ONCE
             if literal_idx is not None:
@@ -5221,9 +5788,7 @@ class Compiler:
         elif isinstance(stmt, ast.Continue):
             self.compile_continue(stmt)
         elif isinstance(stmt, ast.Expr):
-            if (isinstance(stmt.value, ast.Constant) and stmt.value.value is Ellipsis) or (
-                hasattr(ast, "Ellipsis") and isinstance(stmt.value, ast.Ellipsis)
-            ):
+            if isinstance(stmt.value, ast.Constant) and stmt.value.value is Ellipsis:
                 pass
             elif isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
                 if self.comments_to_print:
@@ -5241,8 +5806,15 @@ class Compiler:
                 else:
                     pass
             else:
-                if isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Name) and stmt.value.func.id == "Array":
-                    self.error("Array declaration must be assigned to a variable, e.g. 'a = Array(...)'", stmt)
+                if isinstance(stmt.value, ast.Call):
+                    if self._is_beta_array_constructor(stmt.value.func):
+                        self.error("Array declaration must be assigned to a variable, e.g. 'a = Array(...)'", stmt)
+                    elif self._is_legacy_array_constructor(stmt.value.func):
+                        self.error("Array declaration must be assigned to a variable, e.g. 'a = Array(...)'", stmt)
+                    elif self._is_local_array_constructor(stmt.value.func):
+                        self.error("LocalArray declaration must be assigned to a variable, e.g. 'a = LocalArray(...)'", stmt)
+                    elif self._is_block_array_constructor(stmt.value.func):
+                        self.error("BlockArray declaration must be assigned to a variable, e.g. 'a = BlockArray(...)'", stmt)
                 self.compile_expr(stmt.value, is_statement=True)
 
         elif isinstance(stmt, ast.Pass):
@@ -5332,17 +5904,74 @@ class Compiler:
         self._loop_stack.clear()
         self.allocator = MemoryBlockAllocator()
         self._pre_allocated_arrays.clear()
+        self.beta_array_symbols.clear()
+        self.beta_local_array_symbols.clear()
+        self.beta_block_array_symbols.clear()
+        self.legacy_array_symbols.clear()
+        self.beta_module_aliases = {"beta"}
+
+        # Scan module imports to accurately identify Array origins and aliases
+        for stmt in tree.body:
+            if isinstance(stmt, ast.Import):
+                for alias in stmt.names:
+                    if alias.name in ("mlog.beta", "src.mlog.beta"):
+                        self.beta_module_aliases.add(alias.asname or "beta")
+            elif isinstance(stmt, ast.ImportFrom):
+                if stmt.module in ("mlog.beta", "src.mlog.beta", "beta"):
+                    for alias in stmt.names:
+                        imported = alias.name
+                        target = alias.asname or alias.name
+                        if imported == "Array":
+                            self.beta_array_symbols.add(target)
+                            self.legacy_array_symbols.discard(target)
+                        elif imported == "LocalArray":
+                            self.beta_local_array_symbols.add(target)
+                        elif imported == "BlockArray":
+                            self.beta_block_array_symbols.add(target)
+                        elif imported == "*":
+                            self.beta_array_symbols.add("Array")
+                            self.legacy_array_symbols.discard("Array")
+                            self.beta_local_array_symbols.add("LocalArray")
+                            self.beta_block_array_symbols.add("BlockArray")
+                elif stmt.module in ("mlog", "src.mlog"):
+                    for alias in stmt.names:
+                        imported = alias.name
+                        target = alias.asname or alias.name
+                        if imported == "Array":
+                            self.legacy_array_symbols.add(target)
+                            self.beta_array_symbols.discard(target)
+                        elif imported == "*":
+                            self.legacy_array_symbols.add("Array")
+                            self.beta_array_symbols.discard("Array")
 
         # Pre-register top-level Array declarations so they are visible to functions and global statements
         for stmt in tree.body:
             if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
                 val = stmt.value
-                if isinstance(val, ast.Call) and isinstance(val.func, ast.Name) and val.func.id == "Array":
+                if isinstance(val, ast.Call):
                     target_name = stmt.targets[0].id
                     loc = self.loc(stmt)
-                    block_name, size_val, dtype_val = _parse_array_call(self, val, loc)
-                    self.allocator.allocate(name=target_name, block=block_name, size=size_val, dtype=dtype_val, loc=loc)
-                    self._pre_allocated_arrays.add(target_name)
+                    if self._is_beta_array_constructor(val.func):
+                        backend, params = _parse_beta_array_call(self, val, loc)
+                        if backend == "local":
+                            size_val, dtype_val, default_node = params
+                            self.allocator.allocate_local(name=target_name, size=size_val, dtype=dtype_val, default=default_node, loc=loc)
+                        else:
+                            block_name, size_val, dtype_val = params
+                            self.allocator.allocate_block(name=target_name, block=block_name, size=size_val, dtype=dtype_val, loc=loc)
+                        self._pre_allocated_arrays.add(target_name)
+                    elif self._is_legacy_array_constructor(val.func):
+                        block_name, size_val, dtype_val = _parse_array_call(self, val, loc)
+                        self.allocator.allocate(name=target_name, block=block_name, size=size_val, dtype=dtype_val, loc=loc)
+                        self._pre_allocated_arrays.add(target_name)
+                    elif self._is_local_array_constructor(val.func):
+                        size_val, dtype_val, default_node = _parse_local_array_call(self, val, loc)
+                        self.allocator.allocate_local(name=target_name, size=size_val, dtype=dtype_val, default=default_node, loc=loc)
+                        self._pre_allocated_arrays.add(target_name)
+                    elif self._is_block_array_constructor(val.func):
+                        block_name, size_val, dtype_val = _parse_block_array_call(self, val, loc)
+                        self.allocator.allocate_block(name=target_name, block=block_name, size=size_val, dtype=dtype_val, loc=loc)
+                        self._pre_allocated_arrays.add(target_name)
 
         if self.allow_functions:
             functions = [s for s in tree.body if isinstance(s, ast.FunctionDef)]

@@ -79,6 +79,11 @@ class ASTValidator(ast.NodeVisitor):
         from .constants import NamedConstantRegistry
         self.constant_registry = NamedConstantRegistry()
         self._module_classes: Set[ast.ClassDef] = set()
+        self.beta_array_symbols: Set[str] = set()
+        self.beta_local_array_symbols: Set[str] = set()
+        self.beta_block_array_symbols: Set[str] = set()
+        self.legacy_array_symbols: Set[str] = set()
+        self.beta_module_aliases: Set[str] = {"beta"}
 
     def error(self, msg: str, node: ast.AST):
         loc = get_loc(node, self.filename)
@@ -89,6 +94,37 @@ class ASTValidator(ast.NodeVisitor):
         for stmt in node.body:
             if isinstance(stmt, ast.ClassDef):
                 self._module_classes.add(stmt)
+            elif isinstance(stmt, ast.Import):
+                for alias in stmt.names:
+                    if alias.name in ("mlog.beta", "src.mlog.beta"):
+                        self.beta_module_aliases.add(alias.asname or "beta")
+            elif isinstance(stmt, ast.ImportFrom):
+                if stmt.module in ("mlog.beta", "src.mlog.beta", "beta"):
+                    for alias in stmt.names:
+                        imported = alias.name
+                        target = alias.asname or alias.name
+                        if imported == "Array":
+                            self.beta_array_symbols.add(target)
+                            self.legacy_array_symbols.discard(target)
+                        elif imported == "LocalArray":
+                            self.beta_local_array_symbols.add(target)
+                        elif imported == "BlockArray":
+                            self.beta_block_array_symbols.add(target)
+                        elif imported == "*":
+                            self.beta_array_symbols.add("Array")
+                            self.legacy_array_symbols.discard("Array")
+                            self.beta_local_array_symbols.add("LocalArray")
+                            self.beta_block_array_symbols.add("BlockArray")
+                elif stmt.module in ("mlog", "src.mlog"):
+                    for alias in stmt.names:
+                        imported = alias.name
+                        target = alias.asname or alias.name
+                        if imported == "Array":
+                            self.legacy_array_symbols.add(target)
+                            self.beta_array_symbols.discard(target)
+                        elif imported == "*":
+                            self.legacy_array_symbols.add("Array")
+                            self.beta_array_symbols.discard("Array")
         extract_int_enums(node, self.filename, registry=self.constant_registry)
         if self.allow_functions:
             for stmt in node.body:
@@ -188,6 +224,10 @@ class ASTValidator(ast.NodeVisitor):
                 if alias.asname is not None and alias.asname != alias.name:
                     self.error(f"import aliasing ('as {alias.asname}') is not supported", node)
                 continue
+            if alias.name in ("mlog.beta", "src.mlog.beta"):
+                if alias.asname is not None and alias.asname not in ("beta", alias.name):
+                    self.error(f"import aliasing ('as {alias.asname}') is not supported; use 'as beta' or direct import", node)
+                continue
             if alias.name not in ("mlog", "src.mlog", "mlog_registry", "src.mlog_registry"):
                 self.error("unsupported Python feature: import statement", node)
 
@@ -200,6 +240,15 @@ class ASTValidator(ast.NodeVisitor):
                     self.error(f"import aliasing ('as {alias.asname}') is not supported", node)
             return
 
+        if node.module in ("mlog.beta", "src.mlog.beta", "beta"):
+            BETA_EXPORTS = {"LocalArray", "BlockArray", "Array"}
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                if alias.name not in BETA_EXPORTS:
+                    self.error(f"cannot import name '{alias.name}' from '{node.module}'", node)
+            return
+
         if node.module not in ("mlog", "src.mlog", "mlog_registry", "src.mlog_registry"):
             self.error("unsupported Python feature: from ... import statement", node)
 
@@ -207,7 +256,8 @@ class ASTValidator(ast.NodeVisitor):
             if alias.name == "*":
                 continue
             if alias.asname is not None and alias.asname != alias.name:
-                self.error(f"import aliasing ('as {alias.asname}') is not supported", node)
+                if alias.name != "Array":
+                    self.error(f"import aliasing ('as {alias.asname}') is not supported", node)
             if node.module in ("mlog", "src.mlog"):
                 if alias.name not in MLOG_EXPORTS:
                     matches = difflib.get_close_matches(alias.name, MLOG_EXPORTS, n=1)
@@ -220,7 +270,22 @@ class ASTValidator(ast.NodeVisitor):
 
     def visit_Attribute(self, node: ast.Attribute):
         from .mlog_registry import ENUM_CLASS_TO_REGISTRY, BUILTIN_VARIABLES_DATA
+        if isinstance(node.value, ast.Attribute) and isinstance(node.value.value, ast.Name):
+            if node.value.value.id in ("mlog", "src.mlog") and node.value.attr == "beta":
+                BETA_METHODS = {"LocalArray", "BlockArray", "Array"}
+                if node.attr not in BETA_METHODS:
+                    self.error(f"unknown beta feature: 'mlog.beta.{node.attr}'", node)
+                return
         if isinstance(node.value, ast.Name):
+            if node.value.id in self.beta_module_aliases or node.value.id == "beta":
+                BETA_METHODS = {"LocalArray", "BlockArray", "Array"}
+                if node.attr not in BETA_METHODS:
+                    self.error(f"unknown beta feature: 'beta.{node.attr}'", node)
+                return
+            if node.value.id in ("mlog", "src.mlog") and node.attr == "beta":
+                return
+            if node.attr in ("size", "capacity", "block", "fill", "dtype"):
+                return
             if node.value.id == "Vars":
                 if node.attr not in BUILTIN_VARIABLES_DATA:
                     matches = difflib.get_close_matches(node.attr, BUILTIN_VARIABLES_DATA, n=1)
@@ -588,6 +653,73 @@ class ASTValidator(ast.NodeVisitor):
             self.visit(stmt)
 
     def visit_Call(self, node: ast.Call):
+        func_node = node.func
+        if isinstance(func_node, ast.Subscript):
+            func_node = func_node.value
+        is_local_array = (
+            (isinstance(func_node, ast.Name) and (func_node.id == "LocalArray" or func_node.id in self.beta_local_array_symbols))
+            or (isinstance(func_node, ast.Attribute) and func_node.attr == "LocalArray")
+        )
+        if is_local_array:
+            for kw in node.keywords:
+                if kw.arg not in ("size", "default", "dtype"):
+                    self.error(f"unexpected keyword argument '{kw.arg}' in LocalArray()", kw)
+            for arg in node.args:
+                self.visit(arg)
+            for kw in node.keywords:
+                self.visit(kw.value)
+            return
+
+        is_block_array = (
+            (isinstance(func_node, ast.Name) and (func_node.id == "BlockArray" or func_node.id in self.beta_block_array_symbols))
+            or (isinstance(func_node, ast.Attribute) and func_node.attr == "BlockArray")
+        )
+        if is_block_array:
+            for kw in node.keywords:
+                if kw.arg not in ("block", "size", "dtype"):
+                    self.error(f"unexpected keyword argument '{kw.arg}' in BlockArray()", kw)
+            for arg in node.args:
+                self.visit(arg)
+            for kw in node.keywords:
+                self.visit(kw.value)
+            return
+
+        is_beta_array = (
+            (isinstance(func_node, ast.Name) and func_node.id in self.beta_array_symbols)
+            or (isinstance(func_node, ast.Attribute) and func_node.attr == "Array" and isinstance(func_node.value, ast.Name) and (func_node.value.id in self.beta_module_aliases or func_node.value.id == "beta"))
+            or (isinstance(func_node, ast.Attribute) and func_node.attr == "Array" and isinstance(func_node.value, ast.Attribute) and func_node.value.attr == "beta")
+        )
+        if is_beta_array:
+            for kw in node.keywords:
+                if kw.arg not in ("block", "size", "dtype", "default"):
+                    self.error(f"unexpected keyword argument '{kw.arg}' in Array()", kw)
+            for arg in node.args:
+                self.visit(arg)
+            for kw in node.keywords:
+                self.visit(kw.value)
+            return
+
+        is_legacy_array = (
+            (isinstance(func_node, ast.Name) and (func_node.id in self.legacy_array_symbols or (func_node.id == "Array" and not is_beta_array)))
+            or (isinstance(func_node, ast.Attribute) and func_node.attr == "Array" and isinstance(func_node.value, ast.Name) and func_node.value.id in ("mlog", "src.mlog"))
+        )
+        if is_legacy_array:
+            for kw in node.keywords:
+                if kw.arg not in ("block", "size", "dtype"):
+                    self.error(f"unexpected keyword argument '{kw.arg}' in Array()", kw)
+            for arg in node.args:
+                self.visit(arg)
+            for kw in node.keywords:
+                self.visit(kw.value)
+            return
+
+        if isinstance(node.func, ast.Attribute) and node.func.attr == "fill" and isinstance(node.func.value, ast.Name):
+            if len(node.args) != 1 or node.keywords:
+                self.error("fill() takes exactly 1 positional argument", node)
+            self.visit(node.func.value)
+            self.visit(node.args[0])
+            return
+
         CALLABLE_NAMESPACES = (
             "draw", "control", "ucontrol", "ulocate", "op",
             "cutscene", "sound", "music", "marker", "status", "fetch", "lookup", "query", "message",

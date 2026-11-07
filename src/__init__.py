@@ -12,6 +12,7 @@ import mlog
 # Re-export submodules
 _SUBMODULES = (
     "allocator",
+    "beta",
     "clipboard",
     "comments",
     "compiler",

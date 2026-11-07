@@ -3215,6 +3215,7 @@ MLOG_EXPORTS: Set[str] = (
     | BUILTIN_VARIABLES
     | {
         "Array",
+        "beta",
         "BuiltinVarToken",
         "compile_py",
         "CompileResult",
@@ -3270,6 +3271,7 @@ def generate_pyi() -> str:
     lines.append("")
     lines.append("from enum import Enum, IntEnum as IntEnum")
     lines.append("from typing import Any, Dict, List, Literal, NamedTuple, Optional, Tuple, Union, overload")
+    lines.append("from . import beta as beta")
     lines.append("")
     lines.append("# Package version")
     lines.append("__version__: str")
