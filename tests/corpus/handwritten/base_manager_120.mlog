@@ -13,7 +13,7 @@ sensor t_max_hp t_block @maxHealth
 op div t_hp_ratio t_hp t_max_hp
 jump 18 lessThan t_hp_ratio 0.4
 control shoot t_block 0 0 1 0
-jump 19 always 0 0
+jump 18 always 0 0
 control shoot t_block 0 0 0 0
 control enabled t_block 1 0 0 0
 op add turret_idx turret_idx 1

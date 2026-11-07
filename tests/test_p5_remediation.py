@@ -117,7 +117,7 @@ op land res a b
 
         all_addrs = set(range(len(instructions)))
         unmapped = all_addrs - mapped_addrs
-        # Only address 15 (jump 19 always) is absorbed into structured if/else branch
+        # The loop regions are emitted as raw code, so every address is mapped.
         for dropped in (20, 21, 33, 34, 35):
             self.assertNotIn(dropped, unmapped, f"Instruction at address {dropped} was dropped!")
 

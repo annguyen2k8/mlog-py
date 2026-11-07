@@ -224,6 +224,7 @@ class TestP7High01LoopGap(unittest.TestCase):
         )
         # The raw region keeps the exact guard and latch targets.
         self.assertIn('jump(22, "greaterThanEq", turret_idx, 4)', py)
+        self.assertIn('jump(18, "always", 0, 0)  # addr 15', py)
         self.assertIn('jump(8, "always", 0, 0)  # addr 19', py)
         self.assertIn('jump(36, "greaterThanEq", cell_idx, 8)', py)
         self.assertIn('jump(27, "always", 0, 0)  # addr 32', py)
@@ -234,6 +235,7 @@ class TestP7High01LoopGap(unittest.TestCase):
 
         recompiled = _recompile(py)
         self.assertEqual(len(recompiled.strip().splitlines()), 120)
+        self.assertEqual(_normalized_lines(recompiled), _normalized_lines(mlog))
 
     def test_normal_loop_without_gap_stays_structured(self):
         mlog = _read_corpus("control_flow/nested_while_breaks.mlog")
@@ -242,6 +244,32 @@ class TestP7High01LoopGap(unittest.TestCase):
         self.assertIn("while outer < 5:", py)
         self.assertIn("while inner < 4:", py)
         self.assertNotIn("Loop exit at address", py)
+
+
+class TestP7Low02CorpusValidity(unittest.TestCase):
+    """The corpus must exercise the intended paths and be engine-valid."""
+
+    def test_base_manager_counter_path_exits_and_roundtrips(self):
+        mlog = _read_corpus("handwritten/base_manager_120.mlog")
+        self.assertIn("jump 18 always 0 0", mlog)
+
+        py = decompile(mlog)
+        ast.parse(py)
+        recompiled = _recompile(py)
+        self.assertEqual(_normalized_lines(recompiled), _normalized_lines(mlog))
+
+    def test_flare_miner_uses_valid_storage_group(self):
+        mlog = _read_corpus("handwritten/flare_miner.mlog")
+        self.assertIn("ulocate building storage", mlog)
+        self.assertNotIn("ulocate building container", mlog)
+
+        py = decompile(mlog)
+        ast.parse(py)
+        self.assertIn('ulocate.building("storage", 0)', py)
+        recompiled = _recompile(py)
+        self.assertIn(
+            "ulocate building storage 0 @copper cx cy found cblock", recompiled
+        )
 
 
 class TestP7SourceMapCoverage(unittest.TestCase):

@@ -193,12 +193,50 @@ class TestP7RemediationJvm(unittest.TestCase):
         self.assertIsNone(after.bound_unit)
         self.assertEqual(before.vars.get("u_flag"), after.vars.get("u_flag"))
         self.assertEqual(before.vars.get("bar_w"), after.vars.get("bar_w"))
-        self.assertNotEqual(after.vars.get("u_flag"), 0.0)
-        self.assertNotEqual(after.vars.get("bar_w"), 0.0)
+        self.assertEqual(after.vars.get("u_flag"), "null")
+        self.assertEqual(after.vars.get("bar_w"), "null")
         self.assertEqual(
             before.messages.get("message1"), "Status: Nominal"
         )
         self.assertEqual(after.messages.get("message1"), "Status: Nominal")
+
+    # ------------------------------------------------------------------
+    # P7-LOW-02
+    # ------------------------------------------------------------------
+
+    def test_low02_base_manager_corpus_terminates(self):
+        mlog = _read_corpus("handwritten/base_manager_120.mlog")
+        py, recompiled, before, after = self._roundtrip(mlog, max_steps=300)
+
+        self.assertIn("Loop exit at address 22", py)
+        self.assertIn("Loop exit at address 36", py)
+        self.assertEqual(_normalized_lines(recompiled), _normalized_lines(mlog))
+        self._assert_runtime_equal(before, after)
+
+        # Before the corpus fix, address 15 skipped the counter increment and
+        # the committed input looped until the step cap.
+        self.assertEqual(before.message, "RUN_OK:184")
+        self.assertEqual(before.ticks, 23)
+        self.assertEqual(before.vars.get("turret_idx"), 4.0)
+        self.assertEqual(before.vars.get("cell_idx"), 8.0)
+        self.assertEqual(before.messages.get("message1"), "Status: Nominal")
+
+    def test_low02_flare_miner_corpus_is_engine_valid(self):
+        mlog = _read_corpus("handwritten/flare_miner.mlog")
+        py, recompiled, before, after = self._roundtrip(mlog, max_steps=300)
+
+        self.assertIn('ulocate.building("storage", 0)', py)
+        self.assertIn(
+            "ulocate building storage 0 @copper cx cy found cblock", recompiled
+        )
+        self._assert_runtime_equal(before, after)
+
+        # Before the corpus fix, the engine rejected `ulocate building
+        # container` on both forms.
+        self.assertEqual(before.message, "RUN_OK:300")
+        self.assertEqual(before.bound_unit, "flare")
+        self.assertEqual(after.vars.get("flag"), 1.0)
+        self.assertEqual(after.vars.get("item"), 0.0)
 
 
 if __name__ == "__main__":

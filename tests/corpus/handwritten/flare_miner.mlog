@@ -5,7 +5,7 @@ ucontrol flag 1 0 0 0 0
 jump 0 always 0 0
 sensor item @unit @copper
 jump 11 greaterThanEq item 10
-ulocate building container 0 @copper cx cy found cblock
+ulocate building storage 0 @copper cx cy found cblock
 ucontrol approach cx cy 3 0 0
 ucontrol itemTake cblock @copper 10 0 0
 jump 0 always 0 0
