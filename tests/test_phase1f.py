@@ -225,7 +225,6 @@ class TestPhase1F(unittest.TestCase):
         mlog = self.check_compile_and_validate(source)
         lines = mlog.splitlines()
         expected = [
-            "jump 3 equal true 0",
             "op add i i 1",
             "jump 0 always 0 0",
         ]

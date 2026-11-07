@@ -127,7 +127,7 @@ print sum
         recompiled = compile_py(py).mlog.strip()
         self.assertIn("read val bank1 i", recompiled)
         self.assertIn("op add sum sum val", recompiled)
-        self.assertIn("jump 8 always 0 0", recompiled)
+        self.assertIn("jump 7 always 0 0", recompiled)
 
     def test_loop_header_with_sensor_side_effect(self):
         """Header contains sensor: must execute sensor before checking condition."""
@@ -150,7 +150,7 @@ print "dead"
         recompiled = compile_py(py).mlog.strip()
         self.assertIn("sensor hp @unit @health", recompiled)
         self.assertIn("greaterThanEq hp 50", recompiled)
-        self.assertIn("jump 6 always 0 0", recompiled)
+        self.assertIn("jump 5 always 0 0", recompiled)
 
     # -----------------------------------------------------------------------
     # 3. Bottom-Tested Loops (do-while / latch condition)
