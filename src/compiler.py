@@ -99,6 +99,32 @@ def _extract_const_val(node: ast.AST) -> Tuple[bool, object]:
     return False, None
 
 
+def _is_constant_true(node: ast.AST) -> bool:
+    """Check if node is guaranteed to be a pure compile-time constant true expression without side effects."""
+    ok, val = _extract_const_val(node)
+    if ok:
+        if isinstance(val, bool):
+            return val is True
+        if isinstance(val, (int, float)):
+            return val != 0
+        return False
+
+    # Check for logical 'not' on a pure constant false
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        ok_op, val_op = _extract_const_val(node.operand)
+        if ok_op:
+            if isinstance(val_op, bool):
+                return val_op is False
+            if isinstance(val_op, (int, float)):
+                return val_op == 0
+            if val_op is None:
+                return True
+        return False
+
+    return False
+
+
+
 def _is_literal_float(node: ast.AST) -> bool:
     """Check if node is an explicit float literal."""
     if isinstance(node, ast.Constant) and isinstance(node.value, float):
@@ -4991,8 +5017,10 @@ class Compiler:
         # break jumps to while_end (skipping orelse)
         self._loop_stack.append((while_start, while_end))
 
-        # Compile condition: if false, jump to while_orelse (or while_end if no orelse)
-        self.compile_condition(node.test, true_label=None, false_label=while_orelse)
+        # Compile condition: if false, jump to while_orelse (or while_end if no orelse).
+        # When condition is proven pure compile-time constant true, omit the redundant guard.
+        if not _is_constant_true(node.test):
+            self.compile_condition(node.test, true_label=None, false_label=while_orelse)
 
         # Compile loop body
         for stmt in node.body:
