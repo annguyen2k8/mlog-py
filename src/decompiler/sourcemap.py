@@ -66,6 +66,7 @@ class SourceMapping:
     source_lines: List[int] = field(default_factory=list)
     description: Optional[str] = None
     ir_node: Optional[Any] = None
+    is_coarse: bool = False
 
     @property
     def address_range(self) -> Optional[Tuple[int, int]]:
@@ -89,6 +90,8 @@ class SourceMapping:
             res["address_range"] = [self.address_range[0], self.address_range[1]]
         if self.description:
             res["description"] = self.description
+        if self.is_coarse:
+            res["is_coarse"] = True
         return res
 
 
@@ -116,11 +119,14 @@ class SourceMap:
         matching = [m for m in self.mappings if mlog_address in m.mlog_addresses]
         if not matching:
             return None
-        # Prefer specific statement over container FunctionDef
-        stmt_matching = [m for m in matching if m.node_type != "FunctionDef"]
+        # Prefer specific statement over coarse container mappings (FunctionDef,
+        # function-table preamble) that duplicate whole address ranges.
+        stmt_matching = [
+            m for m in matching if not m.is_coarse and m.node_type != "FunctionDef"
+        ]
         if stmt_matching:
             return min(stmt_matching, key=lambda m: len(m.mlog_addresses)).python_line
-        return matching[0].python_line
+        return min(matching, key=lambda m: len(m.mlog_addresses)).python_line
 
     def mlog_to_python_lines(self, mlog_address: int) -> List[int]:
         """Return all Python line numbers associated with an mlog instruction address."""
@@ -129,6 +135,46 @@ class SourceMap:
             if mlog_address in m.mlog_addresses:
                 lines.add(m.python_line)
         return sorted(lines)
+
+    def mapped_addresses(self, include_coarse: bool = True) -> List[int]:
+        """Return sorted mlog addresses with a provenance mapping.
+
+        Set ``include_coarse`` to False to ignore container mappings such as
+        ``FunctionDef`` ranges and the function-table preamble.
+        """
+        addrs: Set[int] = set()
+        for m in self.mappings:
+            if include_coarse or not m.is_coarse:
+                addrs.update(m.mlog_addresses)
+        return sorted(addrs)
+
+    def missing_addresses(
+        self,
+        total_instructions: int,
+        include_coarse: bool = True,
+    ) -> List[int]:
+        """Return addresses in ``[0, total_instructions)`` without a mapping."""
+        mapped = set(self.mapped_addresses(include_coarse=include_coarse))
+        return [addr for addr in range(total_instructions) if addr not in mapped]
+
+    def coverage_summary(self, total_instructions: int) -> Dict[str, Any]:
+        """Report address-level and statement-level coverage separately."""
+        address_mapped = len(self.mapped_addresses(include_coarse=True))
+        statement_mapped = len(self.mapped_addresses(include_coarse=False))
+        total = max(total_instructions, 0)
+
+        def ratio(count: int) -> float:
+            return (count / total) if total else 1.0
+
+        return {
+            "total_instructions": total,
+            "address_mapped": address_mapped,
+            "address_missing": self.missing_addresses(total, include_coarse=True),
+            "address_coverage": ratio(address_mapped),
+            "statement_mapped": statement_mapped,
+            "statement_missing": self.missing_addresses(total, include_coarse=False),
+            "statement_coverage": ratio(statement_mapped),
+        }
 
     def get_mapping_by_python_line(self, python_line: int) -> Optional[SourceMapping]:
         """Get the mapping containing the specified Python line."""
@@ -149,16 +195,25 @@ class SourceMap:
     def to_dict(self) -> Dict[str, Any]:
         """Export source map as deterministic, serializable dictionary."""
         p_to_m: Dict[str, List[int]] = {}
+        p_to_m_sets: Dict[str, Set[int]] = {}
         m_to_p: Dict[str, int] = {}
 
         # Sort mappings by python_line
         sorted_mappings = sorted(self.mappings, key=lambda m: (m.python_line, m.python_end_line))
 
         for m in sorted_mappings:
-            p_to_m[str(m.python_line)] = sorted(list(set(m.mlog_addresses)))
-            for addr in m.mlog_addresses:
-                if str(addr) not in m_to_p:
-                    m_to_p[str(addr)] = m.python_line
+            key = str(m.python_line)
+            p_to_m_sets.setdefault(key, set()).update(m.mlog_addresses)
+
+        for key in sorted(p_to_m_sets, key=int):
+            p_to_m[key] = sorted(p_to_m_sets[key])
+
+        # Keep the JSON reverse map consistent with mlog_to_python: specific
+        # statement mappings win over coarse container mappings.
+        for addr in self.mapped_addresses(include_coarse=True):
+            line = self.mlog_to_python(addr)
+            if line is not None:
+                m_to_p[str(addr)] = line
 
         return {
             "version": self.version,
@@ -191,6 +246,7 @@ class SourceMap:
                 instructions=m_data.get("instructions", []),
                 source_lines=m_data.get("source_lines", []),
                 description=m_data.get("description"),
+                is_coarse=bool(m_data.get("is_coarse", False)),
             )
             sm.add_mapping(mapping)
         return sm
@@ -248,6 +304,7 @@ class SourceMapEmitter:
         node_type: str,
         node: Any,
         explicit_addrs: Optional[List[int]] = None,
+        is_coarse: bool = False,
     ):
         addrs = explicit_addrs if explicit_addrs is not None else getattr(node, "source_addresses", [])
         mapping = SourceMapping(
@@ -258,6 +315,7 @@ class SourceMapEmitter:
             instructions=self._get_instructions_text(addrs),
             source_lines=self._get_source_lines(addrs),
             ir_node=node,
+            is_coarse=is_coarse,
         )
         self.mappings.append(mapping)
 
@@ -418,7 +476,7 @@ class SourceMapEmitter:
             header_line = self.current_line()
             params_str = ", ".join(node.param_names)
             self.emit_line(f"{prefix}def {node.name}({params_str}):")
-            self._record_mapping(header_line, header_line, "FunctionDef", node)
+            self._record_mapping(header_line, header_line, "FunctionDef", node, is_coarse=True)
 
             if not node.body:
                 p_line = self.current_line()
@@ -448,6 +506,31 @@ class SourceMapEmitter:
             self.emit_line("")
 
         if isinstance(program, FunctionProgram) and program.functions:
+            # The function-table preamble jump at address 0 has no emitted
+            # statement of its own. Attach it as a coarse mapping to the first
+            # function line so every instruction still has provenance without
+            # inflating statement-level coverage.
+            first_instr = self.instruction_by_address.get(0)
+            covered_by_function = any(
+                0 in func.source_addresses for func in program.functions
+            )
+            if (
+                first_instr is not None
+                and first_instr.is_unconditional_jump
+                and first_instr.jump_target is not None
+                and first_instr.jump_target > 1
+                and not covered_by_function
+            ):
+                preamble_line = self.current_line()
+                self._record_mapping(
+                    preamble_line,
+                    preamble_line,
+                    "Preamble",
+                    None,
+                    explicit_addrs=[0],
+                    is_coarse=True,
+                )
+
             for idx, func in enumerate(program.functions):
                 if idx > 0:
                     self.emit_line("")

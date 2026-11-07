@@ -1,7 +1,7 @@
 # Decompiled from special_constants.mlog
 # Verified via ast.parse and semantic argument recovery
-from mlog import sensor, set
+from mlog import raw, sensor, set
 
-u = sensor('@unit', '@dead')
-hp = sensor("core1", '@health')
-set("@counter", 10)
+u = sensor(raw("@unit"), raw("@dead"))
+hp = sensor("core1", raw("@health"))
+set(raw("@counter"), 10)

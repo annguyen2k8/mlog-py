@@ -89,7 +89,9 @@ def format_operand(op: str) -> str:
     if op == "null":
         return "None"
     if op.startswith("@"):
-        return repr(op)
+        # A bare @ token is a Mindustry register/property, not a Python string.
+        # raw() is the compiler's escape hatch for emitting it as a bare operand.
+        return f'raw("{op}")'
     if is_python_keyword(op):
         return f'raw("{op}")'
     return op
@@ -383,7 +385,12 @@ def instruction_to_python(
         dest, val = args[0], format_operand(args[1])
         if dest.isidentifier() and not dest.startswith("@") and not is_python_keyword(dest):
             return f"{dest} = {val}"
-        return f'set("{dest}", {val})'
+        if dest.startswith("@"):
+            return f'set(raw("{dest}"), {val})'
+        # A non-identifier destination may contain quotes or escapes; keep the
+        # emitted Python valid and recompilable.
+        escaped = dest.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        return f'set("{escaped}", {val})'
 
     if op == "op" and len(args) >= 3:
         op_name = args[0]
@@ -398,7 +405,7 @@ def instruction_to_python(
                 b = format_operand(args[3])
                 return f'{dest} = op("{op_name}", {a}, {b})'
             return f'{dest} = op("{op_name}", {a})'
-        dest_str = repr(dest)
+        dest_str = f'raw("{dest}")' if dest.startswith("@") else repr(dest)
         if len(args) == 4 and not is_unary:
             b = format_operand(args[3])
             return f'op("{op_name}", {dest_str}, {a}, {b})'
@@ -681,6 +688,10 @@ class IfNode(StructuredNode):
     is_elif: bool = False
     condition_expr: Optional[Any] = None
     source_addresses: List[int] = field(default_factory=list)
+    # When this IfNode was created from a conditional jump inside an enclosing
+    # then-body that targets the enclosing if's else entry, records that entry
+    # address so the caller can merge the condition instead of dropping the edge.
+    deferred_else_target: Optional[int] = None
 
     @property
     def condition_text(self) -> str:

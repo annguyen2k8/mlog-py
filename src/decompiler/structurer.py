@@ -20,6 +20,7 @@ from .expression import (
     BinaryExpr,
     CallExpr,
     ConstantExpr,
+    Expr,
     UnaryExpr,
     parse_operand_to_expr,
 )
@@ -322,13 +323,128 @@ class CFGStructurer:
                 return True
         return False
 
+    def _combine_and_expr(self, exprs: List[Optional[Expr]]) -> Optional[Expr]:
+        """Combine condition expressions with logical ``and`` when all are known."""
+        if not exprs or any(e is None for e in exprs):
+            return None
+        combined = exprs[0]
+        for expr in exprs[1:]:
+            combined = BinaryExpr("and", combined, expr)
+        return combined
+
+    def _contains_deferred_else(
+        self,
+        nodes: List[StructuredNode],
+        target: int,
+    ) -> bool:
+        """Return True if a deferred conditional for ``target`` remains in ``nodes``."""
+        for node in nodes:
+            if isinstance(node, IfNode):
+                if node.deferred_else_target == target:
+                    return True
+                if self._contains_deferred_else(node.then_body, target):
+                    return True
+                if self._contains_deferred_else(node.else_body, target):
+                    return True
+            elif isinstance(node, WhileNode):
+                if self._contains_deferred_else(node.body, target):
+                    return True
+        return False
+
+    def _flatten_deferred_chain(
+        self,
+        node: IfNode,
+        target: int,
+    ) -> Optional[tuple]:
+        """Flatten an exact chain of deferred conditionals into one condition.
+
+        Returns ``(condition_texts, condition_exprs, final_then_body, addresses)``
+        when ``node`` is a chain of conditionals whose false edges all target
+        ``target``. Returns ``None`` when other statements interleave with the
+        chain, because merging the conditions would change when those statements
+        execute.
+        """
+        condition_texts: List[str] = []
+        condition_exprs: List[Optional[Expr]] = []
+        addresses: List[int] = []
+        current = node
+
+        while True:
+            if (
+                not isinstance(current, IfNode)
+                or current.deferred_else_target != target
+                or current.else_body
+            ):
+                return None
+            condition_texts.append(current.condition_text)
+            condition_exprs.append(current.condition_expr)
+            addresses.extend(current.source_addresses)
+
+            if (
+                len(current.then_body) == 1
+                and isinstance(current.then_body[0], IfNode)
+                and current.then_body[0].deferred_else_target == target
+            ):
+                current = current.then_body[0]
+                continue
+            break
+
+        if self._contains_deferred_else(current.then_body, target):
+            return None
+        return condition_texts, condition_exprs, current.then_body, addresses
+
+    def _materialize_deferred(
+        self,
+        nodes: List[StructuredNode],
+        target: int,
+    ) -> List[StructuredNode]:
+        """Replace deferred conditionals with raw jumps plus their structured bodies.
+
+        A one-sided ``if`` would drop the false edge to the enclosing else entry.
+        Emitting the exact conditional jump and then the statements that follow it
+        preserves the original instruction addresses and control flow.
+        """
+        result: List[StructuredNode] = []
+        for node in nodes:
+            if isinstance(node, IfNode) and node.deferred_else_target == target:
+                instr = None
+                if node.source_addresses:
+                    instr = self.instructions[node.source_addresses[0]]
+                if instr is not None:
+                    result.append(
+                        UnstructuredNode(
+                            reason=(
+                                "Deferred conditional jump to enclosing else entry "
+                                f"at address {target}"
+                            ),
+                            instructions=[instr],
+                            defined_variables=self.defined_variables,
+                        )
+                    )
+                result.extend(self._materialize_deferred(node.then_body, target))
+            else:
+                if isinstance(node, IfNode):
+                    node.then_body = self._materialize_deferred(node.then_body, target)
+                    node.else_body = self._materialize_deferred(node.else_body, target)
+                elif isinstance(node, WhileNode):
+                    node.body = self._materialize_deferred(node.body, target)
+                result.append(node)
+        return result
+
     def _structure_range(
         self,
         start_address: int,
         stop_address: int,
         loop_stack: List[LoopInfo],
+        deferred_else_target: Optional[int] = None,
     ) -> List[StructuredNode]:
-        """Structure instructions in [start_address, stop_address)."""
+        """Structure instructions in [start_address, stop_address).
+
+        ``deferred_else_target`` is the else-entry address of the enclosing
+        ``if`` when this range is its then-body. A conditional jump that exits
+        this range to exactly that address is the short-circuit false edge and
+        must not be represented as a one-sided ``if``.
+        """
         nodes: List[StructuredNode] = []
         curr_addr = start_address
 
@@ -365,6 +481,28 @@ class CFGStructurer:
                 # It is excluded from the body statements.
                 latch_block = max(loop.latches, key=lambda b: b.end_address)
                 body_stop = latch_block.end_address  # excludes latch jump at latch_block.end_address
+
+                # A loop exit can skip instructions between the last body
+                # instruction and the recorded exit address. Resuming at
+                # max_body_address + 1 would execute that gap, which is
+                # unreachable in the original program. Preserve the entire
+                # range as raw instructions and resume exactly at the exit.
+                if loop.exit_address > loop.max_body_address + 1:
+                    raw_stop = min(loop.exit_address, self.n_instructions)
+                    gap_instructions = self.instructions[curr_addr:raw_stop]
+                    nodes.append(
+                        UnstructuredNode(
+                            reason=(
+                                "Loop exit at address "
+                                f"{loop.exit_address} skips instructions "
+                                f"[{loop.max_body_address + 1}, {loop.exit_address})"
+                            ),
+                            instructions=gap_instructions,
+                            defined_variables=self.defined_variables,
+                        )
+                    )
+                    curr_addr = loop.exit_address
+                    continue
 
                 if has_exit_jump:
                     # Inverted condition: loop executes while NOT (jump_to_exit)
@@ -718,7 +856,11 @@ class CFGStructurer:
                 # If jump_target is outside the current scope boundary [start_address, stop_address):
                 if jump_target > stop_address:
                     if jump_target <= stop_address + 1:
-                        # Exiting to enclosing branch boundary/else entry (e.g. short-circuit AND)
+                        is_enclosing_else = (
+                            deferred_else_target is not None
+                            and jump_target == deferred_else_target
+                            and stop_address + 1 == deferred_else_target
+                        )
                         cond_str = condition_to_python(
                             instr.jump_condition or "always",
                             instr.args[2] if len(instr.args) > 2 else "0",
@@ -735,6 +877,7 @@ class CFGStructurer:
                             start_address=fallthrough,
                             stop_address=stop_address,
                             loop_stack=loop_stack,
+                            deferred_else_target=deferred_else_target if is_enclosing_else else None,
                         )
                         if not sub_then:
                             sub_then = [PassNode()]
@@ -745,6 +888,7 @@ class CFGStructurer:
                                 else_body=[],
                                 condition_expr=cond_expr,
                                 source_addresses=[instr.address],
+                                deferred_else_target=deferred_else_target if is_enclosing_else else None,
                             )
                         )
                         curr_addr = stop_address
@@ -844,9 +988,24 @@ class CFGStructurer:
                         start_address=fallthrough,
                         stop_address=then_stop,
                         loop_stack=loop_stack,
+                        deferred_else_target=jump_target,
                     )
                     if not then_body:
                         then_body = [PassNode()]
+
+                    extra_addrs: List[int] = []
+                    if len(then_body) == 1 and isinstance(then_body[0], IfNode):
+                        flattened = self._flatten_deferred_chain(then_body[0], jump_target)
+                        if flattened is not None:
+                            inner_texts, inner_exprs, final_then, extra_addrs = flattened
+                            cond_str = " and ".join(
+                                f"({text})" for text in [cond_str] + inner_texts
+                            )
+                            cond_expr = self._combine_and_expr([cond_expr] + inner_exprs)
+                            then_body = final_then
+
+                    if self._contains_deferred_else(then_body, jump_target):
+                        then_body = self._materialize_deferred(then_body, jump_target)
 
                     else_body = self._structure_range(
                         start_address=jump_target,
@@ -866,7 +1025,9 @@ class CFGStructurer:
                             then_body=then_body,
                             else_body=else_body,
                             condition_expr=cond_expr,
-                            source_addresses=sorted(set([instr.address, last_then_instr.address])),
+                            source_addresses=sorted(
+                                set([instr.address, last_then_instr.address] + extra_addrs)
+                            ),
                         )
                     )
                     curr_addr = merge_addr

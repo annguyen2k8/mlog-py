@@ -137,7 +137,12 @@ class ConstantExpr(Expr):
         if isinstance(self.value, (int, float)):
             return str(self.value)
         if isinstance(self.value, str):
-            # Check if this is a Mindustry builtin constant token like @unit, @time
+            # A quoted string literal beginning with '@' is a string object; keep
+            # it as a Python string. A bare '@' token is a Mindustry register or
+            # property and must be emitted through raw() so it stays a bare operand.
+            is_quoted_literal = self.raw_str.startswith('"') and self.raw_str.endswith('"')
+            if self.value.startswith("@") and not is_quoted_literal:
+                return f'raw("{self.value}")'
             if self.value.startswith("@"):
                 return repr(self.value)
             if self.value.startswith('"') and self.value.endswith('"'):
