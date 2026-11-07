@@ -7,6 +7,16 @@
 - **Status**: All four requested findings fixed and verified. One out-of-scope
   decompiler limitation is documented in section 8.
 
+> **Post-P7 correction (2026-11-07).** The P6 verification compared final state
+> on fixed corpus inputs only. `p7_fidelity_audit.md` re-ran the corpus with
+> exact PC traces and found three dropped-else defects and a bare-`@` register
+> defect that final-state comparison could not see. It also showed that the
+> P6-H02 gap has two ranges (`[20, 22)` and `[33, 36)`), that it is reproducible
+> with an operand-only variant, and that the seven function files miss only
+> address `0` (the preamble), not function-body addresses. The P6 fixes
+> themselves remain valid; the claims in sections 7.2 and 8.1-8.3 below are
+> superseded by `p7_remediation_report.md`.
+
 ---
 
 ## 1. Executive Summary
@@ -385,7 +395,7 @@ new P6 tests) passes.
 
 ## 8. Remaining Limitations
 
-### 8.1 15 non-byte-equal programs (explained, no runtime mismatches)
+### 8.1 15 non-byte-equal programs (pre-P7 classification; see correction at top)
 
 Byte-for-byte fidelity is 17/32. The 15 non-byte-equal files after P6 are:
 
@@ -401,7 +411,7 @@ the engine in both forms. The other 12 are pre-existing expression
 reconstruction and temporary-allocation differences, not P6 regressions: all
 programs accepted by the engine produce identical final JVM state.
 
-### 8.2 P6-HIGH-02 - loop-exit gap reachability (out of scope)
+### 8.2 P6-HIGH-02 - loop-exit gap reachability (fixed in P7)
 
 `base_manager_120.mlog` has two instructions (addresses 20-21: `ubind @flare`
 and `sensor u_flag @unit @flag`) between the turret loop exit and the next
@@ -413,15 +423,19 @@ unit is an observable side effect.
 
 This is the pre-existing loop-exit gap reachability issue (P6-HIGH-02), not one
 of the four requested findings. It is documented here instead of changing P5's
-loop-exit logic without a proven general fix.
+loop-exit logic without a proven general fix. P7 made the recorded exit address
+authoritative and found a second gap at `[33, 36)`; see
+`p7_remediation_report.md` section 4.
 
-### 8.3 Function-body source-map gaps
+### 8.3 Preamble source-map gap (corrected in P7)
 
 `large_compiler_program` (0.9756), `multi_func_math` (0.9565),
 `recursive_factorial` (0.9375), `func_with_loop` (0.9231), `nested_calls`
 (0.9412), `recursion` (0.9524), and `two_functions` (0.9412) still do not map
-every original address. These are function-boundary and calling-convention
-provenance gaps; they predate P6 and do not indicate dropped execution.
+every original address. P7 established that every function-body address is
+mapped and that each file misses only address `0`, the structural function-table
+preamble. It is now recorded as a coarse `Preamble` mapping, so address coverage
+is 100%; statement-level coverage legitimately excludes address `0`.
 
 ### 8.4 Recursion remains unsupported
 

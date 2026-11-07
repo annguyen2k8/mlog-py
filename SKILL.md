@@ -123,8 +123,12 @@ The Python DSL is strongly typed and checked against Mindustry's engine classes:
   (`r, g, b, a = unpackcolor(color)` -> `unpackcolor r g b a color`); `ulocate` accepts 3
   or 4 depending on the locator. Duplicate target names, non-name targets, keyword
   arguments, and wrong target counts are rejected at parse time.
-- **Special Registers**: Emitted as quoted strings with `@` prefix:
-  `set("@counter", 10)`, `u = sensor("@unit", "@dead")`.
+- **Special Registers**: In generic value positions (`set`, `op` source operands,
+  jump conditions) a bare `@` token is a live register and is emitted through
+  `raw()`: `set(raw("@counter"), 10)`, `x = raw("@time") + 1`,
+  `u = raw("@unit")`. Quoted input tokens such as `"@unit"` remain string
+  literals. Inside intrinsic argument positions, `sensor("reactor1", "@heat")`
+  is still valid because the compiler restores the bare token on recompilation.
 - **Print Buffer Semantics (`print` & `printflush`)**:
   - In Mindustry Logic (`LExecutor.PrintI`), `print` appends text directly to
     the processor's internal `textBuffer`. It does **not** append a newline
@@ -219,8 +223,16 @@ Python DSL Source (.py) / SourceMap (.json)
   the final instruction becomes `end()`, and a jump targeting an unconditional
   loop latch becomes `continue`. Other cross-boundary jumps stay raw instead
   of being dropped.
-- **Zero Guessing Fallback**: Irreducible CFG loops and indirect jumps
-  modifying `@counter` emit `UnstructuredNode` comments and raw jumps.
+- A nested conditional whose false edge targets the enclosing else entry is
+  never emitted as a one-sided nested `if`. Exact chains are flattened into a
+  combined `and` condition; interleaved statements keep the original conditional
+  jump as an `UnstructuredNode`.
+- A loop exit that skips instructions (`exit_address > max_body_address + 1`)
+  emits the whole loop region as a raw `UnstructuredNode` and resumes at the
+  recorded exit address, so the skipped gap never executes.
+- **Zero Guessing Fallback**: Irreducible CFG loops, loop-exit gaps, and
+  indirect jumps modifying `@counter` emit `UnstructuredNode` comments and raw
+  jumps.
 
 ### 2. Expression & Dataflow Recovery
 
@@ -249,7 +261,9 @@ Classifies tokens into 6 distinct semantic roles using `src/metadata.py`:
 2. *Named Hardware Links*: `"cell1"`, `"display1"`, `"message1"`,
    `"reactor1"` $\to$ quoted string literals.
 3. *Special Constants*: `"@unit"`, `"@counter"`, `"@health"` $\to$ quoted
-   string literals.
+   string literals in opcode argument positions. In generic value positions a
+   bare `@` token is a register and uses `raw("@...")`; quoted input tokens stay
+   strings.
 4. *DSL Enums & Keywords*: `DrawType.CLEAR`, `SensorProperty.HEALTH`.
 5. *Literals*: `10`, `3.14`, `"hello"`.
 6. *Dynamic Variables Holding Blocks*: `b = getlink(0)` followed by

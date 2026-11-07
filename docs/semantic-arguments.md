@@ -41,6 +41,15 @@ Python fails at runtime, and static analysis tools (Pylance, mypy, flake8) repor
 | **5. Numeric / String Literal** | Constant numbers or string texts | `42`, `3.14`, `"hello"` | Python literal (`42`, `3.14`, `"hello"`) |
 | **6. Dynamic Block Variable** | Variable bound via `getlink` | `b` from `getlink b 0` | Unquoted Python identifier (`b`) |
 
+The table applies to opcode argument positions. In generic value positions
+(`set`, `op` source operands, jump conditions), a bare `@` token is a live
+register or built-in variable, not a string: the decompiler emits
+`raw("@counter")`, `raw("@time")`, or `raw("@unit")` so it recompiles as a bare
+operand. A quoted input token such as `"@unit"` remains a Python string literal.
+Inside intrinsic argument positions, quoted registry tokens like
+`sensor("reactor1", "@heat")` are still valid because the compiler restores the
+bare token on recompilation.
+
 ---
 
 ## 3. Contrast Example: Hardware Link vs Dynamic Variable

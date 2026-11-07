@@ -130,3 +130,47 @@ instrs = sm.get_instructions_for_python_line(python_line=3)
 ```
 
 This format can be consumed by external debuggers, IDE extensions, and automated regression test harnesses.
+
+---
+
+## 5. Coarse Container Mappings and Coverage
+
+Some mappings describe a container rather than a single executable statement:
+
+- `FunctionDef` maps the function declaration line to the whole function-body
+  address range. It is useful for navigation but duplicates every body address
+  already covered by `Return`, `Call`, `Assign`, and control-flow mappings.
+- The function-table preamble jump at address `0` has no Python statement of its
+  own. It is recorded as a coarse `Preamble` mapping on the first function line
+  so every instruction has provenance without inventing executable code.
+
+`SourceMapping.is_coarse` marks these mappings. The JSON form includes
+`"is_coarse": true` only for coarse entries. `SourceMap.mlog_to_python()` prefers
+the smallest non-coarse mapping, so a body address resolves to its precise
+statement rather than the enclosing `FunctionDef`.
+
+Coverage must therefore be reported at two levels:
+
+```python
+summary = sm.coverage_summary(total_instructions)
+# {
+#   "total_instructions": 17,
+#   "address_mapped": 17,
+#   "address_missing": [],
+#   "address_coverage": 1.0,
+#   "statement_mapped": 16,
+#   "statement_missing": [0],
+#   "statement_coverage": 0.9411764705882353,
+# }
+```
+
+- **Address coverage** (`include_coarse=True`) proves that every instruction has
+  provenance, including structural containers and the preamble.
+- **Statement coverage** (`include_coarse=False`) measures precise
+  statement-level mappings. Function-bearing programs legitimately miss address
+  `0` here because no Python statement executes the preamble jump.
+
+Use `mapped_addresses(include_coarse=...)` and
+`missing_addresses(total, include_coarse=...)` to query the same distinction
+directly. Counting raw mappings without excluding coarse containers overstates
+statement-level precision.

@@ -9,6 +9,7 @@ Keep long rationale here, not in the task handoff.
 | [ADR-001](0001-modulo-semantics.md) | Decided | Lower Python `%` to Mindustry `emod` (floored modulo) for v8. |
 | [ADR-002](0002-shared-agent-memory.md) | Accepted | Use filesystem Markdown plus `AGENTS.md` for shared agent memory and handoff. |
 | [ADR-003](0003-p6-control-flow-and-recursion-contracts.md) | Accepted | Preserve every unconditional jump edge, capture function results in value contexts, share jump formatting, and reject recursion until a software stack exists. |
+| [ADR-004](0004-p7-decompiler-fidelity-contracts.md) | Accepted | Preserve enclosing else edges, emit bare `@` registers through `raw()`, make loop exit addresses authoritative, and separate coarse from statement-level source maps. |
 
 ## Adding an ADR
 

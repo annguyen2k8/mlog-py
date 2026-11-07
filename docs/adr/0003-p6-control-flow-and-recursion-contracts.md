@@ -103,8 +103,9 @@ ADR for the calling convention.
   Recursive programs fail fast with an actionable diagnostic.
 - Corpus programs that rely on recursion now assert the rejection contract. This
   is an intentional contract change, not a reduction in coverage.
-- Loop-exit gap reachability (P6-HIGH-02) remains a separate, pre-existing
-  limitation. It was not changed by this ADR.
+- Loop-exit gap reachability (P6-HIGH-02) was a pre-existing limitation that
+  P7 fixed by making the recorded loop exit address authoritative. See
+  `docs/adr/0004-p7-decompiler-fidelity-contracts.md`.
 
 ---
 
