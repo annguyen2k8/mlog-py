@@ -273,19 +273,19 @@ def instruction_to_python(
         elif cmd == "reset":
             return "draw.reset()"
 
-    if op == "control" and len(args) == 6:
+    if op == "control" and 3 <= len(args) <= 6:
         control_type = args[0]
         if control_type == "enabled" and all(is_canonical_zero_operand(a) for a in args[3:6]):
             target = format_semantic_argument("control", 1, args[1], defined_variables, args)
             value = format_semantic_argument("control", 2, args[2], defined_variables, args)
             return f"control.enabled({target}, {value})"
-        elif control_type == "shoot" and is_canonical_zero_operand(args[5]):
+        elif control_type == "shoot" and len(args) >= 5 and all(is_canonical_zero_operand(a) for a in args[5:6]):
             target = format_semantic_argument("control", 1, args[1], defined_variables, args)
             x = format_semantic_argument("control", 2, args[2], defined_variables, args)
             y = format_semantic_argument("control", 3, args[3], defined_variables, args)
             shoot = format_semantic_argument("control", 4, args[4], defined_variables, args)
             return f"control.shoot({target}, {x}, {y}, {shoot})"
-        elif control_type == "shootp" and all(is_canonical_zero_operand(a) for a in args[4:6]):
+        elif control_type == "shootp" and len(args) >= 4 and all(is_canonical_zero_operand(a) for a in args[4:6]):
             target = format_semantic_argument("control", 1, args[1], defined_variables, args)
             unit = format_semantic_argument("control", 2, args[2], defined_variables, args)
             shoot = format_semantic_argument("control", 3, args[3], defined_variables, args)

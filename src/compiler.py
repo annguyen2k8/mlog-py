@@ -2771,7 +2771,7 @@ class Compiler:
             x = str(self.format_intrinsic_arg(args[1], is_ident=False))
             y = str(self.format_intrinsic_arg(args[2], is_ident=False))
             sizerot = str(self.format_intrinsic_arg(args[3], is_ident=False)) if len(args) >= 4 else "0"
-            color = str(self.format_intrinsic_arg(args[4], is_ident=False)) if len(args) >= 5 else "0"
+            color = str(self.format_intrinsic_arg(args[4], is_ident=True)) if len(args) >= 5 else "0"
             data = str(self.format_intrinsic_arg(args[5], is_ident=False)) if len(args) >= 6 else "0"
             self.instructions.append(
                 IRRaw(opcode="effect", args=[type_, x, y, sizerot, color, data], loc=loc)

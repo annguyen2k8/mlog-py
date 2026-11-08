@@ -56,13 +56,15 @@ A strict distinction must be drawn between statements visible in the UI and opco
 - **Total VM Opcodes (Mindustry v160.7)**:
   - Supported in `mlog-py`: **53 / 53 opcodes** (**100.0%**)
   - JVM Runtime & Roundtrip Verified: **53 / 53 opcodes** (**100.0%**)
+- **Dedicated Comprehensive API Coverage Suite**:
+  - Full matrix test suite in `tests/test_decompiler_api_coverage.py` verifying all 53 opcodes and subcommands across recognition, argument mapping, Python reconstruction, re-compilation, and roundtrip bytecode fidelity.
 
 > [!NOTE]
-> **Opcode Universe vs. High-Level DSL Scope**:
-> All 53 VM opcodes are supported at the bytecode compiler/decompiler level and verified against the Mindustry v160.7 engine. Full opcode coverage does not imply unrestricted runtime execution in standard survival processors or high-level DSL convenience:
-> 1. **Privileged runtime boundary**: All 25 World opcodes require a World Processor (`#processor: world`). Standard processors reject them as `InvalidStatement` at engine runtime.
-> 2. **API Gaps**: Certain engine-internal buffers (notably `@queries` populated by `query`) are not yet bound to typed constants in `Vars` (`Vars.queries` is absent), requiring raw string reference `"@queries"`.
-> 3. **Intrinsic Exposure**: World opcodes map to direct compiler intrinsics and namespaces (`cutscene.*`, `marker.*`) rather than synthesized high-level abstractions, preserving exact 1:1 bytecode equivalence under the Zero-Guessing contract.
+> **Support Level Classification**:
+> - **Full Support (Đã hỗ trợ đầy đủ)**: 52 / 53 opcodes have full high-level DSL methods/expressions and direct intrinsics with 100% round-trip fidelity.
+> - **Partial Support / API Gap (Được hỗ trợ một phần)**: 1 opcode (`query`) is fully executable and roundtrip capable, but access to the internal `@queries` buffer requires raw string reference `"@queries"` because `Vars.queries` is not currently exported in the typed registry.
+> - **Safe Fallback (Chỉ có fallback khi cần thiết)**: Non-canonical zero dummy spellings in `control` (e.g. `0.0`, `0e0`) safely fall back to generic `control(...)` calls to preserve exact token spelling without semantic drift.
+> - **Unsupported (Chưa hỗ trợ)**: 0 opcodes (0 / 53). All Mindustry v160.7 instructions are fully supported.
 
 ```mermaid
 flowchart TD
