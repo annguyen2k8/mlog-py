@@ -5,19 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.9.0] - 2026-11-08
 
 ### Added
 - **Unified Array Architecture (`mlog.beta`)**:
-  - Introduced `LocalArray` backed directly by processor registers, eliminating memory cell/bank requirements on map for vector math, small lookup tables, and in-register buffers.
-  - Introduced `BlockArray` backed by physical memory blocks (`cell` and `bank`) with native $O(1)$ read/write instructions and `.fill()` memory initialization.
-  - Provided polymorphic `Array` factory in `mlog.beta` that automatically dispatches to `LocalArray` or `BlockArray` based on presence of a block argument.
+  - `LocalArray`: High-performance array abstraction backed directly by processor registers, eliminating physical memory block requirements on map for vector math, small lookup tables, and in-register scratch buffers.
+  - `BlockArray`: Abstraction backed by physical memory blocks (`cell` and `bank`) with native $O(1)$ read/write instructions and `.fill()` memory initialization.
+  - Polymorphic `Array` factory in `mlog.beta` that automatically dispatches to `LocalArray` or `BlockArray` based on the presence of a target block.
   - Generic typing support via `Array[T]`, `LocalArray[T]`, and `BlockArray[T]`.
   - Compile-time constant folding for array properties (`len(arr)`, `arr.size`, `arr.capacity`).
   - Added paired compiler examples: `examples/compiler/beta_local_array.py` and `examples/compiler/beta_block_array.py`.
+- **Comprehensive Mindustry Logic API Coverage (53/53 Commands)**:
+  - Full audit and support for all 28 Standard processor opcodes and 25 World/Privileged statements in compiler, validator, and decompiler.
+  - Complete support for world/privileged processor commands: `setblock`, `setrule`, `playsound`, `setrate`, `fetch`, `sync`, `getflag`, `setflag`, `setprop`, `effect`.
+  - Comprehensive documentation of all 53 opcodes with parameter mappings and DSL signatures in `docs/mlog-command-coverage.md`.
+  - Added full test coverage suite with 55 dedicated tests in `tests/test_decompiler_api_coverage.py`.
 - **Architectural & Audit Documentation**:
-  - Consolidated P9–P15 array subsystem specification in `docs/p9_p15_acceptance_report.md`.
   - Codified the Hybrid Array Architecture in `docs/adr/0005-p9-p12-hybrid-array-architecture.md`.
+
+### Changed
+- **Decompiler Reconstruction Improvements**:
+  - Enhanced reconstruction for `control` commands supporting variable argument arity (3 to 6 operands: `enabled`, `shoot`, `shootp`, `color`, `config`).
+  - Restored identifier recognition for color literals in `effect` commands (e.g. `@white`, `@team`).
+  - Improved control flow structurer, loop detection, and temporary variable reduction across multi-statement blocks.
+- **Typing Stubs and Metadata Synchronization**:
+  - Synchronized `mlog.pyi`, `src/mlog.pyi`, and `mlog/__init__.pyi` with `generate_pyi()` SSOT.
 
 ## [0.8.1] - 2026-11-01
 

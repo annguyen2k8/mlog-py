@@ -67,3 +67,5 @@ for _sub in _DECOMP_SUBMODULES:
 
 sys.modules["src.mlog"] = mlog
 
+__version__ = mlog.__version__
+

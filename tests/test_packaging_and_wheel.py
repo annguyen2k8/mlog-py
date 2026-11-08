@@ -174,7 +174,7 @@ class TestPackagingAndWheel(unittest.TestCase):
             text=True,
         )
         self.assertEqual(proc_mod.returncode, 0)
-        self.assertIn("0.8.1", proc_mod.stdout + proc_mod.stderr)
+        self.assertIn("0.9.0", proc_mod.stdout + proc_mod.stderr)
 
         # 2. mlog-py --help
         proc_py = subprocess.run(
